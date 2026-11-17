@@ -233,7 +233,9 @@ def test_legacy_resume_preserves_transform_and_transfer_enables_squash(monkeypat
     train_small(tmp_path, resume=True, dry_run=True)
     assert torch.load(tmp_path/'run_ppo.pt', weights_only=False)['squash_actions'] is False
     train_small(tmp_path/'transfer', load_checkpoint=tmp_path/'run_ppo.pt', dry_run=True)
-    assert torch.load(tmp_path/'transfer/run_ppo.pt', weights_only=False)['squash_actions'] is True
+    assert torch.load(tmp_path/'transfer/run_ppo.pt', weights_only=False)['squash_actions'] is False
+    train_small(tmp_path/'transfer_sq', load_checkpoint=tmp_path/'run_ppo.pt', dry_run=True, squash_actions=True)
+    assert torch.load(tmp_path/'transfer_sq/run_ppo.pt', weights_only=False)['squash_actions'] is True
 
 
 def test_deterministic_evaluation_counts_terminal_step_and_restores_state():
@@ -346,7 +348,9 @@ def test_generated_c_applies_output_transform_before_quantization(tmp_path, squa
     import subprocess
     from scripts.export_policy import export_esp32_headers
     from scripts.train_ppo import ActorCritic
+    from training.policy_contract import observation_schema
     model = ActorCritic(hidden_dim=256, squash_actions=squash)
+    model.observation_schema = observation_schema(42, False, 0.02)
     with torch.no_grad():
         for p in model.actor.parameters():
             p.zero_()

@@ -159,3 +159,72 @@ def test_parallel_sim_runner_nav_planner_integration():
         assert np.allclose(next_obs[0, 6:9], runner.commands[0, :3], atol=1e-5)
     finally:
         runner.close()
+
+
+@pytest.mark.parametrize("goal_xy,yaw", [((0.0, 2.0), np.pi / 2), ((0.0, -2.0), -np.pi / 2), ((2.0, 0.0), 0.0)])
+def test_nav_planner_stage0_bearing_heading_and_yaw_termination(goal_xy, yaw):
+    """F5: Stage 0 navigation must align target_yaw to waypoint bearing rather than world-X."""
+    import mujoco
+    from training.run_parallel_sim import ParallelSimRunner
+
+    runner = ParallelSimRunner(
+        model_path="duck_v2/cyberduck_v2.xml",
+        num_envs=1,
+        num_threads=1,
+        max_episode_steps=50,
+        stage=0,
+        terrain_mode="flat",
+        use_nav_planner=True,
+        nav_goal_xy=goal_xy,
+    )
+    try:
+        runner.reset()
+        d = runner.datas[0]
+        d.qpos[0:3] = [0.0, 0.0, 0.128]
+        d.qpos[3:7] = [np.cos(yaw / 2.0), 0.0, 0.0, np.sin(yaw / 2.0)]
+        d.qvel[:] = 0.0
+        mujoco.mj_forward(runner.model, d)
+        runner.update_nav_commands(env_indices=[0])
+
+        # Facing goal -> straight forward command (|wz| < 0.05) and no heading penalty or yaw_fallen
+        assert abs(runner.commands[0, 2]) < 0.05
+        assert runner.commands[0, 0] > 0.1
+        _, _, dones, infos = runner.step(np.zeros((1, 8), dtype=np.float32))
+        assert not dones[0], f"Aligned navigation goal={goal_xy} yaw={yaw:.2f} triggered false fall"
+        assert infos[0]["heading_penalty"] == pytest.approx(0.0, abs=1e-3)
+
+        # Slightly off bearing within straight-command deadband (|wz| < 0.05) -> negative heading_penalty
+        slight_off_yaw = yaw + 0.03
+        d.qpos[3:7] = [np.cos(slight_off_yaw / 2.0), 0.0, 0.0, np.sin(slight_off_yaw / 2.0)]
+        d.qvel[:] = 0.0
+        mujoco.mj_forward(runner.model, d)
+        _, _, dones_slight, infos_slight = runner.step(np.zeros((1, 8), dtype=np.float32))
+        assert not dones_slight[0]
+        assert infos_slight[0]["heading_penalty"] < -1e-4
+
+        # Standing at goal within goal_tol at arbitrary yaw must NOT falsely yaw-fall or penalize heading
+        d.qpos[0:2] = [goal_xy[0], goal_xy[1]]
+        off_yaw = yaw + np.pi / 2.0
+        d.qpos[3:7] = [np.cos(off_yaw / 2.0), 0.0, 0.0, np.sin(off_yaw / 2.0)]
+        d.qvel[:] = 0.0
+        mujoco.mj_forward(runner.model, d)
+        _, _, dones_at_goal, infos_at_goal = runner.step(np.zeros((1, 8), dtype=np.float32))
+        assert not dones_at_goal[0], "Standing at goal within goal_tol must not falsely yaw-fall"
+        assert infos_at_goal[0]["heading_penalty"] == pytest.approx(0.0, abs=1e-5)
+
+        # Large bearing error (> 1.0 rad) when commanding straight walk triggers bearing-relative yaw_fallen
+        runner.reset()
+        d = runner.datas[0]
+        d.qpos[0:3] = [0.0, 0.0, 0.128]
+        far_off_yaw = yaw + 1.2
+        d.qpos[3:7] = [np.cos(far_off_yaw / 2.0), 0.0, 0.0, np.sin(far_off_yaw / 2.0)]
+        d.qvel[:] = 0.0
+        mujoco.mj_forward(runner.model, d)
+        runner.commands[0] = [0.2, 0.0, 0.0]
+        runner.update_nav_commands = lambda *a, **kw: None
+        _, _, dones_far, infos_far = runner.step(np.zeros((1, 8), dtype=np.float32))
+        assert dones_far[0], "Large bearing error > 1.0 rad under straight command must terminate"
+        assert infos_far[0]["heading_penalty"] < -1.0
+    finally:
+        runner.close()
+

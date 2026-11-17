@@ -11,6 +11,7 @@ import argparse
 import json
 import copy
 import hashlib
+import math
 import sys
 from typing import Any, Optional, Tuple, Union
 
@@ -39,6 +40,19 @@ DEFAULT_ESP32_CONFIG_PATH = (
 )
 
 
+def _validate_esp32_actor_arch(actor: nn.Module) -> None:
+    if getattr(actor, "_policy_arch", None) == "sac_squashed_gaussian" or any(isinstance(m, nn.ReLU) for m in actor.modules()):
+        raise ValueError("Unsupported ESP32 policy architecture: SAC ReLU actor is unsupported by quantized ELU firmware")
+
+
+def _validate_ckpt_dims(ckpt: dict, expected: Tuple[Tuple[str, int], ...]) -> None:
+    for key, actual in expected:
+        if key in ckpt:
+            val = ckpt[key]
+            if isinstance(val, bool) or not isinstance(val, (int, np.integer)) or int(val) != actual:
+                raise ValueError(f"Checkpoint {key} disagrees with actor weights")
+
+
 def prepare_target_exports(checkpoints, legacy_model_name=None, schema_override=None):
     """Validate every CLI target before writing any deployment artifact."""
     from training.policy_contract import TARGET_MODELS, validate_model_identity, validate_observation_schema
@@ -60,8 +74,33 @@ def prepare_target_exports(checkpoints, legacy_model_name=None, schema_override=
         actor = load_actor_from_checkpoint(checkpoint)
         if actor[0].in_features != 42 or actor[4].out_features != 8:
             raise ValueError(f"{target} export requires 42 observations and 8 actions")
+        if target == "esp32":
+            _validate_esp32_actor_arch(actor)
+            _resolve_esp32_schema(actor, None)
         prepared[target] = actor
     return prepared
+
+
+def _resolve_esp32_schema(actor: nn.Module, legacy_observation_schema: Optional[dict] = None) -> dict:
+    from training.policy_contract import validate_observation_schema
+
+    raw_schema = getattr(actor, "_model_metadata", {}).get("observation_schema")
+    if raw_schema is not None and legacy_observation_schema is not None:
+        raise ValueError("legacy_observation_schema override only applies to legacy policies without observation_schema")
+    if raw_schema is not None:
+        try:
+            schema = validate_observation_schema(json.loads(raw_schema) if isinstance(raw_schema, str) else raw_schema)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("Invalid policy observation_schema") from exc
+    elif legacy_observation_schema is not None:
+        schema = validate_observation_schema(legacy_observation_schema)
+    else:
+        raise ValueError("Legacy policy has no observation_schema; provide an explicit verified legacy schema")
+    if schema["obs_dim"] != 42:
+        raise ValueError("ESP32 observation_schema requires 42 observations")
+    if not math.isclose(schema["control_dt"], 0.02, rel_tol=1e-7, abs_tol=1e-10):
+        raise ValueError("Unsupported ESP32 observation_schema control_dt; firmware requires 50 Hz (0.02s)")
+    return schema
 
 
 class PolicyOnnxWrapper(nn.Module):
@@ -111,7 +150,7 @@ def apply_obs_norm_to_actor(actor: nn.Module, ckpt: Any, min_std: float = 0.10) 
         if mean.shape != (linear.in_features,) or var.shape != mean.shape:
             raise ValueError("shape must match actor input width")
         if not (np.isfinite(mean).all() and np.isfinite(var).all() and (var >= 0).all()
-                and np.isfinite([eps, minimum, clip, count]).all() and eps > 0 and minimum > 0 and count >= 0):
+                and np.isfinite([eps, minimum, clip, count]).all() and eps > 0 and minimum > 0 and clip >= 0 and count >= 0):
             raise ValueError("non-finite or invalid statistics")
         std = np.maximum(np.sqrt(var + eps), minimum)
         if not np.isfinite(std).all() or (std <= 0).any():
@@ -148,6 +187,43 @@ def apply_obs_norm_to_actor(actor: nn.Module, ckpt: Any, min_std: float = 0.10) 
     return actor
 
 
+def _build_sac_sequential(state: dict, ckpt: Optional[dict] = None) -> nn.Sequential:
+    """Adapt SAC SquashedGaussianActor (ReLU + mean_head) weights to nn.Sequential."""
+    required = ("net.0.weight", "net.0.bias", "net.2.weight", "net.2.bias", "mean_head.weight", "mean_head.bias")
+    if not isinstance(state, dict) or any(k not in state or not isinstance(state[k], torch.Tensor) for k in required):
+        raise ValueError("Invalid SAC actor_state_dict; missing expected ReLU/mean_head tensors")
+    w0, w2, wm = state["net.0.weight"], state["net.2.weight"], state["mean_head.weight"]
+    if w0.ndim != 2 or w2.ndim != 2 or wm.ndim != 2:
+        raise ValueError("Invalid SAC weight tensor rank")
+    hid_d, obs_d = int(w0.shape[0]), int(w0.shape[1])
+    act_d = int(wm.shape[0])
+    if (tuple(w2.shape) != (hid_d, hid_d) or tuple(wm.shape) != (act_d, hid_d)
+            or tuple(state["net.0.bias"].shape) != (hid_d,) or tuple(state["net.2.bias"].shape) != (hid_d,)
+            or tuple(state["mean_head.bias"].shape) != (act_d,)):
+        raise ValueError("SAC actor_state_dict layer dimensions are inconsistent")
+    if "log_std_head.weight" in state and tuple(state["log_std_head.weight"].shape) != (act_d, hid_d):
+        raise ValueError("SAC log_std_head.weight shape disagrees with actor dimensions")
+    if isinstance(ckpt, dict):
+        _validate_ckpt_dims(ckpt, (("obs_dim", obs_d), ("hidden_dim", hid_d), ("action_dim", act_d)))
+        if "squash_actions" in ckpt and ckpt["squash_actions"] is not True:
+            raise ValueError("SAC checkpoint requires squash_actions=True")
+    actor = nn.Sequential(
+        nn.Linear(obs_d, hid_d), nn.ReLU(),
+        nn.Linear(hid_d, hid_d), nn.ReLU(),
+        nn.Linear(hid_d, act_d),
+    )
+    with torch.no_grad():
+        actor[0].weight.copy_(w0)
+        actor[0].bias.copy_(state["net.0.bias"])
+        actor[2].weight.copy_(w2)
+        actor[2].bias.copy_(state["net.2.bias"])
+        actor[4].weight.copy_(wm)
+        actor[4].bias.copy_(state["mean_head.bias"])
+    actor._squash_actions = True
+    actor._policy_arch = "sac_squashed_gaussian"
+    return actor
+
+
 def load_actor_from_checkpoint(
     checkpoint_or_model: Union[str, Path, nn.Module, dict],
     obs_dim: int = 42,
@@ -156,9 +232,12 @@ def load_actor_from_checkpoint(
 ) -> nn.Module:
     """Load Actor network from checkpoint file or dict, folding obs_rms if present."""
     if isinstance(checkpoint_or_model, nn.Module):
-        actor = copy.deepcopy(getattr(checkpoint_or_model, "actor", checkpoint_or_model))
-        if hasattr(checkpoint_or_model, "squash_actions"):
-            actor._squash_actions = checkpoint_or_model.squash_actions
+        if hasattr(checkpoint_or_model, "net") and hasattr(checkpoint_or_model, "mean_head"):
+            actor = _build_sac_sequential(checkpoint_or_model.state_dict())
+        else:
+            actor = copy.deepcopy(getattr(checkpoint_or_model, "actor", checkpoint_or_model))
+            if hasattr(checkpoint_or_model, "squash_actions"):
+                actor._squash_actions = checkpoint_or_model.squash_actions
         if hasattr(checkpoint_or_model, "obs_rms"):
             apply_obs_norm_to_actor(actor, {"obs_rms": checkpoint_or_model.obs_rms})
         metadata = dict(getattr(actor, "_model_metadata", {}))
@@ -186,54 +265,63 @@ def load_actor_from_checkpoint(
             raise FileNotFoundError(f"Checkpoint file not found at {ckpt_path}")
         ckpt = torch.load(str(ckpt_path), map_location="cpu", weights_only=False)
 
-    obs_d = ckpt.get("obs_dim", obs_dim) if isinstance(ckpt, dict) else obs_dim
-    # Infer observation dimension directly from state_dict weights to be fully resilient
-    if isinstance(ckpt, dict):
-        if "model_state_dict" in ckpt and "actor.0.weight" in ckpt["model_state_dict"]:
-            obs_d = int(ckpt["model_state_dict"]["actor.0.weight"].shape[1])
-        elif "actor_state_dict" in ckpt and "0.weight" in ckpt["actor_state_dict"]:
-            obs_d = int(ckpt["actor_state_dict"]["0.weight"].shape[1])
-        elif "0.weight" in ckpt:
-            obs_d = int(ckpt["0.weight"].shape[1])
+    state = ckpt.get("actor_state_dict", ckpt.get("model_state_dict", ckpt)) if isinstance(ckpt, dict) else ckpt
+    is_sac = isinstance(ckpt, dict) and (
+        ckpt.get("policy_arch") == "sac_squashed_gaussian"
+        or ckpt.get("algorithm") == "sac"
+        or (isinstance(state, dict) and "net.0.weight" in state and "mean_head.weight" in state)
+    )
+    if is_sac:
+        actor = _build_sac_sequential(state, ckpt=ckpt)
+        obs_d = int(actor[0].in_features)
+    else:
+        obs_d = ckpt.get("obs_dim", obs_dim) if isinstance(ckpt, dict) else obs_dim
+        # Infer observation dimension directly from state_dict weights to be fully resilient
+        if isinstance(ckpt, dict):
+            if "model_state_dict" in ckpt and "actor.0.weight" in ckpt["model_state_dict"]:
+                obs_d = int(ckpt["model_state_dict"]["actor.0.weight"].shape[1])
+            elif "actor_state_dict" in ckpt and "0.weight" in ckpt["actor_state_dict"]:
+                obs_d = int(ckpt["actor_state_dict"]["0.weight"].shape[1])
+            elif "0.weight" in ckpt:
+                obs_d = int(ckpt["0.weight"].shape[1])
 
-    critic_obs_d = None
-    if isinstance(ckpt, dict):
-        if "critic_obs_dim" in ckpt:
-            critic_obs_d = int(ckpt["critic_obs_dim"])
-        elif "model_state_dict" in ckpt and "critic.0.weight" in ckpt["model_state_dict"]:
-            critic_obs_d = int(ckpt["model_state_dict"]["critic.0.weight"].shape[1])
-        elif "critic.0.weight" in ckpt:
-            critic_obs_d = int(ckpt["critic.0.weight"].shape[1])
+        critic_obs_d = None
+        if isinstance(ckpt, dict):
+            if "critic_obs_dim" in ckpt:
+                critic_obs_d = int(ckpt["critic_obs_dim"])
+            elif "model_state_dict" in ckpt and "critic.0.weight" in ckpt["model_state_dict"]:
+                critic_obs_d = int(ckpt["model_state_dict"]["critic.0.weight"].shape[1])
+            elif "critic.0.weight" in ckpt:
+                critic_obs_d = int(ckpt["critic.0.weight"].shape[1])
 
-    act_d = ckpt.get("action_dim", action_dim) if isinstance(ckpt, dict) else action_dim
-    hid_d = ckpt.get("hidden_dim", hidden_dim) if isinstance(ckpt, dict) else hidden_dim
-    state = ckpt.get("actor_state_dict", ckpt.get("model_state_dict", ckpt))
-    prefix = "actor." if "actor.0.weight" in state else ""
-    if prefix + "0.weight" in state:
-        hid_d = int(state[prefix + "0.weight"].shape[0])
-        act_d = int(state[prefix + "4.weight"].shape[0])
-        for key, actual in (("obs_dim", obs_d), ("hidden_dim", hid_d), ("action_dim", act_d)):
-            if key in ckpt and int(ckpt[key]) != actual:
-                raise ValueError(f"Checkpoint {key} disagrees with actor weights")
+        act_d = ckpt.get("action_dim", action_dim) if isinstance(ckpt, dict) else action_dim
+        hid_d = ckpt.get("hidden_dim", hidden_dim) if isinstance(ckpt, dict) else hidden_dim
+        prefix = "actor." if "actor.0.weight" in state else ""
+        if prefix + "0.weight" in state:
+            hid_d = int(state[prefix + "0.weight"].shape[0])
+            act_d = int(state[prefix + "4.weight"].shape[0])
+            _validate_ckpt_dims(ckpt, (("obs_dim", obs_d), ("hidden_dim", hid_d), ("action_dim", act_d)))
 
-    model = ActorCritic(obs_dim=obs_d, action_dim=act_d, hidden_dim=hid_d, critic_obs_dim=critic_obs_d)
+        model = ActorCritic(obs_dim=obs_d, action_dim=act_d, hidden_dim=hid_d, critic_obs_dim=critic_obs_d)
 
-    if isinstance(ckpt, dict):
-        if "model_state_dict" in ckpt:
-            model.load_state_dict(ckpt["model_state_dict"])
-        elif "actor_state_dict" in ckpt:
-            model.actor.load_state_dict(ckpt["actor_state_dict"])
-        elif "0.weight" in ckpt:
-            model.actor.load_state_dict(ckpt)
+        if isinstance(ckpt, dict):
+            if "model_state_dict" in ckpt:
+                model.load_state_dict(ckpt["model_state_dict"])
+            elif "actor_state_dict" in ckpt:
+                model.actor.load_state_dict(ckpt["actor_state_dict"])
+            elif "0.weight" in ckpt:
+                model.actor.load_state_dict(ckpt)
+            else:
+                model.load_state_dict(ckpt)
         else:
             model.load_state_dict(ckpt)
-    else:
-        model.load_state_dict(ckpt)
 
-    actor = model.actor
+        actor = model.actor
+        if isinstance(ckpt, dict) and "squash_actions" in ckpt and type(ckpt["squash_actions"]) is not bool:
+            raise ValueError("Checkpoint action transform must be boolean")
+        actor._squash_actions = bool(ckpt.get("squash_actions", False))
     if not all(torch.isfinite(parameter).all() for parameter in actor.parameters()):
         raise ValueError("Policy actor weights must be finite")
-    actor._squash_actions = bool(ckpt.get("squash_actions", False))
     actor._model_metadata = {k: str(ckpt[k]) for k in ("model_path", "model_name") if ckpt.get(k)}
     if "observation_schema" in ckpt:
         from training.policy_contract import validate_observation_schema
@@ -320,12 +408,14 @@ def export_esp32_headers(
     config_output_path: Union[str, Path] = DEFAULT_ESP32_CONFIG_PATH,
     scale_obs: float = 127.0,
     scale_act: float = 127.0,
+    legacy_observation_schema: Optional[dict] = None,
 ) -> Tuple[Path, Path]:
     """Export INT8 quantized weights & INT32 biases header and config header for ESP32-S3."""
     if not all(np.isfinite(scale) and scale > 0 for scale in (scale_obs, scale_act)):
         raise ValueError("Quantization scales must be finite and positive")
     actor = load_actor_from_checkpoint(model)
     actor.eval()
+    _validate_esp32_actor_arch(actor)
 
     # 1. Extract weights and biases
     # actor[0]: Linear(obs_dim, 256)
@@ -342,6 +432,7 @@ def export_esp32_headers(
     b3 = actor[4].bias.detach().cpu().numpy().astype(np.float32)    # [8]
     if obs_dim != 42 or w3.shape[0] != 8:
         raise ValueError("Unsupported ESP32 policy dimensions; expected 42 observations and 8 actions")
+    schema = _resolve_esp32_schema(actor, legacy_observation_schema=legacy_observation_schema)
 
     weights_output_path = Path(weights_output_path).resolve()
     weights_output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -414,6 +505,12 @@ def export_esp32_headers(
 #define POLICY_LAYER3_IN  {w3.shape[1]}
 #define POLICY_LAYER3_OUT {w3.shape[0]}
 #define POLICY_SQUASH_ACTIONS {squash}
+#define POLICY_OBS_SCHEMA_VERSION {int(schema["version"])}
+#define POLICY_EMBED_PHASE_CLOCK {1 if schema["embed_phase_clock"] else 0}
+#define POLICY_CONTROL_DT {float(schema["control_dt"]):.9g}f
+#define POLICY_GAIT_PERIOD {float(schema["period"]):.9g}f
+#define POLICY_CLOCK_ADVANCE_AFTER_ACTION 1
+#define POLICY_CLOCK_ZERO_CMD_ADVANCE 1
 static const float POLICY_OBS_LOWER[POLICY_LAYER1_IN] = {{{lower_code}}};
 static const float POLICY_OBS_UPPER[POLICY_LAYER1_IN] = {{{upper_code}}};
 

@@ -238,3 +238,37 @@ def test_parallel_sim_runner_auto_recovery_integration():
             break
 
     assert recovered, f"Robot failed to auto-recover: root_z={sim.datas[0].qpos[2]:.3f}"
+
+
+@pytest.mark.parametrize("model_rel", ["models/mjcf/microduck_8dof.xml", "duck_v2/cyberduck_v2.xml"])
+def test_self_righting_completes_at_mjcf_standing_geometry_and_rejects_fallen_pose(model_rel):
+    """F6: SelfRightingController must reach DONE at V1/V2 nominal root_z (~0.128m) and reject fallen/tilted poses."""
+    import mujoco
+    from training.env_config import DEFAULT_NOMINAL_QPOS
+
+    m = mujoco.MjModel.from_xml_path(str(Path(__file__).resolve().parent.parent / model_rel))
+    ctrl = SelfRightingController.from_model(m) if hasattr(SelfRightingController, "from_model") else SelfRightingController()
+    nominal_z = float(m.qpos0[2])
+    upright_grav = np.array([0.0, 0.0, -1.0], dtype=np.float32)
+
+    # 1. Holding upright at nominal MJCF geometry must complete recovery without hitting FAILED_LOCKED
+    ctrl.trigger(FallType.PRONE, LIE_NOMINAL_QPOS.copy())
+    target = LIE_NOMINAL_QPOS.copy()
+    for _ in range(250):
+        target, is_done = ctrl.step(target, nominal_z, upright_grav)
+        if is_done or ctrl.state == SelfRightingController.FAILED_LOCKED:
+            break
+    assert ctrl.state == SelfRightingController.DONE, f"Expected DONE at {model_rel} z={nominal_z}, got {ctrl.state}"
+    assert is_done is True
+
+    # 2. Even if joints match STAND_NOMINAL_QPOS, a fallen/tilted body must NOT be marked DONE
+    ctrl_fallen = SelfRightingController(max_retries=1, phase_timeout=10)
+    ctrl_fallen.trigger(FallType.PRONE, DEFAULT_NOMINAL_QPOS.copy())
+    for _ in range(150):
+        target_f, done_f = ctrl_fallen.step(DEFAULT_NOMINAL_QPOS.copy(), 0.050, np.array([0.0, 0.8, -0.5], dtype=np.float32))
+        assert done_f is False
+        assert ctrl_fallen.state != SelfRightingController.DONE
+        if ctrl_fallen.state == SelfRightingController.FAILED_LOCKED:
+            break
+    assert ctrl_fallen.state == SelfRightingController.FAILED_LOCKED
+

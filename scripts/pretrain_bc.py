@@ -160,6 +160,7 @@ def save_bc_checkpoint(
         "obs_dim": int(obs_dim),
         "action_dim": int(action_dim),
         "hidden_dim": int(hidden_dim),
+        "squash_actions": bool(model.squash_actions),
         "stage": 0,
         "iterations": 0,
     }

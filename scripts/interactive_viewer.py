@@ -8,6 +8,7 @@ headless environments or remote servers.
 """
 
 import argparse
+import json
 import math
 import os
 import sys
@@ -315,6 +316,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=["yellow", "red", "green", "blue"],
         help="Color target to track with visual servoing (default: yellow)",
     )
+    parser.add_argument(
+        "--legacy-observation-schema",
+        type=Path,
+        default=None,
+        help="Verified JSON observation schema for legacy checkpoint/ONNX without embedded schema",
+    )
     return parser
 
 
@@ -437,10 +444,13 @@ def extract_viewer_observation(
     data: Any,
     cmd_vel: Union[Tuple[float, float, float], List[float], np.ndarray] = (0.2, 0.0, 0.0),
     last_actions: Optional[np.ndarray] = None,
-    obs_dim: int = 42,
+    obs_dim: Optional[int] = None,
     episode_step: int = 0,
     control_dt: float = 0.02,
     sim_step: Optional[int] = None,
+    observation_schema: Optional[Dict[str, Any]] = None,
+    embed_phase_clock: Optional[bool] = None,
+    period: float = 0.8,
 ) -> np.ndarray:
     """Extract observation vector (37 or 42 dimensions) from current MuJoCo simulation data.
 
@@ -454,8 +464,33 @@ def extract_viewer_observation(
     - Feet contact sensors (4) from touch sensors (sensordata 10, 11, zero padded)
     - Optional LiDAR ranges (5) from rangefinder sensors (sensordata 28:33, clipped to max range)
     """
+    from training.policy_contract import phase_clock_for_schema, validate_observation_schema
+
     if sim_step is not None:
         episode_step = sim_step
+
+    if observation_schema is not None:
+        schema = validate_observation_schema(observation_schema)
+        if obs_dim is not None and int(obs_dim) != schema["obs_dim"]:
+            raise ValueError(f"obs_dim ({obs_dim}) conflicts with observation_schema obs_dim ({schema['obs_dim']})")
+        eff_obs_dim = schema["obs_dim"]
+        eff_control_dt = schema["control_dt"]
+        eff_period = schema["period"]
+        phase_clock = phase_clock_for_schema(schema, episode_step)
+    else:
+        eff_obs_dim = 42 if obs_dim is None else int(obs_dim)
+        if eff_obs_dim not in (37, 42):
+            raise ValueError(f"Unsupported viewer obs_dim: {eff_obs_dim}")
+        eff_control_dt = float(control_dt)
+        eff_period = float(period)
+        use_clock = True if embed_phase_clock is None else bool(embed_phase_clock)
+        if use_clock and compute_gait_phase is not None:
+            _, clock_sin, clock_cos = compute_gait_phase(
+                episode_step, dt_control=eff_control_dt, period=eff_period
+            )
+            phase_clock = np.array([clock_sin, clock_cos], dtype=np.float32)
+        else:
+            phase_clock = None
 
     if last_actions is None:
         last_actions = np.zeros(8, dtype=np.float32)
@@ -491,50 +526,28 @@ def extract_viewer_observation(
         dtype=np.float32,
     )
 
-    # 6. LiDAR ranges (sensordata 28:33) with floor-hit filtering matching ParallelSimRunner
-    if extract_filtered_lidar_ranges is not None:
-        lidar_ranges = extract_filtered_lidar_ranges(model, data, obs_dim=obs_dim, lidar_max=2.0)
+    # 6. LiDAR ranges (sensordata 28:33) only for 42-dim layout
+    if eff_obs_dim != 42:
+        lidar_ranges = None
+    elif extract_filtered_lidar_ranges is not None:
+        lidar_ranges = extract_filtered_lidar_ranges(model, data, obs_dim=eff_obs_dim, lidar_max=2.0)
     elif len(data.sensordata) >= 33:
         raw_lidar = np.array(data.sensordata[28:33], dtype=np.float32)
         lidar_ranges = np.where(raw_lidar < 0.0, 2.0, raw_lidar)
-    elif obs_dim == 42:
-        lidar_ranges = np.full(5, 2.0, dtype=np.float32)
     else:
-        lidar_ranges = None
+        lidar_ranges = np.full(5, 2.0, dtype=np.float32)
 
-    clock_sin, clock_cos = 0.0, 1.0
-    if compute_gait_phase is not None:
-        _, clock_sin, clock_cos = compute_gait_phase(
-            episode_step, dt_control=control_dt, period=0.8
-        )
-    phase_clock = np.array([clock_sin, clock_cos], dtype=np.float32)
-
-    try:
-        return compute_observations(
-            base_ang_vel=base_ang_vel,
-            proj_grav=proj_grav,
-            commands=cmd,
-            joint_pos=joint_pos,
-            joint_vel=joint_vel,
-            last_actions=last_actions,
-            foot_contact=foot_contact,
-            lidar_ranges=lidar_ranges if obs_dim == 42 else None,
-            phase_clock=phase_clock,
-        )
-    except Exception:
-        foot_contact[2:4] = phase_clock
-        parts = [
-            base_ang_vel.ravel(),
-            proj_grav.ravel(),
-            cmd.ravel(),
-            joint_pos.ravel(),
-            joint_vel.ravel(),
-            last_actions.ravel(),
-            foot_contact.ravel(),
-        ]
-        if obs_dim == 42 and lidar_ranges is not None:
-            parts.append(lidar_ranges.ravel())
-        return np.concatenate(parts, axis=-1).astype(np.float32)
+    return compute_observations(
+        base_ang_vel=base_ang_vel,
+        proj_grav=proj_grav,
+        commands=cmd,
+        joint_pos=joint_pos,
+        joint_vel=joint_vel,
+        last_actions=last_actions,
+        foot_contact=foot_contact,
+        lidar_ranges=lidar_ranges,
+        phase_clock=phase_clock,
+    )
 
 
 def resolve_viewer_model_path(model_arg=None, policy_path=None) -> str:
@@ -599,12 +612,36 @@ def _validate_viewer_policy_dimensions(policy):
         obs_width, action_width = layers[0].in_features, layers[-1].out_features
     if obs_width not in (37, 42) or action_width != 8:
         raise ValueError(f"Unsupported viewer policy dimensions: obs={obs_width}, actions={action_width}")
+    return int(obs_width)
+
+
+def _attach_viewer_policy_schema(policy: Any, obs_width: int, legacy_observation_schema: Optional[Dict[str, Any]], require_schema: bool) -> Any:
+    from training.policy_contract import validate_observation_schema
+
+    metadata = dict(getattr(policy, "_model_metadata", {}))
+    raw_schema = metadata.get("observation_schema")
+    if raw_schema is None and legacy_observation_schema is None:
+        if require_schema:
+            raise ValueError("Legacy policy has no observation_schema; provide an explicit verified legacy schema")
+        policy._observation_schema = None
+        return policy
+    try:
+        parsed = json.loads(raw_schema) if isinstance(raw_schema, str) else (raw_schema if raw_schema is not None else legacy_observation_schema)
+        schema = validate_observation_schema(parsed)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Invalid policy observation_schema") from exc
+    if schema["obs_dim"] != obs_width:
+        raise ValueError(f"observation_schema obs_dim ({schema['obs_dim']}) disagrees with policy input width ({obs_width})")
+    policy._observation_schema = schema
+    return policy
 
 
 def load_viewer_policy(
     policy_path: Union[str, Path],
     obs_dim: int = 42,
     action_dim: int = 8,
+    legacy_observation_schema: Optional[Dict[str, Any]] = None,
+    require_schema: bool = False,
 ) -> Any:
     """Load trained RL policy from PyTorch (.pt) or ONNX (.onnx) file.
 
@@ -625,14 +662,15 @@ def load_viewer_policy(
                 "onnxruntime is required to load .onnx policies. Run: pip install onnxruntime"
             ) from e
         session = ort.InferenceSession(str(p_path), providers=["CPUExecutionProvider"])
-        _validate_viewer_policy_dimensions(session)
-        return session
+        obs_width = _validate_viewer_policy_dimensions(session)
+        session._model_metadata = dict(session.get_modelmeta().custom_metadata_map)
+        return _attach_viewer_policy_schema(session, obs_width, legacy_observation_schema, require_schema)
 
     from scripts.export_policy import load_actor_from_checkpoint
     actor = load_actor_from_checkpoint(p_path, obs_dim=obs_dim, action_dim=action_dim)
-    _validate_viewer_policy_dimensions(actor)
+    obs_width = _validate_viewer_policy_dimensions(actor)
     actor.eval()
-    return actor
+    return _attach_viewer_policy_schema(actor, obs_width, legacy_observation_schema, require_schema)
 
 
 
@@ -666,6 +704,9 @@ def policy_step(policy: Any, obs: np.ndarray) -> np.ndarray:
                 break
 
     if expected_dim is not None and expected_dim > 0:
+        schema = getattr(policy, "_observation_schema", None)
+        if schema is not None and obs_arr.shape[-1] != schema["obs_dim"]:
+            raise ValueError(f"Policy observation mismatch: {obs_arr.shape[-1]} vs {schema['obs_dim']}")
         if obs_arr.shape[-1] != expected_dim and {obs_arr.shape[-1], expected_dim} != {37, 42}:
             raise ValueError(f"Policy observation mismatch: {obs_arr.shape[-1]} vs {expected_dim}")
         if obs_arr.shape[-1] > expected_dim:
@@ -705,6 +746,8 @@ def _maybe_hot_reload_policy(
     last_check_wall: float,
     check_interval: float = 1.0,
     now: Optional[float] = None,
+    legacy_observation_schema: Optional[Dict[str, Any]] = None,
+    require_schema: bool = False,
 ) -> Tuple[Any, float, float]:
     """Check if policy file on disk has updated mtime and hot-reload weights.
 
@@ -718,17 +761,56 @@ def _maybe_hot_reload_policy(
     try:
         mtime = os.path.getmtime(str(policy_path))
         if mtime > last_mtime:
-            new_policy = load_viewer_policy(policy_path)
+            if require_schema or legacy_observation_schema is not None:
+                new_policy = load_viewer_policy(
+                    policy_path,
+                    legacy_observation_schema=legacy_observation_schema,
+                    require_schema=require_schema,
+                )
+            else:
+                new_policy = load_viewer_policy(policy_path)
             current_model = getattr(current_policy, "_model_metadata", {})
             new_model = getattr(new_policy, "_model_metadata", {})
             if current_model and new_model and current_model != new_model:
                 raise ValueError("Hot-reload model metadata changed; reopen the viewer")
+            current_schema = getattr(current_policy, "_observation_schema", None)
+            new_schema = getattr(new_policy, "_observation_schema", None)
+            if current_schema != new_schema:
+                raise ValueError("Hot-reload observation_schema changed; reopen the viewer")
             print(f"\n[HOT-RELOAD] Đã tải trọng số policy mới từ {policy_path} (mtime={mtime:.1f})")
             return (new_policy, mtime, now_t)
         return (current_policy, last_mtime, now_t)
     except Exception as exc:
         print(f"[HOT-RELOAD] Keeping last valid policy: {exc}")
         return (current_policy, last_mtime, now_t)
+
+
+def _step_viewer_policy_control(
+    policy: Any,
+    model: Any,
+    data: Any,
+    cmd_vel: Union[Tuple[float, float, float], List[float], np.ndarray],
+    last_actions: np.ndarray,
+    last_targets: np.ndarray,
+    episode_step: int,
+    control_dt: float,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    schema = getattr(policy, "_observation_schema", None)
+    obs = extract_viewer_observation(
+        model,
+        data,
+        cmd_vel=cmd_vel,
+        last_actions=last_actions,
+        obs_dim=schema["obs_dim"] if schema is not None else 42,
+        episode_step=episode_step,
+        control_dt=control_dt,
+        observation_schema=schema,
+    )
+    actions = policy_step(policy, obs)
+    scaled_targets = scale_actions(actions, _DEFAULT_CFG, nominal_centered=True)
+    max_vel = _DEFAULT_CFG.MAX_VELOCITY if _DEFAULT_CFG else 6.0
+    targets = clip_action_rates(scaled_targets, last_targets, dt=control_dt, max_velocity=max_vel)
+    return targets, targets, actions
 
 
 def run_simulation_headless(
@@ -746,13 +828,18 @@ def run_simulation_headless(
     gait: str = "waddle",
     track: bool = False,
     target_color: str = "yellow",
+    legacy_observation_schema: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Execute a headless simulation without GUI window for verification and testing."""
     if not _MUJOCO_AVAILABLE:
         raise RuntimeError("MuJoCo library is not available in current environment.")
 
     model_path = resolve_viewer_model_path(model_path, policy_path)
-    policy = load_viewer_policy(policy_path) if policy_path else None
+    policy = (
+        load_viewer_policy(policy_path, legacy_observation_schema=legacy_observation_schema, require_schema=True)
+        if policy_path
+        else None
+    )
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found: {model_path}")
 
@@ -761,7 +848,8 @@ def run_simulation_headless(
     total_steps = int(max(1, duration / dt))
     sim_time = 0.0
 
-    control_dt = 0.02
+    policy_schema = getattr(policy, "_observation_schema", None) if policy is not None else None
+    control_dt = float(policy_schema["control_dt"]) if policy_schema is not None else 0.02
     decimation = max(1, int(round(control_dt / dt)))
     policy_episode_step = 0
     last_actions = np.zeros(8, dtype=np.float32)
@@ -781,24 +869,10 @@ def run_simulation_headless(
     for step_idx in range(total_steps):
         if policy is not None:
             if step_idx % decimation == 0:
-                obs = extract_viewer_observation(
-                    model,
-                    data,
-                    cmd_vel=cmd_vel,
-                    last_actions=last_actions,
-                    obs_dim=42,
-                    episode_step=policy_episode_step,
-                    control_dt=control_dt,
+                targets, last_targets, last_actions = _step_viewer_policy_control(
+                    policy, model, data, cmd_vel, last_actions, last_targets, policy_episode_step, control_dt
                 )
                 policy_episode_step += 1
-                actions = policy_step(policy, obs)
-                scaled_targets = scale_actions(actions, _DEFAULT_CFG, nominal_centered=True)
-                max_vel = _DEFAULT_CFG.MAX_VELOCITY if _DEFAULT_CFG else 6.0
-                targets = clip_action_rates(
-                    scaled_targets, last_targets, dt=control_dt, max_velocity=max_vel
-                )
-                last_targets = targets
-                last_actions = actions
         elif gait_demo:
             targets = compute_gait_targets(sim_time, pattern=gait)
             if blob_tracker is not None and servo_ctrl is not None and cam_renderer is not None:
@@ -868,6 +942,7 @@ def run_interactive_viewer(
     gait: str = "waddle",
     track: bool = False,
     target_color: str = "yellow",
+    legacy_observation_schema: Optional[Dict[str, Any]] = None,
 ):
     """Launch passive 3D MuJoCo viewer or fall back to headless/CLI mode."""
     if not _MUJOCO_AVAILABLE:
@@ -875,7 +950,11 @@ def run_interactive_viewer(
         return
 
     model_path = resolve_viewer_model_path(model_path, policy_path)
-    policy = load_viewer_policy(policy_path) if policy_path else None
+    policy = (
+        load_viewer_policy(policy_path, legacy_observation_schema=legacy_observation_schema, require_schema=True)
+        if policy_path
+        else None
+    )
     if not os.path.exists(model_path):
         print(f"[LỖI] Không tìm thấy tệp mô hình: {model_path}")
         return
@@ -942,7 +1021,8 @@ def run_interactive_viewer(
                     last_reload_check = time.time()
                 except Exception:
                     pass
-            control_dt = 0.02
+            policy_schema = getattr(policy, "_observation_schema", None) if policy is not None else None
+            control_dt = float(policy_schema["control_dt"]) if policy_schema is not None else 0.02
             decimation = max(1, int(round(control_dt / dt)))
             policy_episode_step = 0
             last_actions = np.zeros(8, dtype=np.float32)
@@ -960,26 +1040,17 @@ def run_interactive_viewer(
                 if policy is not None:
                     if step_count % decimation == 0:
                         policy, policy_mtime, last_reload_check = _maybe_hot_reload_policy(
-                            policy_path, policy, policy_mtime, last_reload_check
+                            policy_path,
+                            policy,
+                            policy_mtime,
+                            last_reload_check,
+                            legacy_observation_schema=legacy_observation_schema,
+                            require_schema=True,
                         )
-                        obs = extract_viewer_observation(
-                            model,
-                            data,
-                            cmd_vel=cmd_vel,
-                            last_actions=last_actions,
-                            obs_dim=42,
-                            episode_step=policy_episode_step,
-                            control_dt=control_dt,
+                        targets, last_targets, last_actions = _step_viewer_policy_control(
+                            policy, model, data, cmd_vel, last_actions, last_targets, policy_episode_step, control_dt
                         )
                         policy_episode_step += 1
-                        actions = policy_step(policy, obs)
-                        scaled_targets = scale_actions(actions, _DEFAULT_CFG, nominal_centered=True)
-                        max_vel = _DEFAULT_CFG.MAX_VELOCITY if _DEFAULT_CFG else 6.0
-                        targets = clip_action_rates(
-                            scaled_targets, last_targets, dt=control_dt, max_velocity=max_vel
-                        )
-                        last_targets = targets
-                        last_actions = actions
                 elif gait_demo:
                     targets = compute_gait_targets(elapsed, pattern=gait)
                 else:
@@ -1033,6 +1104,7 @@ def run_interactive_viewer(
                 gait=gait,
                 track=track,
                 target_color=target_color,
+                legacy_observation_schema=legacy_observation_schema,
             )
             return
 
@@ -1052,6 +1124,7 @@ def run_interactive_viewer(
             gait=gait,
             track=track,
             target_color=target_color,
+            legacy_observation_schema=legacy_observation_schema,
         )
         print(f"  Tổng bước chạy      : {metrics['completed_steps']}")
         print(f"  Thời gian mô phỏng  : {metrics['sim_time']:.2f} s")
@@ -1075,6 +1148,7 @@ def run_opencv_viewer(
     gait: str = "waddle",
     track: bool = False,
     target_color: str = "yellow",
+    legacy_observation_schema: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Launch resilient 3D viewer using MuJoCo offscreen Renderer + OpenCV native window.
 
@@ -1089,7 +1163,11 @@ def run_opencv_viewer(
         return
 
     model_path = resolve_viewer_model_path(model_path, policy_path)
-    policy = load_viewer_policy(policy_path) if policy_path else None
+    policy = (
+        load_viewer_policy(policy_path, legacy_observation_schema=legacy_observation_schema, require_schema=True)
+        if policy_path
+        else None
+    )
     if not os.path.exists(model_path):
         print(f"[LỖI] Không tìm thấy tệp mô hình: {model_path}")
         return
@@ -1122,7 +1200,8 @@ def run_opencv_viewer(
             last_reload_check = time.time()
         except Exception:
             pass
-    control_dt = 0.02
+    policy_schema = getattr(policy, "_observation_schema", None) if policy is not None else None
+    control_dt = float(policy_schema["control_dt"]) if policy_schema is not None else 0.02
     decimation = max(1, int(round(control_dt / dt)))
     policy_episode_step = 0
     last_actions = np.zeros(8, dtype=np.float32)
@@ -1177,30 +1256,21 @@ def run_opencv_viewer(
             if not paused:
                 if policy is not None:
                     policy, policy_mtime, last_reload_check = _maybe_hot_reload_policy(
-                        policy_path, policy, policy_mtime, last_reload_check
+                        policy_path,
+                        policy,
+                        policy_mtime,
+                        last_reload_check,
+                        legacy_observation_schema=legacy_observation_schema,
+                        require_schema=True,
                     )
                 steps_per_frame = int(round(1.0 / (30.0 * dt)))
                 for _ in range(steps_per_frame):
                     if policy is not None:
                         if step_count % decimation == 0:
-                            obs = extract_viewer_observation(
-                                model,
-                                data,
-                                cmd_vel=cmd_vel,
-                                last_actions=last_actions,
-                                obs_dim=42,
-                                episode_step=policy_episode_step,
-                                control_dt=control_dt,
+                            targets, last_targets, last_actions = _step_viewer_policy_control(
+                                policy, model, data, cmd_vel, last_actions, last_targets, policy_episode_step, control_dt
                             )
                             policy_episode_step += 1
-                            actions = policy_step(policy, obs)
-                            scaled_targets = scale_actions(actions, _DEFAULT_CFG, nominal_centered=True)
-                            max_vel = _DEFAULT_CFG.MAX_VELOCITY if _DEFAULT_CFG else 6.0
-                            targets = clip_action_rates(
-                                scaled_targets, last_targets, dt=control_dt, max_velocity=max_vel
-                            )
-                            last_targets = targets
-                            last_actions = actions
                     elif gait_demo:
                         targets = compute_gait_targets(sim_time, pattern=current_gait)
                         if blob_tracker is not None and servo_ctrl is not None and cam_renderer is not None:
@@ -1442,6 +1512,11 @@ def main() -> int:
     """Main CLI entry point."""
     parser = build_arg_parser()
     args = parser.parse_args()
+    legacy_schema = (
+        json.loads(args.legacy_observation_schema.read_text(encoding="utf-8"))
+        if getattr(args, "legacy_observation_schema", None)
+        else None
+    )
 
     if args.interactive:
         run_interactive_cli(model_path=resolve_viewer_model_path(args.model), dt=args.dt)
@@ -1462,6 +1537,7 @@ def main() -> int:
             gait=args.gait,
             track=args.track,
             target_color=args.target_color,
+            legacy_observation_schema=legacy_schema,
         )
         print("Kết quả mô phỏng:")
         print(f"  - Tổng số bước      : {metrics['completed_steps']}")
@@ -1485,6 +1561,7 @@ def main() -> int:
             gait=args.gait,
             track=args.track,
             target_color=args.target_color,
+            legacy_observation_schema=legacy_schema,
         )
     else:
         run_interactive_viewer(
@@ -1501,6 +1578,7 @@ def main() -> int:
             gait=args.gait,
             track=args.track,
             target_color=args.target_color,
+            legacy_observation_schema=legacy_schema,
         )
     return 0
 

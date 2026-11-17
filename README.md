@@ -217,10 +217,10 @@ duckV1/
 
 ## 7. Trạng Thái Hiện Tại & Điểm Neo Khôi Phục (`v1-flat-walk-stable`)
 
-- **Đang dừng ở đâu:** Đã triển khai [plan project audit](plans/261117-1710-project-audit-fixes/plan.md) trên `wip/fix-project-audit`; neo `v1-flat-walk-stable` (`dc948dbd` + `models/checkpoints/v1-flat-walk-stable.pt`) được bảo toàn, hai edit đường dẫn Pi có sẵn vẫn để riêng ngoài commit.
-- **Đã sửa:** F1–F6 gồm history/terminal observations, namespace và identity checkpoint, RMS/finite guards, schema clock train → ONNX → Pi, cùng guard 42 chiều ESP32. F7 đưa toàn bộ tests và dashboard phụ thuộc vào Git; không cập nhật artifact đang ship.
-- **Kiểm chứng:** Baseline `479 passed`; focused `146 passed`; full suite `521 passed, 26 warnings` (`240.25s`), verify vật lý thành công; `duck.py verify` trên bản xuất sạch Git index đạt `521 passed, 26 warnings` (`230.95s`). Chi tiết tại [execution report](plans/261117-1710-project-audit-fixes/execution.md).
-- **Bước tiếp theo:** Xác minh provenance checkpoint legacy trước transfer/export; train lại và đánh giá locomotion deterministic, sau đó smoke Pi/ESP32 trên phần cứng trước khi tạo neo code + weights mới.
+- **Đang dừng ở đâu:** Hoàn tất plan follow-up F1–F10 tại [plan](plans/261117-2140-project-audit-followup/plan.md) trên `wip/fix-project-audit`; neo `v1-flat-walk-stable` (`734e3c10` / `dc948dbd` + `models/checkpoints/v1-flat-walk-stable.pt`) giữ nguyên, hai chỉnh sửa đường dẫn Pi có sẵn vẫn để riêng ngoài commit và không đụng các artifact đã ship.
+- **Đã sửa:** Tách watchdog timestamp command/LiDAR trên MCU2, decode MPU6050 signed int16 và dừng an toàn khi I2C lỗi/stale trên Pi, đồng bộ observation schema clock qua exporter/MCU2/viewer, sửa navigation bearing `target_yaw`, hiệu chỉnh ngưỡng đứng self-righting + giữ `FAILED_LOCKED`, bảo toàn `squash_actions` khi transfer PPO/BC, hỗ trợ checkpoint SAC ở ONNX/viewer/benchmark (chặn ESP32 trước tạo file), và chuẩn hóa RMS `clip=0`.
+- **Kiểm chứng:** Focused 7 file `154 passed` (`172.19s`); full suite `543 passed, 38 warnings` (`262.52s`); `duck.py verify` đạt exit `0` với xác thực vật lý MJCF/URDF thành công và `543 passed, 38 warnings` (`265.64s`). Chi tiết tại [execution report](plans/261117-2140-project-audit-followup/execution.md).
+- **Bước tiếp theo:** Xác minh provenance checkpoint legacy trước transfer/export, chạy lại benchmark deterministic / huấn luyện dài nếu cần, và smoke-test trực tiếp trên phần cứng Pi + ESP32 trước khi gắn tag/weights neo mới.
 
 ---
 

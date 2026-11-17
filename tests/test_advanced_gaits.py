@@ -176,3 +176,43 @@ def test_bipedal_gait_generator_quadrature_forward_walk_and_waddle():
         assert final_x_waddle > 0.015, f"Waddle final_x too low: {final_x_waddle:.4f}m <= 0.015m"
     finally:
         runner.close()
+
+
+def test_advanced_behavior_controller_persists_failed_locked_until_explicit_reset():
+    """F7: Once SelfRightingController hits FAILED_LOCKED, AdvancedBehaviorController must stay locked across ticks."""
+    ctrl = AdvancedBehaviorController(default_pattern=GaitPattern.WADDLE, enable_fall_recovery=True)
+    ctrl.recovery_ctrl.phase_timeout = 10
+    ctrl.recovery_ctrl.max_retries = 3
+
+    curr_qpos = DEFAULT_NOMINAL_QPOS.copy()
+    stuck_grav = np.array([0.0, 0.0, -0.40], dtype=np.float32)
+    stuck_z = 0.050
+
+    locked_step = None
+    for s in range(150):
+        targets, recovering = ctrl.step(0.02, curr_qpos, stuck_z, stuck_grav)
+        curr_qpos = targets
+        if ctrl.recovery_ctrl.state == RecoveryState.FAILED_LOCKED:
+            assert recovering is False
+            locked_step = s
+            break
+    assert locked_step is not None, "Controller did not enter FAILED_LOCKED"
+    locked_attempts = ctrl.recovery_ctrl.attempts
+    locked_target = curr_qpos.copy()
+
+    # Subsequent ticks while still fallen must NOT re-trigger PHASE1, bump attempts, or run gait
+    for _ in range(15):
+        next_targets, recovering = ctrl.step(0.02, curr_qpos, stuck_z, stuck_grav)
+        assert ctrl.recovery_ctrl.state == RecoveryState.FAILED_LOCKED
+        assert ctrl.recovery_ctrl.attempts == locked_attempts
+        assert ctrl.is_recovering is False
+        assert recovering is False
+        np.testing.assert_allclose(next_targets, locked_target, atol=1e-6)
+
+    # Explicit reset unlocks and returns to nominal gait when upright
+    ctrl.reset_recovery()
+    assert ctrl.recovery_ctrl.state == RecoveryState.IDLE
+    upright_targets, recovering = ctrl.step(0.02, DEFAULT_NOMINAL_QPOS.copy(), 0.128, np.array([0.0, 0.0, -1.0], dtype=np.float32))
+    assert recovering is False
+    assert ctrl.recovery_ctrl.state == RecoveryState.IDLE
+

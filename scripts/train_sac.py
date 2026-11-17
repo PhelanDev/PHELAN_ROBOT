@@ -6,6 +6,7 @@ from torch.distributions import Normal
 _ROOT = str(Path(__file__).resolve().parent.parent)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
+from training.policy_contract import observation_schema
 from training.run_parallel_sim import ParallelSimRunner
 
 
@@ -116,13 +117,22 @@ def sac_update_step(
 def save_sac_checkpoint(
     path: Union[str, Path], actor: SquashedGaussianActor, log_alpha: torch.Tensor,
     obs_dim: int, act_dim: int, hidden_dim: int = 256,
+    model_path: Optional[Union[str, Path]] = None,
+    observation_schema: Optional[dict] = None,
 ) -> Path:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({
+    payload = {
         "actor_state_dict": actor.state_dict(), "sac_alpha": float(log_alpha.exp().item()),
-        "obs_dim": obs_dim, "action_dim": act_dim, "hidden_dim": hidden_dim,
-    }, p)
+        "obs_dim": int(obs_dim), "action_dim": int(act_dim), "hidden_dim": int(hidden_dim),
+        "policy_arch": "sac_squashed_gaussian", "algorithm": "sac", "squash_actions": True,
+    }
+    if model_path is not None:
+        payload["model_path"] = str(model_path)
+        payload["model_name"] = Path(model_path).name
+    if observation_schema is not None:
+        payload["observation_schema"] = dict(observation_schema)
+    torch.save(payload, p)
     return p
 
 
@@ -167,7 +177,11 @@ def train_sac(
             obs, collected = next_obs, collected + num_envs
             if collected >= warmup_steps and buf.size >= batch_size:
                 sac_update_step(actor, critic, target_critic, log_alpha, buf.sample(batch_size, device=device), optimizers, t_entropy, gamma=gamma, tau=tau)
-        return save_sac_checkpoint(save_path, actor, log_alpha, obs_dim, act_dim, hidden_dim)
+        schema = observation_schema(obs_dim, runner.embed_phase_clock, runner.control_dt)
+        return save_sac_checkpoint(
+            save_path, actor, log_alpha, obs_dim, act_dim, hidden_dim,
+            model_path=model_path, observation_schema=schema,
+        )
     finally:
         runner.close()
 

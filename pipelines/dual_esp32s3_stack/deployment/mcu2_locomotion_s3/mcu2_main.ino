@@ -70,6 +70,14 @@ HardwareSerial UartLink(MCU2_UART_NUM);
 static_assert(OBS_DIM == 42, "MCU2 observation assembly requires OBS_DIM=42");
 static_assert(POLICY_LAYER1_IN == OBS_DIM, "Policy input and observation buffer disagree");
 static_assert(POLICY_LAYER3_OUT == 8, "MCU2 requires eight policy actions");
+#ifndef POLICY_OBS_SCHEMA_VERSION
+#error "esp32_policy_weights.h missing observation schema metadata; re-export with scripts/export_policy.py"
+#endif
+static_assert(POLICY_OBS_SCHEMA_VERSION == 1, "MCU2 requires observation schema version 1");
+static_assert(POLICY_CONTROL_DT > 0.0199f && POLICY_CONTROL_DT < 0.0201f, "MCU2 requires 50 Hz (control_dt=0.02s)");
+static_assert(POLICY_GAIT_PERIOD > 0.0f, "MCU2 requires positive gait period");
+static_assert(POLICY_CLOCK_ADVANCE_AFTER_ACTION == 1, "MCU2 requires advance=after_action clock schema");
+static_assert(POLICY_CLOCK_ZERO_CMD_ADVANCE == 1, "MCU2 requires zero_command=advance clock schema");
 static float g_obs[OBS_DIM];
 
 // Locomotion & Joint State (initialized to nominal stand posture)
@@ -80,10 +88,14 @@ static float g_last_targets[8]      = { 0.00f,  0.00f,  0.00f, -0.15f, 0.15f,  0
 float g_last_raw_actions[8]         = {0};
 
 // Telemetry from MCU 1
-static VelocityCmdPacket g_cmd_pkt = {0.20f, 0.0f, 0.0f};
+static VelocityCmdPacket g_cmd_pkt = {0.0f, 0.0f, 0.0f};
 static LidarPerceptionPacket g_lidar_pkt = {{1.5f, 1.5f, 1.5f, 1.5f, 1.5f}, 0};
 static ColorTargetPacket g_color_target_pkt = {0, 0, 0};
 static uint32_t g_last_mcu1_pkt_time = 0;
+static uint32_t g_last_cmd_pkt_time = 0;
+static uint32_t g_last_lidar_pkt_time = 0;
+static bool g_has_cmd_pkt = false;
+static bool g_has_lidar_pkt = false;
 static bool g_emergency_stop = false;
 static bool s_warned_contact_fallback = false;
 static bool s_warned_lidar_fallback = false;
@@ -94,6 +106,7 @@ static uint16_t g_rx_head = 0;
 
 static uint32_t g_last_loop_time = 0;
 static uint32_t g_step_count = 0;
+static uint32_t g_episode_steps = 0;
 
 // ============================================================================
 // Hardware Setup & PWM Driver Helpers
@@ -396,11 +409,17 @@ void process_uart_packets() {
 
                     if (p_type == PKT_TYPE_VELOCITY_CMD) {
                         if (decode_velocity_packet(g_rx_ring, total_len, &g_cmd_pkt, &seq)) {
-                            g_last_mcu1_pkt_time = millis();
+                            uint32_t rx_ms = millis();
+                            g_has_cmd_pkt = true;
+                            g_last_cmd_pkt_time = rx_ms;
+                            g_last_mcu1_pkt_time = rx_ms;
                         }
                     } else if (p_type == PKT_TYPE_LIDAR_PERCEPTION) {
                         if (decode_lidar_packet(g_rx_ring, total_len, &g_lidar_pkt, &seq)) {
-                            g_last_mcu1_pkt_time = millis();
+                            uint32_t rx_ms = millis();
+                            g_has_lidar_pkt = true;
+                            g_last_lidar_pkt_time = rx_ms;
+                            g_last_mcu1_pkt_time = rx_ms;
                         }
                     } else if (p_type == PKT_TYPE_HEARTBEAT) {
                         HeartbeatPacket hb;
@@ -414,7 +433,10 @@ void process_uart_packets() {
                                 g_cmd_pkt.vx = voice_cmd.vx;
                                 g_cmd_pkt.vy = voice_cmd.vy;
                                 g_cmd_pkt.wz = voice_cmd.wz;
-                                g_last_mcu1_pkt_time = millis();
+                                uint32_t rx_ms = millis();
+                                g_has_cmd_pkt = true;
+                                g_last_cmd_pkt_time = rx_ms;
+                                g_last_mcu1_pkt_time = rx_ms;
                             }
                         }
                     } else if (p_type == PKT_TYPE_COLOR_TARGET) {
@@ -430,6 +452,7 @@ void process_uart_packets() {
                             g_cmd_pkt.vx = 0.0f;
                             g_cmd_pkt.vy = 0.0f;
                             g_cmd_pkt.wz = 0.0f;
+                            g_last_mcu1_pkt_time = millis();
                             for (int i = 0; i < 8; ++i) {
                                 set_servo_angle(i, JOINT_NOMINAL_POS[i]);
                                 g_last_targets[i] = JOINT_NOMINAL_POS[i];
@@ -474,7 +497,7 @@ void read_foot_contacts(float *contact_out) {
 }
 
 void read_lidar_distances(float *ranges_out) {
-    if (g_last_mcu1_pkt_time == 0 || (millis() - g_last_mcu1_pkt_time > 500)) {
+    if (!g_has_lidar_pkt || (millis() - g_last_lidar_pkt_time > 500)) {
         if (!s_warned_lidar_fallback) {
             Serial.println("[MCU 2 Warning] LiDAR telemetry from MCU 1 unavailable/timeout. Using default clear 1.5m range.");
             s_warned_lidar_fallback = true;
@@ -531,18 +554,14 @@ void assemble_observation(float *obs_out) {
     read_foot_contacts(&obs_out[33]);
 
     // [35..36]: Gait phase clock [sin(phase), cos(phase)] (T=0.8s, dt=0.02s) matching compute_gait_phase
-    static uint32_t s_gait_step = 0;
-    bool is_moving = (fabsf(g_cmd_pkt.vx) > 0.01f || fabsf(g_cmd_pkt.vy) > 0.01f || fabsf(g_cmd_pkt.wz) > 0.01f);
-    if (is_moving) {
-        s_gait_step++;
-        float phase = fmodf((float)s_gait_step * CONTROL_DT / 0.8f, 1.0f);
+    if (POLICY_EMBED_PHASE_CLOCK) {
+        float phase = fmodf((float)g_episode_steps * POLICY_CONTROL_DT / POLICY_GAIT_PERIOD, 1.0f);
         float two_pi_phase = 2.0f * (float)PI * phase;
         obs_out[35] = sinf(two_pi_phase);
         obs_out[36] = cosf(two_pi_phase);
     } else {
-        s_gait_step = 0;
         obs_out[35] = 0.0f;
-        obs_out[36] = 1.0f;
+        obs_out[36] = 0.0f;
     }
 
     // [37..41]: 5-Ray ToF LiDAR rangefinder distances from MCU 1 (5)
@@ -573,11 +592,19 @@ void evaluate_locomotion_policy(const float *obs, float *target_angles_out) {
         float target_angle = JOINT_NOMINAL_POS[i] + raw_act * JOINT_ACTION_SCALE[i];
         target_angles_out[i] = constrain(target_angle, JOINT_MIN_LIMITS[i], JOINT_MAX_LIMITS[i]);
     }
+    g_episode_steps++;
 }
 
 // ============================================================================
 // Main Setup & Loop
 // ============================================================================
+
+void reset_policy_state() {
+    g_episode_steps = 0;
+    for (int i = 0; i < 8; ++i) {
+        g_last_raw_actions[i] = 0.0f;
+    }
+}
 
 void setup() {
     Serial.begin(115200);
@@ -593,9 +620,19 @@ void setup() {
 
     init_servos();
     init_mpu6050();
+    reset_policy_state();
 
     g_last_mcu1_pkt_time = millis();
     Serial.println("[MCU 2] Locomotion reflex engine initialized.");
+}
+
+void update_mcu1_watchdogs(uint32_t now) {
+    // Safety watchdog: stop walking if velocity/voice commands are stale (> 500ms)
+    if (!g_has_cmd_pkt || (now - g_last_cmd_pkt_time > 500)) {
+        g_cmd_pkt.vx = 0.0f;
+        g_cmd_pkt.vy = 0.0f;
+        g_cmd_pkt.wz = 0.0f;
+    }
 }
 
 void loop() {
@@ -610,13 +647,7 @@ void loop() {
 
     // 2. Strict 50 Hz (20ms) Real-Time Locomotion Loop
     uint32_t now = millis();
-
-    // Safety watchdog: stop walking if communication with MCU 1 is lost for > 500ms
-    if (g_last_mcu1_pkt_time > 0 && (now - g_last_mcu1_pkt_time > 500)) {
-        g_cmd_pkt.vx = 0.0f;
-        g_cmd_pkt.vy = 0.0f;
-        g_cmd_pkt.wz = 0.0f;
-    }
+    update_mcu1_watchdogs(now);
 
     if (now - g_last_loop_time >= 20) {
         g_last_loop_time = now;

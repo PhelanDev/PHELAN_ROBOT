@@ -288,6 +288,15 @@ class AdvancedBehaviorController:
         """True if the controller is actively executing fall recovery reflex."""
         return self.recovery_ctrl.is_recovering
 
+    @property
+    def is_failed(self) -> bool:
+        """True if self-righting recovery entered safety lock (requires explicit reset_recovery())."""
+        return self.recovery_ctrl.is_failed
+
+    def reset_recovery(self) -> None:
+        """Explicitly clear FAILED_LOCKED / DONE recovery state after operator intervention."""
+        self.recovery_ctrl.reset()
+
     def set_pattern(self, pattern: Union[str, GaitPattern]) -> None:
         """Change the active gait or behavior pattern."""
         self.pattern = GaitPattern(pattern) if isinstance(pattern, str) else pattern
@@ -323,6 +332,10 @@ class AdvancedBehaviorController:
 
         # 1. Fall detection & reflex takeover
         if self.enable_fall_recovery:
+            if self.recovery_ctrl.is_failed:
+                safe_targets, _ = self.recovery_ctrl.step(curr_qpos, root_z, proj_gravity)
+                return self.gait_gen.clamp_targets(safe_targets), False
+
             if not self.recovery_ctrl.is_recovering:
                 detected_fall = FallClassifier.classify(root_z, proj_gravity)
                 if detected_fall is not None:
@@ -337,7 +350,7 @@ class AdvancedBehaviorController:
                     self.recovery_ctrl.state = RecoveryState.IDLE
                     self.recovery_ctrl.last_target = None
                     return self.gait_gen.compute_gait(self.time, self.pattern), False
-                return self.gait_gen.clamp_targets(recovery_targets), True
+                return self.gait_gen.clamp_targets(recovery_targets), self.recovery_ctrl.is_recovering
 
         # 2. Nominal gait execution
         targets = self.gait_gen.compute_gait(self.time, self.pattern)

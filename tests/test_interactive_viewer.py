@@ -289,6 +289,7 @@ def test_configure_viewer_camera():
 def test_interactive_viewer_policy_headless_stability():
     """Verify that running policy brain in headless mode stays stable above z >= 0.18m."""
     from scripts.interactive_viewer import run_simulation_headless
+    from training.policy_contract import observation_schema
 
     ckpt_path = os.path.join(PROJECT_ROOT, "models", "checkpoints", "microduck_ppo.pt")
     if not os.path.exists(ckpt_path):
@@ -300,6 +301,7 @@ def test_interactive_viewer_policy_headless_stability():
         duration=0.5,
         dt=0.002,
         auto_reset=True,
+        legacy_observation_schema=observation_schema(42, True, 0.02),
     )
     assert metrics["completed_steps"] > 0
     # Must remain standing / walking and NOT collapse to z = 0.057m

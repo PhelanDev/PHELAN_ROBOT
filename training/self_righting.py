@@ -106,17 +106,38 @@ class SelfRightingController:
     PHASE3_PUSH_TO_STAND = RecoveryState.PHASE3_PUSH_TO_STAND
     DONE = RecoveryState.DONE
     FAILED_LOCKED = RecoveryState.FAILED_LOCKED
+    DEFAULT_STAND_MIN_Z = 0.1088  # 0.85 * 0.128m MJCF standing nominal CoM height (V1/V2)
+    DEFAULT_STAND_GRAV_Z = -0.85
 
     def __init__(
         self,
         max_rate: float = 0.10,
         max_retries: int = 3,
         phase_timeout: int = 40,
+        stand_min_z: float = DEFAULT_STAND_MIN_Z,
+        stand_grav_z: float = DEFAULT_STAND_GRAV_Z,
     ):
         self.max_rate = float(max_rate)
         self.max_retries = int(max_retries)
         self.phase_timeout = int(phase_timeout)
+        self.stand_min_z = float(stand_min_z)
+        self.stand_grav_z = float(stand_grav_z)
         self.reset()
+
+    @classmethod
+    def from_model(cls, model, **kwargs) -> "SelfRightingController":
+        """Build a controller calibrated to 85% of the MuJoCo model nominal standing height."""
+        nominal_z = float(model.qpos0[2]) if len(model.qpos0) > 2 else 0.128
+        kwargs.setdefault("stand_min_z", 0.85 * nominal_z)
+        return cls(**kwargs)
+
+    def _is_standing(self, root_z: float, grav: np.ndarray) -> bool:
+        """Check standing posture using geometry-calibrated height and tilt thresholds."""
+        return bool(
+            root_z >= self.stand_min_z
+            and grav[2] < self.stand_grav_z
+            and abs(float(grav[1])) <= 0.6
+        )
 
     def reset(self) -> None:
         """Reset controller to IDLE initial state."""
@@ -131,7 +152,9 @@ class SelfRightingController:
         fall_type: Optional[FallType] = None,
         qpos: Optional[np.ndarray] = None,
     ) -> None:
-        """Trigger reflex recovery initiation."""
+        """Trigger reflex recovery initiation unless safety-locked (call reset() first)."""
+        if self.state == self.FAILED_LOCKED:
+            return
         self.fall_type = fall_type
         self.state = self.PHASE1_ORIENT_PRONE
         self.phase_steps = 0
@@ -192,7 +215,7 @@ class SelfRightingController:
 
         # 1. If IDLE: trigger recovery if not standing
         if self.state == self.IDLE:
-            if rz >= 0.18 and grav[2] < -0.85:
+            if self._is_standing(rz, grav):
                 return self.last_target.copy(), True
             self.trigger(FallClassifier.classify(rz, grav), qpos=qpos)
 
@@ -232,14 +255,14 @@ class SelfRightingController:
             target_pose = STAND_NOMINAL_QPOS
 
             # Check if standing height and orientation achieved
-            if rz >= 0.18 and grav[2] < -0.85:
+            if self._is_standing(rz, grav):
                 self.state = self.DONE
                 return self.last_target.copy(), True
 
             delta = np.clip(target_pose - self.last_target, -self.max_rate, self.max_rate)
             self.last_target = (self.last_target + delta).astype(np.float32)
 
-            if rz >= 0.18 and grav[2] < -0.85:
+            if self._is_standing(rz, grav):
                 self.state = self.DONE
                 return self.last_target.copy(), True
 

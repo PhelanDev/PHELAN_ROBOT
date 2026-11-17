@@ -178,6 +178,10 @@ class MPU6050FilterReader:
         self.filt_grav = np.array([0.0, 0.0, -1.0], dtype=np.float32)
         self.alpha_gyro = 0.70
         self.alpha_grav = 0.80
+        self.is_stale = False
+        self.last_read_ok = True
+        self.consecutive_read_errors = 0
+        self.last_read_error: Optional[Exception] = None
 
         if not self.mock:
             try:
@@ -189,9 +193,19 @@ class MPU6050FilterReader:
                 # Gyro sensitivity +-250 deg/s
                 self.bus.write_byte_data(self.address, self.GYRO_CONFIG, 0x00)
                 self._calibrate_gyro()
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 print(f"[IMU] Real I2C MPU6050 unavailable ({e}), using mock/fallback.")
                 self.mock = True
+
+    @staticmethod
+    def _decode_int16_be(hi: int, lo: int) -> int:
+        if isinstance(hi, bool) or isinstance(lo, bool) or not isinstance(hi, (int, np.integer)) or not isinstance(lo, (int, np.integer)):
+            raise ValueError("I2C register bytes must be integers")
+        hi_i, lo_i = int(hi), int(lo)
+        if not (0 <= hi_i <= 255 and 0 <= lo_i <= 255):
+            raise ValueError("I2C register byte out of [0, 255] range")
+        val = (hi_i << 8) | lo_i
+        return val - 0x10000 if (val & 0x8000) else val
 
     def _calibrate_gyro(self, samples: int = 100) -> None:
         """Calibrate gyro zero-rate offset while standing still."""
@@ -201,14 +215,18 @@ class MPU6050FilterReader:
         for _ in range(samples):
             try:
                 data = self.bus.read_i2c_block_data(self.address, self.GYRO_XOUT_H, 6)
-                gx = (np.int16((data[0] << 8) | data[1]) / 131.0) * (np.pi / 180.0)
-                gy = (np.int16((data[2] << 8) | data[3]) / 131.0) * (np.pi / 180.0)
-                gz = (np.int16((data[4] << 8) | data[5]) / 131.0) * (np.pi / 180.0)
-                acc += [gx, gy, gz]
-                count += 1
-                time.sleep(0.002)
-            except Exception:
-                pass
+            except OSError:
+                continue
+            if len(data) < 6:
+                raise ValueError(f"Expected 6 gyro calibration bytes, got {len(data)}")
+            gx = (self._decode_int16_be(data[0], data[1]) / 131.0) * (np.pi / 180.0)
+            gy = (self._decode_int16_be(data[2], data[3]) / 131.0) * (np.pi / 180.0)
+            gz = (self._decode_int16_be(data[4], data[5]) / 131.0) * (np.pi / 180.0)
+            acc += [gx, gy, gz]
+            count += 1
+            time.sleep(0.002)
+        if samples > 0 and count == 0:
+            raise RuntimeError("Failed to read any valid MPU6050 gyro calibration samples")
         if count > 0:
             self.gyro_bias = (acc / count).astype(np.float32)
 
@@ -307,33 +325,48 @@ class MPU6050FilterReader:
     def read(self) -> Tuple[np.ndarray, np.ndarray]:
         """Read and return filtered (base_ang_vel, proj_grav)."""
         if self.mock:
+            self.is_stale = False
+            self.last_read_ok = True
+            self.consecutive_read_errors = 0
+            self.last_read_error = None
             return self.filt_gyro.copy(), self.get_proj_grav()
 
         try:
             data = self.bus.read_i2c_block_data(self.address, self.ACCEL_XOUT_H, 14)
-            ax_raw = np.int16((data[0] << 8) | data[1])
-            ay_raw = np.int16((data[2] << 8) | data[3])
-            az_raw = np.int16((data[4] << 8) | data[5])
-            gx_raw = np.int16((data[8] << 8) | data[9])
-            gy_raw = np.int16((data[10] << 8) | data[11])
-            gz_raw = np.int16((data[12] << 8) | data[13])
+        except OSError as exc:
+            self.is_stale = True
+            self.last_read_ok = False
+            self.consecutive_read_errors = int(getattr(self, "consecutive_read_errors", 0)) + 1
+            self.last_read_error = exc
+            return self.filt_gyro.copy(), self.get_proj_grav()
 
-            raw_gx = ((gx_raw / 131.0) * (np.pi / 180.0)) - self.gyro_bias[0]
-            raw_gy = ((gy_raw / 131.0) * (np.pi / 180.0)) - self.gyro_bias[1]
-            raw_gz = ((gz_raw / 131.0) * (np.pi / 180.0)) - self.gyro_bias[2]
+        if len(data) < 14:
+            raise ValueError(f"Expected 14 MPU6050 bytes, got {len(data)}")
 
-            self.filt_gyro = self.alpha_gyro * self.filt_gyro + (1.0 - self.alpha_gyro) * np.array(
-                [raw_gx, raw_gy, raw_gz], dtype=np.float32
-            )
+        ax_raw = self._decode_int16_be(data[0], data[1])
+        ay_raw = self._decode_int16_be(data[2], data[3])
+        az_raw = self._decode_int16_be(data[4], data[5])
+        gx_raw = self._decode_int16_be(data[8], data[9])
+        gy_raw = self._decode_int16_be(data[10], data[11])
+        gz_raw = self._decode_int16_be(data[12], data[13])
 
-            ax = float(ax_raw) / 16384.0
-            ay = float(ay_raw) / 16384.0
-            az = float(az_raw) / 16384.0
+        raw_gx = ((gx_raw / 131.0) * (np.pi / 180.0)) - self.gyro_bias[0]
+        raw_gy = ((gy_raw / 131.0) * (np.pi / 180.0)) - self.gyro_bias[1]
+        raw_gz = ((gz_raw / 131.0) * (np.pi / 180.0)) - self.gyro_bias[2]
 
-            self.update(ax, ay, az, self.filt_gyro[0], self.filt_gyro[1], self.filt_gyro[2], dt=self.dt)
+        self.filt_gyro = self.alpha_gyro * self.filt_gyro + (1.0 - self.alpha_gyro) * np.array(
+            [raw_gx, raw_gy, raw_gz], dtype=np.float32
+        )
 
-        except Exception:
-            pass
+        ax = float(ax_raw) / 16384.0
+        ay = float(ay_raw) / 16384.0
+        az = float(az_raw) / 16384.0
+
+        self.update(ax, ay, az, self.filt_gyro[0], self.filt_gyro[1], self.filt_gyro[2], dt=self.dt)
+        self.is_stale = False
+        self.last_read_ok = True
+        self.consecutive_read_errors = 0
+        self.last_read_error = None
 
         return self.filt_gyro.copy(), self.get_proj_grav()
 
@@ -412,6 +445,8 @@ class BaseRPiInferenceEngine:
         self.prev_q: np.ndarray = self.cfg.nominal_qpos.copy()
         self._warned_foot_fallback: bool = False
         self._warned_lidar_fallback: bool = False
+        self.imu_stale_steps: int = 0
+        self.last_imu_stale: bool = False
 
     def reset_policy_state(self):
         """Reset observation history and clock together at an episode boundary."""
@@ -419,12 +454,10 @@ class BaseRPiInferenceEngine:
         self.last_raw_actions = np.zeros(self.cfg.ACTION_DIM, dtype=np.float32)
 
     def phase_clock(self):
-        if self.observation_schema is None or not self.observation_schema["embed_phase_clock"]:
+        if self.observation_schema is None:
             return None
-        from training.env_config import compute_gait_phase
-        _, sine, cosine = compute_gait_phase(self.episode_steps, dt_control=self.dt,
-                                              period=self.observation_schema["period"])
-        return np.array([sine, cosine], dtype=np.float32)
+        from training.policy_contract import phase_clock_for_schema
+        return phase_clock_for_schema(self.observation_schema, self.episode_steps)
 
     def read_foot_contact(self) -> List[float]:
         """Read 4-channel foot contact states [Left, Right, Padded, Padded]."""
@@ -515,6 +548,15 @@ class BaseRPiInferenceEngine:
 
                 # Read filtered IMU angular velocity and gravity vector
                 base_ang_vel, proj_grav = self.imu_reader.read()
+                imu_stale = bool(getattr(self.imu_reader, "is_stale", False))
+                self.last_imu_stale = imu_stale
+                if imu_stale:
+                    self.imu_stale_steps += 1
+                    loop_commands = [0.0, 0.0, 0.0]
+                    if self.imu_stale_steps == 1 or self.imu_stale_steps % max(1, int(self.freq)) == 0:
+                        print(f"[{self.engine_name} Warning] Stale IMU sample ({self.imu_reader.last_read_error}); zeroing velocity commands.")
+                else:
+                    loop_commands = commands
 
                 # Read foot contact and LiDAR perception hooks (with fallback warning)
                 foot_contact = self.read_foot_contact()
@@ -531,7 +573,7 @@ class BaseRPiInferenceEngine:
                 obs = pack_rpi_observation(
                     base_ang_vel=base_ang_vel,
                     proj_grav=proj_grav,
-                    commands=commands,
+                    commands=loop_commands,
                     joint_pos=current_q,
                     joint_vel=joint_vel,
                     last_actions=self.last_raw_actions,

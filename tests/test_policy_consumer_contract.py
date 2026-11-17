@@ -1,5 +1,6 @@
 """Behavioral coverage for checkpoint consumer validation and generated inference."""
 
+from pathlib import Path
 import subprocess
 
 import numpy as np
@@ -123,6 +124,7 @@ def run_generated_policy(tmp_path, weights, config, observation):
 def test_generated_policy_preserves_clipped_rms_and_actual_hidden_width(tmp_path):
     from scripts.export_policy import export_esp32_headers
     from training.env_config import DEFAULT_OBS_BOUNDS
+    from training.policy_contract import observation_schema
 
     model, rms = make_policy()
     with torch.no_grad():
@@ -131,7 +133,8 @@ def test_generated_policy_preserves_clipped_rms_and_actual_hidden_width(tmp_path
         model.actor[0].weight[0, 0] = 0.5
         model.actor[2].weight[0, 0] = 1.0
         model.actor[4].weight[:, 0] = 2.0
-    checkpoint = dict(model_state_dict=model.state_dict(), squash_actions=True, obs_rms=rms.state_dict())
+    checkpoint = dict(model_state_dict=model.state_dict(), squash_actions=True, obs_rms=rms.state_dict(),
+                      observation_schema=observation_schema(42, False, 0.02))
     weights, config = export_esp32_headers(checkpoint, tmp_path / "weights.h", tmp_path / "config.h")
     observation = np.zeros(42, dtype=np.int8)
     observation[0] = 120
@@ -208,3 +211,108 @@ def test_esp32_rejects_invalid_quantization_before_writing(tmp_path, scale):
         export_esp32_headers(model, tmp_path / "weights.h", tmp_path / "config.h", scale_obs=scale)
     assert not (tmp_path / "weights.h").exists()
     assert not (tmp_path / "config.h").exists()
+
+
+@pytest.mark.parametrize("embed_clock,control_dt,obs_dim", [
+    (False, 0.02, 42),
+    (True, 0.006, 42),
+    (True, 0.02, 37),
+])
+def test_viewer_schema_clock_and_layout_parity_with_runner(tmp_path, embed_clock, control_dt, obs_dim):
+    """F4: Viewer headless loop & extract_viewer_observation must honor policy observation_schema (clock, dt, 37 vs 42)."""
+    from training.policy_contract import observation_schema
+    from training.run_parallel_sim import ParallelSimRunner
+    from scripts.export_policy import export_onnx
+    from scripts.interactive_viewer import extract_viewer_observation, load_viewer_policy, run_simulation_headless
+
+    decimation = max(1, int(round(control_dt / 0.002)))
+    model = ActorCritic(obs_dim=obs_dim, hidden_dim=16, squash_actions=True)
+    schema = observation_schema(obs_dim, embed_clock, control_dt, period=0.8)
+    model.observation_schema = schema
+
+    pt_path = tmp_path / f"policy_{obs_dim}_{embed_clock}.pt"
+    model_rel = "models/mjcf/microduck_8dof.xml" if obs_dim == 37 else "pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml"
+    torch.save({
+        "model_state_dict": model.state_dict(),
+        "obs_dim": obs_dim,
+        "action_dim": 8,
+        "hidden_dim": 16,
+        "squash_actions": True,
+        "model_path": model_rel,
+        "model_name": Path(model_rel).name,
+        "observation_schema": schema,
+    }, pt_path)
+    onnx_path = export_onnx(pt_path, tmp_path / f"policy_{obs_dim}_{embed_clock}.onnx")
+
+    runner = ParallelSimRunner(
+        model_path=model_rel,
+        num_envs=1,
+        decimation=decimation,
+        terrain_mode="flat",
+        embed_phase_clock=embed_clock,
+    )
+    try:
+        runner.reset()
+        runner.commands[0] = np.array([0.0, 0.0, 0.0], dtype=np.float32)  # zero command still advances when clock enabled
+        for step_idx in range(3):
+            expected = runner.get_observations()[0]
+            viewer_obs = extract_viewer_observation(
+                runner.model,
+                runner.datas[0],
+                cmd_vel=runner.commands[0],
+                last_actions=runner.last_actions[0],
+                obs_dim=obs_dim,
+                episode_step=step_idx,
+                observation_schema=schema,
+            )
+            assert viewer_obs.shape == (obs_dim,)
+            np.testing.assert_allclose(viewer_obs, expected, atol=1e-6)
+            if not embed_clock:
+                np.testing.assert_array_equal(viewer_obs[35:37], [0.0, 0.0])
+            runner.step(np.zeros((1, 8), dtype=np.float32))
+    finally:
+        runner.close()
+
+    # Headless viewer loop using .pt and .onnx must also pass schema-matching observations
+    for policy_file in (pt_path, onnx_path):
+        metrics = run_simulation_headless(
+            model_path=model_rel,
+            policy_path=policy_file,
+            cmd_vel=(0.0, 0.0, 0.0),
+            duration=control_dt * 3,
+            dt=0.002,
+            auto_reset=False,
+        )
+        assert metrics["completed_steps"] >= 3
+
+
+def test_viewer_rejects_legacy_policy_without_explicit_schema(tmp_path):
+    """F4: Viewer simulation loops must reject legacy policies lacking observation_schema unless explicit override is given."""
+    from training.policy_contract import observation_schema
+    from scripts.export_policy import export_onnx
+    from scripts.interactive_viewer import run_simulation_headless
+
+    model = ActorCritic(obs_dim=42, hidden_dim=16, squash_actions=True)
+    legacy_pt = tmp_path / "legacy_no_schema.pt"
+    torch.save({"model_state_dict": model.state_dict(), "obs_dim": 42, "action_dim": 8, "hidden_dim": 16}, legacy_pt)
+    legacy_onnx = export_onnx(legacy_pt, tmp_path / "legacy_no_schema.onnx")
+
+    for legacy_file in (legacy_pt, legacy_onnx):
+        with pytest.raises(ValueError, match="schema|legacy"):
+            run_simulation_headless(
+                model_path="models/mjcf/microduck_8dof.xml",
+                policy_path=legacy_file,
+                duration=0.02,
+                dt=0.002,
+            )
+
+    # Explicit legacy_observation_schema succeeds
+    metrics = run_simulation_headless(
+        model_path="models/mjcf/microduck_8dof.xml",
+        policy_path=legacy_onnx,
+        duration=0.04,
+        dt=0.002,
+        legacy_observation_schema=observation_schema(42, False, 0.02),
+    )
+    assert metrics["completed_steps"] > 0
+

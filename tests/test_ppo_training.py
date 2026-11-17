@@ -402,9 +402,11 @@ def test_export_esp32_c_headers_syntax_and_compilation(tmp_path):
     """Verify INT8 quantized weights and INT32 biases header generation and C++ compilation."""
     from scripts.train_ppo import ActorCritic
     from scripts.export_policy import export_esp32_headers
+    from training.policy_contract import observation_schema
 
     torch.manual_seed(42)
     model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256)
+    model.observation_schema = observation_schema(42, True, 0.02)
 
     weights_header_path = tmp_path / "esp32_policy_weights.h"
     config_header_path = tmp_path / "esp32_quant_config.h"
@@ -1362,6 +1364,7 @@ def test_legacy_42dim_checkpoint_transfer_to_asymmetric_critic(tmp_path):
         load_checkpoint=str(legacy_ckpt_path),
         save_path=str(save_path),
         best_save_path=str(best_save_path),
+        squash_actions=False,
         verbose=False,
     )
 
@@ -1591,3 +1594,179 @@ def test_get_privileged_obs_vectorized_subsets_and_eval_runner_reuse(tmp_path):
         assert reset_obs.shape[0] == 1
     finally:
         eval_r.close()
+
+
+@pytest.mark.parametrize("source_squash,expected_action_val", [(False, 0.8), (True, math.tanh(0.8))])
+def test_transfer_preserves_squash_actions_and_pre_optimizer_parity(monkeypatch, tmp_path, source_squash, expected_action_val):
+    """F8: Warm-start transfer must preserve source squash_actions metadata and pre-optimizer action semantics."""
+    import scripts.train_ppo as ppo_mod
+    from scripts.train_ppo import ActorCritic, RunningMeanStd
+    from training.policy_contract import observation_schema
+
+    obs_dim, act_dim, hidden_dim = 42, 8, 256
+    src = ActorCritic(obs_dim=obs_dim, action_dim=act_dim, hidden_dim=hidden_dim, squash_actions=source_squash)
+    with torch.no_grad():
+        for p in src.actor.parameters():
+            p.zero_()
+        src.actor[-1].bias.fill_(0.8)
+    src_rms = RunningMeanStd(shape=obs_dim, clip=10.0)
+    src_path = tmp_path / f"src_squash_{source_squash}.pt"
+    torch.save({
+        "model_state_dict": src.state_dict(),
+        "actor_state_dict": src.actor.state_dict(),
+        "critic_state_dict": src.critic.state_dict(),
+        "obs_dim": obs_dim,
+        "critic_obs_dim": 53,
+        "action_dim": act_dim,
+        "hidden_dim": hidden_dim,
+        "model_path": "duck_v2/cyberduck_v2.xml",
+        "model_name": "cyberduck_v2.xml",
+        "observation_schema": observation_schema(obs_dim, True, 0.02),
+        "obs_rms": src_rms.state_dict(),
+        "squash_actions": source_squash,
+        "stage": 0,
+        "iterations": 2,
+    }, src_path)
+
+    captured_first_det_actions = []
+    orig_forward_actor = ActorCritic.forward_actor
+
+    def spy_forward_actor(self, obs):
+        out = orig_forward_actor(self, obs)
+        if not captured_first_det_actions:
+            captured_first_det_actions.append(out.detach().cpu().numpy().copy())
+        return out
+
+    monkeypatch.setattr(ActorCritic, "forward_actor", spy_forward_actor)
+    monkeypatch.setattr(ppo_mod, "evaluate_deterministic_rollout", lambda **kw: (0.0, 0.0))
+
+    dst_path = tmp_path / f"dst_squash_{source_squash}.pt"
+    ppo_mod.train_ppo(
+        model_path="duck_v2/cyberduck_v2.xml",
+        num_envs=1,
+        rollout_steps=2,
+        max_iterations=1,
+        num_epochs=1,
+        dry_run=True,
+        load_checkpoint=str(src_path),
+        save_path=str(dst_path),
+        best_save_path=str(tmp_path / f"dst_best_{source_squash}.pt"),
+        verbose=False,
+    )
+    assert captured_first_det_actions, "Expected rollout forward_actor call"
+    np.testing.assert_allclose(captured_first_det_actions[0], expected_action_val, atol=1e-5)
+    saved = torch.load(dst_path, map_location="cpu", weights_only=False)
+    assert saved["squash_actions"] is source_squash
+
+
+def test_transfer_bc_and_legacy_squash_metadata_and_invalid_rejected(tmp_path):
+    """F8: BC checkpoints declare squash_actions=False; legacy without metadata fails loud unless explicit; bad type writes nothing."""
+    from scripts.pretrain_bc import train_behavior_cloning, save_bc_checkpoint
+    from scripts.train_ppo import ActorCritic, train_ppo
+    from training.policy_contract import observation_schema
+
+    obs = np.random.randn(20, 42).astype(np.float32)
+    acts = np.random.uniform(-0.5, 0.5, size=(20, 8)).astype(np.float32)
+    bc_model, _ = train_behavior_cloning(obs, acts, obs_dim=42, action_dim=8, epochs=1, batch_size=20)
+    bc_path = tmp_path / "bc_explicit.pt"
+    save_bc_checkpoint(bc_path, bc_model, obs_dim=42, action_dim=8)
+    bc_ckpt = torch.load(bc_path, map_location="cpu", weights_only=False)
+    assert bc_ckpt.get("squash_actions") is False
+
+    # Legacy checkpoint missing squash_actions must reject implicit transfer (avoid silent tanh distortion)
+    legacy = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256, critic_obs_dim=53)
+    legacy_path = tmp_path / "legacy_no_squash.pt"
+    torch.save({
+        "model_state_dict": legacy.state_dict(),
+        "obs_dim": 42,
+        "critic_obs_dim": 53,
+        "action_dim": 8,
+        "hidden_dim": 256,
+        "observation_schema": observation_schema(42, True, 0.02),
+    }, legacy_path)
+    out_fail = tmp_path / "should_not_exist.pt"
+    with pytest.raises(ValueError, match="squash"):
+        train_ppo(
+            model_path="duck_v2/cyberduck_v2.xml",
+            num_envs=1,
+            rollout_steps=2,
+            max_iterations=1,
+            dry_run=True,
+            load_checkpoint=str(legacy_path),
+            save_path=str(out_fail),
+            verbose=False,
+        )
+    assert not out_fail.exists()
+
+    # Non-boolean squash_actions in transfer checkpoint must fail before creating checkpoint
+    bad_path = tmp_path / "bad_squash.pt"
+    bad_ckpt = torch.load(legacy_path, map_location="cpu", weights_only=False)
+    bad_ckpt["squash_actions"] = "false"
+    torch.save(bad_ckpt, bad_path)
+    with pytest.raises(ValueError, match="boolean|squash"):
+        train_ppo(
+            model_path="duck_v2/cyberduck_v2.xml",
+            num_envs=1,
+            rollout_steps=2,
+            max_iterations=1,
+            dry_run=True,
+            load_checkpoint=str(bad_path),
+            save_path=str(out_fail),
+            verbose=False,
+        )
+    assert not out_fail.exists()
+    from scripts.export_policy import load_actor_from_checkpoint
+    with pytest.raises(ValueError, match="boolean"):
+        load_actor_from_checkpoint(bad_path)
+    help_proc = subprocess.run([sys.executable, str(REPO_ROOT / "scripts/train_ppo.py"), "--help"], capture_output=True, text=True, check=False)
+    assert help_proc.returncode == 0 and "--no-squash-actions" in help_proc.stdout
+
+
+def test_running_mean_std_clip_zero_roundtrip_and_negative_rejected(tmp_path):
+    """F10: RunningMeanStd with clip=0 disables clipping and round-trips through state_dict, PPO resume, and exporter."""
+    from scripts.train_ppo import RunningMeanStd, train_ppo
+    from scripts.export_policy import apply_obs_norm_to_actor
+    import torch.nn as nn
+
+    rms = RunningMeanStd(shape=3, clip=0.0)
+    rms.mean[:] = [1.0, -2.0, 0.5]
+    rms.var[:] = [4.0, 9.0, 1.0]
+    rms.count = 50.0
+    sd = rms.state_dict()
+    assert sd["clip"] == 0.0
+
+    rms2 = RunningMeanStd(shape=3, clip=10.0)
+    rms2.load_state_dict(sd)
+    assert rms2.clip == 0.0
+
+    extreme = np.array([1000.0, -1000.0, 500.0], dtype=np.float32)
+    np.testing.assert_allclose(rms2.normalize(extreme), rms.normalize(extreme), atol=1e-6)
+    assert np.max(np.abs(rms2.normalize(extreme))) > 100.0
+    torch.testing.assert_close(rms2.normalize(torch.from_numpy(extreme)), rms.normalize(torch.from_numpy(extreme)))
+
+    # Negative clip must be rejected both at construction and load_state_dict without mutating existing state
+    with pytest.raises(ValueError, match="clip"):
+        RunningMeanStd(shape=3, clip=-1.0)
+    before = rms2.state_dict()
+    with pytest.raises(ValueError, match="RMS"):
+        rms2.load_state_dict(dict(sd, clip=-0.5))
+    assert rms2.state_dict()["clip"] == before["clip"]
+
+    # Exporter also rejects negative clip without mutating actor weights
+    actor = nn.Sequential(nn.Linear(3, 2))
+    w_before = actor[0].weight.clone()
+    with pytest.raises(ValueError, match="obs_rms"):
+        apply_obs_norm_to_actor(actor, {"obs_rms": dict(sd, clip=-1.0)})
+    torch.testing.assert_close(actor[0].weight, w_before)
+
+    # Full PPO checkpoint roundtrip with clip=0
+    ckpt_path = tmp_path / "rms_noclip_ppo.pt"
+    train_ppo(num_envs=1, rollout_steps=2, max_iterations=1, num_epochs=1, save_path=ckpt_path, device="cpu", verbose=False, terrain_mode="flat")
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    ckpt["obs_rms"]["clip"] = 0.0
+    torch.save(ckpt, ckpt_path)
+    res = train_ppo(num_envs=1, rollout_steps=2, max_iterations=1, num_epochs=1, resume=True, load_checkpoint=ckpt_path, save_path=ckpt_path, device="cpu", verbose=False, terrain_mode="flat")
+    assert res["success"] is True
+    resumed = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    assert resumed["obs_rms"]["clip"] == 0.0
+

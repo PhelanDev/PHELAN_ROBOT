@@ -36,17 +36,21 @@ def test_audit_firmware_guards_and_assembly_canary(tmp_path, obs_dim, layer_inpu
     import re
     from scripts.export_policy import export_esp32_headers
     from scripts.train_ppo import ActorCritic
+    from training.policy_contract import observation_schema
     firmware = (REPO_ROOT / "pipelines/dual_esp32s3_stack/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
     guards = "\n".join(re.findall(r'^static_assert\([^\n]+', firmware, re.M))
     assert guards
     function = firmware[firmware.index("void assemble_observation("):firmware.index("void evaluate_locomotion_policy(")]
-    weights, config = export_esp32_headers(ActorCritic(hidden_dim=16), tmp_path / "weights.h", tmp_path / "config.h")
+    policy = ActorCritic(hidden_dim=16)
+    policy.observation_schema = observation_schema(42, True, 0.02)
+    weights, config = export_esp32_headers(policy, tmp_path / "weights.h", tmp_path / "config.h")
     source = '#include <cmath>\n#include <cstdint>\n#include <cassert>\n#include "config.h"\n#include "weights.h"\n'
     source += f'#undef OBS_DIM\n#define OBS_DIM {obs_dim}\n#undef POLICY_LAYER1_IN\n#define POLICY_LAYER1_IN {layer_input}\n'
     source += guards + '''
 const float CONTROL_DT=0.02f, PI=3.14159265358979323846f;
 struct { float vx=0.2f,vy=0,wz=0; } g_cmd_pkt;
 float g_current_joint_pos[8]={},g_last_joint_pos[8]={},g_last_raw_actions[8]={};
+uint32_t g_episode_steps = 0;
 void read_mpu6050(float* gyro,float* grav){for(int i=0;i<3;i++){gyro[i]=0;grav[i]=i==2?-1:0;}}
 void read_foot_contacts(float* p){p[0]=p[1]=1;}
 void read_lidar_distances(float* p){for(int i=0;i<5;i++)p[i]=1.5f;}
@@ -1119,6 +1123,7 @@ def test_esp32_int8_export_matches_float32_inference(tmp_path):
     from scripts.train_ppo import ActorCritic
     from scripts.export_policy import export_esp32_headers
     from pipelines.dual_esp32s3_stack.training.env_config import DEFAULT_OBS_BOUNDS
+    from training.policy_contract import observation_schema
 
     torch.manual_seed(42)
     np.random.seed(42)
@@ -1126,6 +1131,7 @@ def test_esp32_int8_export_matches_float32_inference(tmp_path):
     obs_dim = 42
     action_dim = 8
     model = ActorCritic(obs_dim=obs_dim, action_dim=action_dim)
+    model.observation_schema = observation_schema(42, False, 0.02)
     torch.nn.init.orthogonal_(model.actor[-1].weight, gain=0.2)
     model.eval()
 
@@ -1469,6 +1475,7 @@ def test_export_policy_obs_norm_and_asymmetric_critic_parity(tmp_path):
     import torch
     from scripts.train_ppo import ActorCritic
     from scripts.export_policy import export_onnx, export_esp32_headers
+    from training.policy_contract import observation_schema
 
     torch.manual_seed(42)
     np.random.seed(42)
@@ -1492,6 +1499,7 @@ def test_export_policy_obs_norm_and_asymmetric_critic_parity(tmp_path):
         "critic_obs_dim": critic_obs_dim,
         "action_dim": action_dim,
         "hidden_dim": hidden_dim,
+        "observation_schema": observation_schema(obs_dim, False, 0.02),
         "obs_rms": {
             "mean": mean,
             "var": var,
@@ -1603,3 +1611,312 @@ def test_zero_variance_obs_rms_does_not_amplify_by_100x():
     w_chan0 = actor[0].weight[:, 0].detach().cpu().numpy()
     assert np.all(w_chan0 <= 10.0001), f"Expected channel 0 weights <= 10.0, got {w_chan0}"
     assert np.all(w_chan0 >= 9.999), f"Expected channel 0 weights approx 10.0, got {w_chan0}"
+
+
+def test_mcu2_separate_packet_timestamps_and_independent_expiry(tmp_path):
+    """F1: Heartbeat/color must not refresh command/LiDAR freshness; velocity must not refresh LiDAR; CRC error refreshes nothing."""
+    header_path = REPO_ROOT / "pipelines" / "dual_esp32s3_stack" / "deployment" / "uart_packet_protocol.h"
+    mcu2_src = (REPO_ROOT / "pipelines/dual_esp32s3_stack/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
+    proc_fn = mcu2_src[mcu2_src.index("void process_uart_packets()"):mcu2_src.index("// ============================================================================\n// 42-Dimensional")]
+    lidar_fn = mcu2_src[mcu2_src.index("void read_lidar_distances("):mcu2_src.index("void assemble_observation(")]
+    # Extract watchdog logic from loop() or helper
+    assert "g_last_cmd_pkt_time" in mcu2_src and "g_last_lidar_pkt_time" in mcu2_src, (
+        "mcu2_main.ino must track command and LiDAR timestamps separately from link/heartbeat"
+    )
+    wd_fn = mcu2_src[mcu2_src.index("void update_mcu1_watchdogs("):mcu2_src.index("void loop()")]
+
+    cpp_source = f"""#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <cstdio>
+#include "{header_path.as_posix()}"
+
+static uint32_t g_fake_ms = 0;
+uint32_t millis() {{ return g_fake_ms; }}
+
+struct FakeSerial {{
+    uint8_t buf[512];
+    size_t len = 0, pos = 0;
+    void push(const uint8_t* p, size_t n) {{
+        if (pos == len) {{ pos = len = 0; }}
+        memcpy(buf + len, p, n);
+        len += n;
+    }}
+    int available() {{ return (int)(len - pos); }}
+    uint8_t read() {{ return buf[pos++]; }}
+}} UartLink;
+
+struct FakeOut {{
+    void println(const char*) {{}}
+    void printf(const char*, ...) {{}}
+}} Serial;
+
+void set_servo_angle(uint8_t, float) {{}}
+void ledcWrite(uint8_t, uint32_t) {{}}
+const uint8_t SERVO_PINS[8] = {{0}};
+const float JOINT_NOMINAL_POS[8] = {{0}};
+static float g_last_targets[8] = {{0}};
+static float g_current_joint_pos[8] = {{0}};
+static VelocityCmdPacket g_cmd_pkt = {{0.0f, 0.0f, 0.0f}};
+static LidarPerceptionPacket g_lidar_pkt = {{{{1.5f, 1.5f, 1.5f, 1.5f, 1.5f}}, 0}};
+static ColorTargetPacket g_color_target_pkt = {{0, 0, 0}};
+static uint32_t g_last_mcu1_pkt_time = 0;
+static uint32_t g_last_cmd_pkt_time = 0;
+static uint32_t g_last_lidar_pkt_time = 0;
+static bool g_has_cmd_pkt = false;
+static bool g_has_lidar_pkt = false;
+static bool g_emergency_stop = false;
+static bool s_warned_lidar_fallback = false;
+static uint8_t g_rx_ring[256];
+static uint16_t g_rx_head = 0;
+
+{proc_fn}
+{lidar_fn}
+{wd_fn}
+
+int main() {{
+    uint8_t pkt[128];
+    float ranges[5];
+
+    // t=1000: valid velocity (vx=0.20) + valid lidar (0.10m)
+    g_fake_ms = 1000;
+    VelocityCmdPacket vel = {{0.20f, 0.0f, 0.0f}};
+    uint16_t n = encode_velocity_packet(&vel, 1, pkt, sizeof(pkt));
+    UartLink.push(pkt, n);
+    LidarPerceptionPacket lid = {{{{0.10f, 0.10f, 0.10f, 0.10f, 0.10f}}, 1}};
+    n = encode_lidar_packet(&lid, 2, pkt, sizeof(pkt));
+    UartLink.push(pkt, n);
+    process_uart_packets();
+    update_mcu1_watchdogs(g_fake_ms);
+    read_lidar_distances(ranges);
+    assert(std::fabs(g_cmd_pkt.vx - 0.20f) < 1e-6f);
+    assert(std::fabs(ranges[0] - 0.10f) < 1e-6f);
+
+    // t=1500 (exact 500ms age): still valid
+    g_fake_ms = 1500;
+    update_mcu1_watchdogs(g_fake_ms);
+    read_lidar_distances(ranges);
+    assert(std::fabs(g_cmd_pkt.vx - 0.20f) < 1e-6f);
+    assert(std::fabs(ranges[0] - 0.10f) < 1e-6f);
+
+    // t=1400..5000: send ONLY heartbeat and color packets -> both velocity & lidar MUST expire after 500ms
+    for (uint32_t t = 1400; t <= 5000; t += 100) {{
+        g_fake_ms = t;
+        HeartbeatPacket hb = {{t, 0}};
+        n = encode_heartbeat_packet(&hb, (uint8_t)(t / 100), pkt, sizeof(pkt));
+        UartLink.push(pkt, n);
+        ColorTargetPacket col = {{10, 20, 1}};
+        n = encode_color_target_packet(&col, (uint8_t)(t / 100), pkt, sizeof(pkt));
+        UartLink.push(pkt, n);
+        process_uart_packets();
+    }}
+    update_mcu1_watchdogs(g_fake_ms);
+    read_lidar_distances(ranges);
+    assert(g_cmd_pkt.vx == 0.0f && g_cmd_pkt.vy == 0.0f && g_cmd_pkt.wz == 0.0f);
+    assert(std::fabs(ranges[0] - 1.50f) < 1e-6f);
+    assert(g_last_mcu1_pkt_time == 5000);
+
+    // Corrupt CRC velocity packet at t=5050 must NOT refresh command or link timestamp
+    g_fake_ms = 5050;
+    n = encode_velocity_packet(&vel, 99, pkt, sizeof(pkt));
+    pkt[n - 1] ^= 0xFF;
+    UartLink.push(pkt, n);
+    process_uart_packets();
+    update_mcu1_watchdogs(g_fake_ms);
+    assert(g_cmd_pkt.vx == 0.0f);
+    assert(g_last_mcu1_pkt_time == 5000);
+
+    // Valid velocity at t=5100 must NOT un-expire stale LiDAR from t=1000
+    g_fake_ms = 5100;
+    n = encode_velocity_packet(&vel, 100, pkt, sizeof(pkt));
+    UartLink.push(pkt, n);
+    process_uart_packets();
+    update_mcu1_watchdogs(g_fake_ms);
+    read_lidar_distances(ranges);
+    assert(std::fabs(g_cmd_pkt.vx - 0.20f) < 1e-6f);
+    assert(std::fabs(ranges[0] - 1.50f) < 1e-6f);
+    return 0;
+}}
+"""
+    _compile_and_run_cpp(cpp_source, tmp_path / "f1.cpp", tmp_path / "f1.exe", skip_whole_test=False)
+
+
+def test_mpu6050_signed_int16_decode_and_i2c_error_freshness():
+    """F2: MPU6050FilterReader must decode negative two's complement words on NumPy 2.x and expose I2C error/staleness."""
+    from pipelines.rpi_infer_core import MPU6050FilterReader, BaseRPiInferenceEngine
+
+    class FakeBus:
+        def __init__(self):
+            self.fail_read = False
+            self.short_read = False
+            self.gx_word = 0x0083  # +131 -> +1 deg/s
+            self.ax_word = 0x0000
+
+        def write_byte_data(self, addr, reg, val):
+            pass
+
+        def read_i2c_block_data(self, addr, reg, length):
+            if self.fail_read:
+                raise OSError("Simulated I2C NACK")
+            if self.short_read:
+                return [0] * (length - 1)
+            if length == 6:
+                # calibration: negative gyro word -131 (0xFF7D) on all 3 axes
+                return [0xFF, 0x7D, 0xFF, 0x7D, 0xFF, 0x7D]
+            if length == 14:
+                ax_h, ax_l = (self.ax_word >> 8) & 0xFF, self.ax_word & 0xFF
+                gx_h, gx_l = (self.gx_word >> 8) & 0xFF, self.gx_word & 0xFF
+                # ax, ay=0, az=16384 (1g), temp=0, gx, gy=0, gz=0
+                return [ax_h, ax_l, 0, 0, 0x40, 0x00, 0, 0, gx_h, gx_l, 0, 0, 0, 0]
+            raise AssertionError(f"Unexpected length {length}")
+
+    bus = FakeBus()
+    reader = MPU6050FilterReader.__new__(MPU6050FilterReader)
+    reader.address = 0x68
+    reader.mock = False
+    reader.dt = 0.02
+    reader.kp = 1.0
+    reader.ki = 0.05
+    reader.impact_threshold = 0.30
+    reader.q = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    reader.integral_fb = np.zeros(3, dtype=np.float32)
+    reader.gyro_bias = np.zeros(3, dtype=np.float32)
+    reader.filt_gyro = np.zeros(3, dtype=np.float32)
+    reader.filt_grav = np.array([0.0, 0.0, -1.0], dtype=np.float32)
+    reader.alpha_gyro = 0.70
+    reader.alpha_grav = 0.80
+    reader.bus = bus
+
+    # 1. Calibration with negative words (-131 -> -1 deg/s) must succeed instead of swallowing OverflowError
+    reader._calibrate_gyro(samples=5)
+    expected_bias = -(np.pi / 180.0)
+    np.testing.assert_allclose(reader.gyro_bias, [expected_bias] * 3, atol=1e-6)
+
+    # 2. Read with negative gyro (-131) and negative accel (-1 -> 0xFFFF) updates state accurately
+    reader.gyro_bias[:] = 0.0
+    bus.gx_word = 0xFF7D  # -131 -> -pi/180
+    bus.ax_word = 0xFFFF  # -1
+    ang_vel, grav = reader.read()
+    assert ang_vel[0] < -0.004, f"Negative gyro failed to update: {ang_vel[0]}"
+    assert getattr(reader, "is_stale", None) is False
+    assert getattr(reader, "last_read_ok", None) is True
+
+    # 3. Short/malformed payload must fail loudly instead of silently returning stale sample
+    bus.short_read = True
+    with pytest.raises(ValueError):
+        reader.read()
+    bus.short_read = False
+
+    # 4. I2C OSError holds last sample while explicitly flagging stale/error count
+    prev_gyro = ang_vel.copy()
+    bus.fail_read = True
+    held_vel, _ = reader.read()
+    np.testing.assert_allclose(held_vel, prev_gyro, atol=1e-7)
+    assert reader.is_stale is True
+    assert reader.last_read_ok is False
+    assert reader.consecutive_read_errors == 1
+
+    # 5. BaseRPiInferenceEngine loop sees IMU staleness
+    engine = BaseRPiInferenceEngine(mock=True, freq=50.0)
+    engine.imu_reader = reader
+    engine.run_loop(steps=2)
+    assert getattr(engine, "imu_stale_steps", 0) == 2
+
+
+@pytest.mark.parametrize("embed_clock,moving", [(False, False), (False, True), (True, False), (True, True)])
+def test_esp32_schema_clock_parity_and_rejection(tmp_path, embed_clock, moving):
+    """F3: ESP32 export rejects unsupported schemas before writing; MCU2 C++ clock matches runner on reset/steps/zero-cmd."""
+    from training.policy_contract import observation_schema
+    from training.run_parallel_sim import ParallelSimRunner
+    from scripts.train_ppo import ActorCritic
+    from scripts.export_policy import export_esp32_headers
+    from pipelines.dual_esp32s3_stack.training.env_config import MicroDuck8DoFConfig
+
+    # 1. Unsupported control_dt and missing schema must fail BEFORE creating directory/files
+    bad_dir = tmp_path / "bad_export"
+    bad_model = ActorCritic(hidden_dim=16)
+    bad_model.observation_schema = observation_schema(42, True, 0.01)  # 100 Hz unsupported by 50 Hz MCU2
+    with pytest.raises(ValueError, match="50|control_dt|0.02|ESP32"):
+        export_esp32_headers(bad_model, bad_dir / "w.h", bad_dir / "c.h")
+    assert not bad_dir.exists()
+
+    legacy_model = ActorCritic(hidden_dim=16)
+    with pytest.raises(ValueError, match="schema|legacy"):
+        export_esp32_headers(legacy_model, bad_dir / "w.h", bad_dir / "c.h")
+    assert not bad_dir.exists()
+
+    # 2. Export valid schema and verify C++ MCU2 assembly matches ParallelSimRunner across reset & steps
+    cfg = MicroDuck8DoFConfig()
+    runner = ParallelSimRunner(
+        model_path="pipelines/dual_esp32s3_stack/models/mjcf/microduck_esp32_8dof.xml",
+        cfg=cfg,
+        num_envs=1,
+        decimation=10,
+        terrain_mode="flat",
+        embed_phase_clock=embed_clock,
+    )
+    try:
+        model = ActorCritic(hidden_dim=16)
+        schema = observation_schema(42, embed_clock, runner.control_dt, period=0.8)
+        model.observation_schema = schema
+        weights_h, config_h = export_esp32_headers(model, tmp_path / "weights.h", tmp_path / "config.h")
+
+        mcu2_src = (REPO_ROOT / "pipelines/dual_esp32s3_stack/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
+        assert "POLICY_EMBED_PHASE_CLOCK" in mcu2_src
+        asm_fn = mcu2_src[mcu2_src.index("void assemble_observation("):mcu2_src.index("void evaluate_locomotion_policy(")]
+        eval_fn = mcu2_src[mcu2_src.index("void evaluate_locomotion_policy("):mcu2_src.index("// ============================================================================\n// Main Setup")]
+
+        runner.reset()
+        cmd = [0.2 if moving else 0.0, 0.0, 0.0]
+        runner.commands[0] = cmd
+        runner_clocks = []
+        for _ in range(4):
+            runner_clocks.append(runner.get_observations()[0, 35:37].copy())
+            runner.step(np.zeros((1, 8), dtype=np.float32))
+
+        cpp_source = f"""#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <algorithm>
+#include "{config_h.as_posix()}"
+#include "{weights_h.as_posix()}"
+#define PI 3.14159265358979323846f
+#define CONTROL_DT 0.02f
+template <typename T> T constrain(T v, T lo, T hi) {{ return std::max(lo, std::min(hi, v)); }}
+struct {{ float vx={cmd[0]}f, vy=0.0f, wz=0.0f; }} g_cmd_pkt;
+const float JOINT_MIN_LIMITS[8] = {{-1.57f,-0.52f,-0.44f,-0.87f,0.00f,-0.44f,-0.87f,0.00f}};
+const float JOINT_MAX_LIMITS[8] = {{ 1.57f, 0.78f, 0.44f, 0.87f,1.48f, 0.44f, 0.87f,1.48f}};
+const float JOINT_NOMINAL_POS[8] = {{0.00f,0.00f,0.00f,-0.15f,0.15f,0.00f,-0.15f,0.15f}};
+const float JOINT_ACTION_SCALE[8] = {{0.15f,0.15f,0.25f,0.45f,0.50f,0.25f,0.45f,0.50f}};
+float g_current_joint_pos[8]={{0}}, g_last_joint_pos[8]={{0}}, g_last_raw_actions[8]={{0}};
+static uint32_t g_episode_steps = 0;
+void read_mpu6050(float* g, float* p) {{ g[0]=g[1]=g[2]=0; p[0]=p[1]=0; p[2]=-1; }}
+void read_foot_contacts(float* p) {{ p[0]=p[1]=1.0f; }}
+void read_lidar_distances(float* p) {{ for(int i=0;i<5;i++) p[i]=1.5f; }}
+{asm_fn}
+{eval_fn}
+int main() {{
+    float obs[OBS_DIM], tgt[8];
+    for (int s = 0; s < 4; ++s) {{
+        assemble_observation(obs);
+        printf("%.7f %.7f\\n", obs[35], obs[36]);
+        evaluate_locomotion_policy(obs, tgt);
+    }}
+    return 0;
+}}
+"""
+        cpp_file = tmp_path / "f3_clock.cpp"
+        exe_file = tmp_path / "f3_clock.exe"
+        cpp_file.write_text(cpp_source, encoding="utf-8")
+        comp = subprocess.run(["g++", "-std=c++17", str(cpp_file), "-o", str(exe_file)], capture_output=True, text=True)
+        assert comp.returncode == 0, comp.stderr
+        run = subprocess.run([str(exe_file)], capture_output=True, text=True, check=True)
+        lines = [line.strip() for line in run.stdout.strip().splitlines() if line.strip()]
+        assert len(lines) == 4
+        for step_idx, line in enumerate(lines):
+            c_clock = np.fromstring(line, sep=" ", dtype=np.float32)
+            np.testing.assert_allclose(c_clock, runner_clocks[step_idx], atol=1e-5)
+    finally:
+        runner.close()
+

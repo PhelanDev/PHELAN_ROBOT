@@ -401,7 +401,7 @@ class ParallelSimRunner:
         self.enable_auto_recovery = bool(enable_auto_recovery)
         if self.enable_auto_recovery:
             self.recovery_controllers: List[SelfRightingController] = [
-                SelfRightingController() for _ in range(self.num_envs)
+                SelfRightingController.from_model(self.model) for _ in range(self.num_envs)
             ]
         else:
             self.recovery_controllers = []
@@ -1155,6 +1155,16 @@ class ParallelSimRunner:
             dt=self.control_dt,
         )
 
+        if self.use_nav_planner:
+            goal_xy = np.asarray(self.nav_goal_xy, dtype=np.float32)[:2]
+            dx_g = goal_xy[0] - root_x
+            dy_g = goal_xy[1] - root_y
+            dist_g = np.hypot(dx_g, dy_g)
+            goal_tol = max(float(getattr(getattr(self.nav_planner, "cfg", None), "goal_tol", 0.15)), 1e-6)
+            target_yaw = np.where(dist_g > goal_tol, np.arctan2(dy_g, dx_g), current_yaw).astype(np.float32)
+        else:
+            target_yaw = np.zeros(self.num_envs, dtype=np.float32)
+
         # Vectorized reward computation across all environments
         reward_dict, weighted_terms = compute_rewards(
             base_lin_vel=base_lin_vel_body,
@@ -1187,7 +1197,7 @@ class ParallelSimRunner:
             double_support_time=self.double_support_time,
             last_joint_vel=self.last_joint_vel,
             current_yaw=current_yaw,
-            target_yaw=0.0,
+            target_yaw=target_yaw,
             clock_sin=clock_sin,
             delta_root_x=accepted_dx,
             standstill_time=self.standstill_time,
@@ -1243,7 +1253,8 @@ class ParallelSimRunner:
         yaw_fallen = np.zeros(self.num_envs, dtype=bool)
         if self.curriculum_stage == 0:
             straight_cmd = np.abs(self.commands[:, 2]) < 0.05
-            yaw_fallen = is_walk & straight_cmd & (np.abs(current_yaw) > 1.0)
+            yaw_err = np.arctan2(np.sin(current_yaw - target_yaw), np.cos(current_yaw - target_yaw))
+            yaw_fallen = is_walk & straight_cmd & (np.abs(yaw_err) > 1.0)
 
         fallen = z_fallen | tilt_fallen | yaw_fallen | diverged
 

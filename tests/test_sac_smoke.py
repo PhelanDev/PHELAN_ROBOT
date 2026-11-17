@@ -186,3 +186,63 @@ def test_train_sac_cli_runs_directly_from_repo_root():
     )
     assert proc.returncode == 0, f"train_sac CLI failed: {proc.stderr}"
     assert "--total-steps" in proc.stdout
+
+
+@pytest.mark.parametrize("hidden_dim", [16, 256])
+def test_sac_checkpoint_roundtrip_consumers_and_esp32_reject(tmp_path: Path, hidden_dim: int):
+    """F9: SAC checkpoints load cleanly across actor/viewer/benchmark/ONNX with 1x tanh and fail-loud on ESP32 export."""
+    import onnxruntime as ort
+    from scripts.export_policy import load_actor_from_checkpoint, export_onnx, export_esp32_headers, policy_actor_forward
+    from scripts.interactive_viewer import load_viewer_policy, policy_step
+    from scripts.evaluate_models_sim import load_actor
+    from training.policy_contract import observation_schema
+
+    torch.manual_seed(7)
+    obs_dim, act_dim = 42, 8
+    actor = SquashedGaussianActor(obs_dim, act_dim, hidden_dim=hidden_dim).eval()
+    log_alpha = torch.tensor([-0.5])
+    ckpt_path = tmp_path / f"sac_{hidden_dim}.pt"
+    schema = observation_schema(obs_dim, True, 0.02)
+    save_sac_checkpoint(ckpt_path, actor, log_alpha, obs_dim, act_dim, hidden_dim=hidden_dim)
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    ckpt["model_path"] = "duck_v2/cyberduck_v2.xml"
+    ckpt["model_name"] = "cyberduck_v2.xml"
+    ckpt["observation_schema"] = schema
+    torch.save(ckpt, ckpt_path)
+
+    test_in = torch.cat([torch.full((1, obs_dim), -1.5), torch.full((1, obs_dim), 1.5)], dim=0)
+    with torch.no_grad():
+        expected = actor(test_in).numpy()
+
+    # 1. load_actor_from_checkpoint + policy_actor_forward (must apply tanh once, not twice)
+    loaded_actor = load_actor_from_checkpoint(ckpt_path).eval()
+    with torch.no_grad():
+        actual_direct = policy_actor_forward(loaded_actor, test_in).numpy()
+    np.testing.assert_allclose(actual_direct, expected, atol=1e-6)
+
+    # 2. Viewer and benchmark loaders
+    viewer_policy = load_viewer_policy(ckpt_path)
+    bench_actor = load_actor(ckpt_path)
+    for row_idx in range(2):
+        np.testing.assert_allclose(policy_step(viewer_policy, test_in[row_idx].numpy()), expected[row_idx], atol=1e-6)
+    with torch.no_grad():
+        np.testing.assert_allclose(bench_actor(test_in).numpy(), expected, atol=1e-6)
+
+    # 3. ONNX export parity
+    onnx_out = export_onnx(ckpt_path, tmp_path / f"sac_{hidden_dim}.onnx")
+    sess = ort.InferenceSession(str(onnx_out), providers=["CPUExecutionProvider"])
+    np.testing.assert_allclose(sess.run(None, {"obs": test_in.numpy()})[0], expected, atol=1e-5)
+
+    # 4. ESP32 header export and preflight must explicitly reject unsupported SAC ReLU architecture before writing
+    esp_dir = tmp_path / f"esp32_{hidden_dim}"
+    with pytest.raises(ValueError, match="SAC|architecture|ELU|unsupported"):
+        export_esp32_headers(ckpt_path, esp_dir / "w.h", esp_dir / "c.h")
+    assert not esp_dir.exists()
+    from scripts.export_policy import prepare_target_exports
+    esp_sac_ckpt = tmp_path / f"sac_esp_{hidden_dim}.pt"
+    ckpt["model_path"] = "pipelines/dual_esp32s3_stack/models/mjcf/microduck_esp32_8dof.xml"
+    ckpt["model_name"] = "microduck_esp32_8dof.xml"
+    torch.save(ckpt, esp_sac_ckpt)
+    with pytest.raises(ValueError, match="SAC|architecture|ELU|unsupported"):
+        prepare_target_exports({"esp32": esp_sac_ckpt})
+

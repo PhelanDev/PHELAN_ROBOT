@@ -46,6 +46,18 @@ DEFAULT_SAVE_PATH = REPO_ROOT / "models" / "checkpoints" / "microduck_rpi5_ppo.p
 class RunningMeanStd:
     """Tracks running mean and variance using parallel Welford algorithm."""
 
+    @staticmethod
+    def _validate_scalars(count: Any, clip: Any, epsilon: Any, min_std: Any) -> Dict[str, float]:
+        values = {"count": count, "clip": clip, "epsilon": epsilon, "min_std": min_std}
+        for name, v in values.items():
+            if isinstance(v, (bool, str)) or not np.isscalar(v) or not np.isfinite(v):
+                raise ValueError(f"{name} must be a finite numeric scalar")
+            f = float(v)
+            if (name == "clip" and f < 0.0) or (name != "clip" and f <= 0.0):
+                bound = "non-negative" if name == "clip" else "positive"
+                raise ValueError(f"{name} must be {bound}")
+        return {name: float(v) for name, v in values.items()}
+
     def __init__(
         self,
         shape: Union[int, Tuple[int, ...]] = (),
@@ -56,12 +68,13 @@ class RunningMeanStd:
         if isinstance(shape, int):
             shape = (shape,)
         self.shape = shape
-        self.epsilon = float(epsilon)
-        self.clip = float(clip)
-        self.min_std = float(min_std)
+        validated = self._validate_scalars(count=1e-4, clip=clip, epsilon=epsilon, min_std=min_std)
+        self.epsilon = validated["epsilon"]
+        self.clip = validated["clip"]
+        self.min_std = validated["min_std"]
         self.mean = np.zeros(self.shape, dtype=np.float64)
         self.var = np.ones(self.shape, dtype=np.float64)
-        self.count = 1e-4
+        self.count = validated["count"]
 
     def update(self, x: Union[np.ndarray, torch.Tensor]) -> None:
         """Update running statistics with a batch of observations."""
@@ -125,9 +138,9 @@ class RunningMeanStd:
                 raise ValueError("mean/var must be finite numeric arrays of the expected shape")
             if np.any(var < 0) or ("shape" in state_dict and tuple(state_dict["shape"]) != self.shape):
                 raise ValueError("invalid variance or advertised shape")
-            scalars = {key: state_dict.get(key, getattr(self, key)) for key in ("count", "clip", "epsilon", "min_std")}
-            if "count" not in state_dict or any(isinstance(v, (bool, str)) or not np.isscalar(v) or not np.isfinite(v) or v <= 0 for v in scalars.values()):
-                raise ValueError("count/clip/epsilon/min_std must be positive finite numeric scalars")
+            if "count" not in state_dict:
+                raise ValueError("count missing from RMS state")
+            scalars = self._validate_scalars(**{key: state_dict.get(key, getattr(self, key)) for key in ("count", "clip", "epsilon", "min_std")})
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"Invalid RMS state: {exc}") from exc
         self.mean, self.var = mean.astype(np.float64, copy=True), var.astype(np.float64, copy=True)
@@ -547,8 +560,11 @@ def train_ppo(
     randomize_pillars: bool = False,
     pillar_density: float = 1.0,
     pillar_jitter: float = 0.06,
+    squash_actions: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Execute PPO training pipeline using ParallelSimRunner."""
+    if squash_actions is not None and type(squash_actions) is not bool:
+        raise ValueError("squash_actions must be boolean")
     if device is None:
         device_str = "cuda" if torch.cuda.is_available() else "cpu"
     else:
@@ -672,7 +688,7 @@ def train_ppo(
         hidden_dim=hidden_dim,
         max_log_std=max_log_std,
         critic_obs_dim=critic_obs_dim,
-        squash_actions=True,
+        squash_actions=True if squash_actions is None else squash_actions,
     ).to(dev)
 
     obs_rms = RunningMeanStd(shape=obs_dim, clip=10.0)
@@ -734,10 +750,27 @@ def train_ppo(
                             or any(not isinstance(state[key], torch.Tensor) or state[key].shape != tensor.shape
                                    for key, tensor in expected_state.items())):
                         raise ValueError("Checkpoint model tensor shapes are incompatible with resume; use explicit transfer")
+                    resolved_squash = bool(ckpt.get("squash_actions", False))
+                    if squash_actions is not None and squash_actions != resolved_squash:
+                        raise ValueError("Checkpoint squash_actions disagrees with requested action transform")
                 except Exception:
                     runner.close()
                     raise
-                model.squash_actions = bool(ckpt.get("squash_actions", False))
+                model.squash_actions = resolved_squash
+            else:
+                try:
+                    if "squash_actions" in ckpt:
+                        if type(ckpt["squash_actions"]) is not bool:
+                            raise ValueError("Checkpoint action transform must be boolean")
+                        resolved_squash = ckpt["squash_actions"] if squash_actions is None else squash_actions
+                    elif squash_actions is not None:
+                        resolved_squash = squash_actions
+                    else:
+                        raise ValueError("Legacy checkpoint has no squash_actions metadata; pass explicit squash_actions for transfer")
+                except Exception:
+                    runner.close()
+                    raise
+                model.squash_actions = resolved_squash
             # Validate actor and critic statistics completely before assigning either.
             pending_rms = []
             try:
@@ -1386,6 +1419,12 @@ def main():
     parser.add_argument("--randomize-pillars", action="store_true", help="Enable randomizing slalom pillar selection and jitter per episode/iteration")
     parser.add_argument("--pillar-density", type=float, default=1.0, help="Fraction of slalom pillars kept active (default: 1.0)")
     parser.add_argument("--pillar-jitter", type=float, default=0.06, help="Maximum XY jitter applied to active slalom pillars in meters (default: 0.06)")
+    parser.add_argument(
+        "--squash-actions",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Explicit tanh action transform declaration/override for legacy transfer",
+    )
 
     args = parser.parse_args()
 
@@ -1427,6 +1466,7 @@ def main():
         randomize_pillars=args.randomize_pillars,
         pillar_density=args.pillar_density,
         pillar_jitter=args.pillar_jitter,
+        squash_actions=args.squash_actions,
     )
 
 
