@@ -13,7 +13,7 @@ def main() -> None:
     print("Danh mục dưới đây là mesh giáp ngoài, không phải BOM chế tạo hoàn chỉnh.")
     print("\n| Asset | Tam giác |")
     print("| :--- | ---: |")
-    for part in sorted((REPO_ROOT / "duck_v2/meshes").glob("*.stl")):
+    for part in sorted((REPO_ROOT / "robot/meshes").glob("*.stl")):
         with part.open("rb") as source:
             source.seek(80)
             triangles = struct.unpack("<I", source.read(4))[0]

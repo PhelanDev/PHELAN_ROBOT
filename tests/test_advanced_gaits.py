@@ -139,7 +139,7 @@ def test_bipedal_gait_generator_quadrature_forward_walk_and_waddle():
 
     gen = BipedalGaitGenerator(default_freq=1.25)
     runner = ParallelSimRunner(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=1,
         decimation=10,
         stage=0,

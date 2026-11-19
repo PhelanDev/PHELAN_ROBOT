@@ -7,7 +7,7 @@ pytest.importorskip('build123d')
 
 
 def test_mass_budget_accepts_exact_upper_bound_and_rejects_next_float():
-    from duck_v2.cad_src.validation import within_mass_budget
+    from cad.validation import within_mass_budget
     assert within_mass_budget(1.32)
     assert not within_mass_budget(np.nextafter(1.32, np.inf))
     assert within_mass_budget(1.17)  # The target lower mass is not a safety minimum.
@@ -19,15 +19,15 @@ def test_mass_budget_accepts_exact_upper_bound_and_rejects_next_float():
                                               ('PLA', 1.8), ('BRONZE', 1.8),
                                               ('CLEAR', 1.8)])
 def test_wall_requirements_follow_the_polish_plan(material, expected):
-    from duck_v2.cad_src.dfam import required_wall
+    from cad.dfam import required_wall
     assert required_wall(material) == expected
     with pytest.raises(ValueError):
         required_wall('unknown')
 
 
 def test_all_servo_station_axes_match_the_kinematic_joint_origins():
-    from duck_v2.cad_src.kinematics import FRAMES
-    from duck_v2.cad_src.layout import STATIONS
+    from cad.kinematics import FRAMES
+    from cad.layout import STATIONS
     for station in STATIONS:
         parent, offset, joint, axis = FRAMES[station.moving]
         assert parent == station.fixed and joint == station.joint
@@ -38,12 +38,12 @@ def test_all_servo_station_axes_match_the_kinematic_joint_origins():
 
 
 def test_default_sweep_contains_nine_samples_for_every_joint():
-    from duck_v2.cad_src.validation import sample_poses
+    from cad.validation import sample_poses
     assert len(list(sample_poses())) == 5 + 8 * 9
 
 
 def test_neck_harness_is_routed_behind_the_yaw_axis():
-    from duck_v2.cad_src.wiring.routes import harnesses
+    from cad.wiring.routes import harnesses
     route = next(route for route in harnesses('rpi5') if route.name == 'head_harness')
     neck_points = [xyz for link, xyz in route.anchors if link == 'neck']
     assert len(neck_points) >= 3

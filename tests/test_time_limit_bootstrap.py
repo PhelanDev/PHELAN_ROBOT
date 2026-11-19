@@ -41,7 +41,7 @@ def test_apply_timeout_bootstrap_noop_when_no_timeouts():
 def test_sim_timeout_sets_time_outs_and_terminal_obs():
     """Verify that reaching max_episode_steps sets time_outs=True and records terminal_obs before reset."""
     sim = DuckParallelSim(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=2,
         decimation=1,
     )
@@ -71,7 +71,7 @@ def test_sim_timeout_sets_time_outs_and_terminal_obs():
 def test_sim_fall_is_not_timeout():
     """Verify that when an env falls while also timing out, it is treated as fallen (time_outs=False)."""
     sim = DuckParallelSim(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=2,
         decimation=1,
     )

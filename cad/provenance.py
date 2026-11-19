@@ -5,17 +5,17 @@ from importlib.metadata import version
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def source_receipt(root=REPO_ROOT):
     root = Path(root).resolve()
-    sources = root / 'duck_v2/cad_src'
+    sources = root / 'cad'
     inputs = list(sources.rglob('*.py'))
     inputs += list(sources.glob('requirements*.txt'))
     source_models = sources / 'purchased/sources'
     inputs += [p for p in source_models.glob('*') if p.suffix in ('.step', '.json', '.txt')]
-    for name in ('duck_v2/robot_spec.py', 'training/env_config.py'):
+    for name in ('robot/robot_spec.py', 'training/env_config.py'):
         path = root / name
         if path.is_file():
             inputs.append(path)

@@ -35,7 +35,7 @@ from training.run_parallel_sim import (
     run_benchmark as base_run_benchmark,
 )
 
-from duck_v2.robot_spec import MODEL_PATH
+from robot.robot_spec import MODEL_PATH
 
 DEFAULT_MODEL_PATH = MODEL_PATH
 

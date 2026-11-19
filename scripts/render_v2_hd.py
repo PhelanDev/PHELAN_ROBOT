@@ -6,7 +6,7 @@ from PIL import Image
 
 def render_views():
     repo_root = Path(__file__).resolve().parent.parent
-    v2_dir = repo_root / "duck_v2"
+    v2_dir = repo_root / "robot"
     media_dir = v2_dir / "media"
     media_dir.mkdir(parents=True, exist_ok=True)
 

@@ -152,7 +152,7 @@ def test_duck_cli_status_cyberduck_v2():
 
 
 def test_pi_deployment_profiles_share_canonical_v2_policy():
-    from duck_v2.robot_spec import DEFAULT_ONNX_PATH
+    from robot.robot_spec import DEFAULT_ONNX_PATH
     from pipelines.rpi5_stack.deployment.infer_rpi5 import DEFAULT_MODEL_PATH as rpi5_policy
     from pipelines.pizero2w_stack.deployment.infer_pizero2w import DEFAULT_MODEL_PATH as pi_zero_policy
 
@@ -167,7 +167,7 @@ def test_duck_cli_train_v2_resume_dry_run(tmp_path, isolated_cli_env):
     duck_py = REPO_ROOT / "duck.py"
     from scripts.train_ppo import train_ppo
     checkpoint = tmp_path / "v2_ppo.pt"
-    train_ppo(model_path=REPO_ROOT / "duck_v2/cyberduck_v2.xml", num_envs=1,
+    train_ppo(model_path=REPO_ROOT / "robot/cyberduck_v2.xml", num_envs=1,
         rollout_steps=2, max_iterations=1, num_epochs=1, save_path=checkpoint, verbose=False, device="cpu")
     res = subprocess.run(
         [sys.executable, str(duck_py), "train", "--target", "v2", "--resume", "--dry-run",

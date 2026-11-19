@@ -436,7 +436,7 @@ def generate_bionic_sole():
 # =========================================================================
 
 def build_all_cohesive():
-    out_dir = "duck_v2/meshes"
+    out_dir = "robot/meshes"
     os.makedirs(out_dir, exist_ok=True)
     
     parts = {

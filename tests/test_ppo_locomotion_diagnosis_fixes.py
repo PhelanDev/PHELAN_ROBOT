@@ -77,7 +77,7 @@ def test_gait_hysteresis_rejects_chatter_and_tracks_same_foot(dt, steps):
 def test_sole_clearance_geometry_and_reset_isolation():
     from training.run_parallel_sim import ParallelSimRunner
 
-    runner = ParallelSimRunner('duck_v2/cyberduck_v2.xml', num_envs=2, num_threads=1)
+    runner = ParallelSimRunner('robot/cyberduck_v2.xml', num_envs=2, num_threads=1)
     try:
         d = runner.datas[0]
         gids = [runner.left_foot_gid, runner.right_foot_gid]
@@ -104,7 +104,7 @@ def test_sole_clearance_geometry_and_reset_isolation():
 def test_terminal_reward_diagnostics_precede_autoreset(fast):
     from training.run_parallel_sim import ParallelSimRunner
 
-    runner = ParallelSimRunner('duck_v2/cyberduck_v2.xml', num_envs=1, max_episode_steps=1, num_threads=1)
+    runner = ParallelSimRunner('robot/cyberduck_v2.xml', num_envs=1, max_episode_steps=1, num_threads=1)
     try:
         runner.datas[0].qpos[0] = 1.2
         runner.prev_root_x[0] = 1.2
@@ -145,7 +145,7 @@ def test_squashed_latent_roundtrip_and_gradients(latent):
 
 def train_small(tmp_path, **kwargs):
     from scripts.train_ppo import train_ppo
-    opts = dict(model_path='duck_v2/cyberduck_v2.xml', num_envs=2, rollout_steps=4,
+    opts = dict(model_path='robot/cyberduck_v2.xml', num_envs=2, rollout_steps=4,
                 num_epochs=1, mini_batch_size=4, max_iterations=1, device='cpu', verbose=False,
                 save_path=tmp_path/'run_ppo.pt', best_save_path=tmp_path/'run_best.pt', save_interval=1)
     opts.update(kwargs)
@@ -268,7 +268,7 @@ def policy_checkpoint(squash=True, obs_dim=42, hidden_dim=32):
     rms.var[:] = 0.4
     ckpt = dict(model_state_dict=model.state_dict(), obs_dim=obs_dim, action_dim=8,
                 hidden_dim=hidden_dim, squash_actions=squash, obs_rms=rms.state_dict(),
-                model_path='duck_v2/cyberduck_v2.xml', model_name='cyberduck_v2.xml')
+                model_path='robot/cyberduck_v2.xml', model_name='cyberduck_v2.xml')
     return model, rms, ckpt
 
 
@@ -324,7 +324,7 @@ def test_viewer_model_resolution_explicitness_and_metadata(tmp_path):
     torch.save(ckpt, path)
     assert build_arg_parser().parse_args([]).model is None
     assert Path(resolve_viewer_model_path(None, path)).name == 'cyberduck_v2.xml'
-    assert Path(resolve_viewer_model_path('duck_v2/cyberduck_v2.xml', path)).name == 'cyberduck_v2.xml'
+    assert Path(resolve_viewer_model_path('robot/cyberduck_v2.xml', path)).name == 'cyberduck_v2.xml'
     with pytest.raises(ValueError, match='model'):
         resolve_viewer_model_path('models/microduck_8dof.xml', path)
 
@@ -332,7 +332,7 @@ def test_viewer_model_resolution_explicitness_and_metadata(tmp_path):
     for filename in ('unrelated.pt', 'cyberduck_v2_best.pt', 'experiment_v2.pt'):
         unknown_path = tmp_path / filename
         torch.save(unidentified, unknown_path)
-        for explicit_model in (None, 'duck_v2/cyberduck_v2.xml'):
+        for explicit_model in (None, 'robot/cyberduck_v2.xml'):
             with pytest.raises(ValueError, match='identity'):
                 resolve_viewer_model_path(explicit_model, unknown_path)
 
@@ -397,7 +397,7 @@ def test_deterministic_evaluation_repeats_same_episode_seeds():
     from scripts.train_ppo import ActorCritic, RunningMeanStd, evaluate_deterministic_rollout
     from training.run_parallel_sim import ParallelSimRunner
     model = ActorCritic(squash_actions=True)
-    runner = ParallelSimRunner('duck_v2/cyberduck_v2.xml', num_envs=1)
+    runner = ParallelSimRunner('robot/cyberduck_v2.xml', num_envs=1)
     rms = RunningMeanStd(42)
     try:
         kwargs = dict(model=model, obs_rms=rms, model_path=runner.model_path, stage=0,
@@ -462,7 +462,7 @@ def test_direct_module_onnx_transform_and_export_model_metadata(tmp_path):
     with torch.no_grad():
         expected = model.forward_actor(torch.from_numpy(raw)).numpy()
     np.testing.assert_allclose(session.run(None, {'obs': raw})[0], expected, atol=1e-6)
-    ckpt['model_path'] = 'duck_v2\\cyberduck_v2.xml'
+    ckpt['model_path'] = 'robot\\cyberduck_v2.xml'
     path = export_onnx(ckpt, tmp_path/'metadata.onnx')
     assert Path(resolve_viewer_model_path(None, path)).name == 'cyberduck_v2.xml'
 
@@ -499,7 +499,7 @@ def test_failed_best_write_preserves_existing_file(monkeypatch, tmp_path):
     (0, -0.15, -0.003, True)])
 def test_progress_consistency_uses_world_frame(monkeypatch, yaw, world_vx, dx, valid):
     from training.run_parallel_sim import ParallelSimRunner
-    runner = ParallelSimRunner('duck_v2/cyberduck_v2.xml', num_envs=1, num_threads=1)
+    runner = ParallelSimRunner('robot/cyberduck_v2.xml', num_envs=1, num_threads=1)
     try:
         d = runner.datas[0]
         d.qpos[3:7] = [np.cos(yaw/2), 0, 0, np.sin(yaw/2)]
@@ -552,7 +552,7 @@ def test_resume_with_corrupt_best_preserves_it_until_qualified(monkeypatch, tmp_
 
 def test_sole_clearance_accounts_for_rotation_and_raised_terrain():
     from training.run_parallel_sim import ParallelSimRunner
-    runner = ParallelSimRunner('duck_v2/cyberduck_v2.xml', num_envs=1)
+    runner = ParallelSimRunner('robot/cyberduck_v2.xml', num_envs=1)
     try:
         d = runner.datas[0]
         gid = runner.left_foot_gid

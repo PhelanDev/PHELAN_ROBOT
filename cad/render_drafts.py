@@ -17,8 +17,8 @@ from .params import VARIANTS
 from .provenance import source_receipt
 
 
-ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OUTPUT = ROOT / 'duck_v2/cad/draft/media'
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT = ROOT / 'artifacts/cad/draft/media'
 COLORS = {
     'PLA': (0.34, 0.39, 0.43, 1),
     'PETG': (0.18, 0.23, 0.27, 1),
@@ -147,7 +147,7 @@ def _render_scene(parts, output, renderer_python, scratch, *, exploded=False,
         'lookat_m': lookat, 'distance_m': distance,
         'size_px': [1600, 1200], 'azimuth_deg': azimuth, 'elevation_deg': -18,
     }), encoding='utf-8')
-    helper = ROOT / 'duck_v2/cad_src/render_mujoco.py'
+    helper = ROOT / 'cad/render_mujoco.py'
     subprocess.run([renderer_python, str(helper), str(request_path)],
                    cwd=ROOT, check=True)
 

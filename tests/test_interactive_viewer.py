@@ -125,7 +125,7 @@ def test_interactive_viewer_headless_simulation():
     from scripts.interactive_viewer import run_simulation_headless
 
     metrics = run_simulation_headless(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         pose="stand",
         duration=0.1,
         dt=0.002,
@@ -142,7 +142,7 @@ def test_interactive_viewer_gait_demo_headless():
     from scripts.interactive_viewer import run_simulation_headless
 
     metrics = run_simulation_headless(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         pose="stand",
         duration=0.1,
         gait_demo=True,
@@ -172,7 +172,7 @@ def test_reset_last_actions_fix():
     from training.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=4,
         decimation=5,
     )
@@ -238,7 +238,7 @@ def test_interactive_viewer_cli_simulation(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda prompt="": next(commands))
 
     # Should run and exit without raising an exception
-    run_interactive_cli(model_path="duck_v2/cyberduck_v2.xml", dt=0.005)
+    run_interactive_cli(model_path="robot/cyberduck_v2.xml", dt=0.005)
 
 
 def test_configure_viewer_camera():
@@ -294,7 +294,7 @@ def test_interactive_viewer_policy_headless_stability(tmp_path):
 
     import torch
     from scripts.train_ppo import ActorCritic
-    from duck_v2.robot_spec import MODEL_NAME
+    from robot.robot_spec import MODEL_NAME
 
     actor = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=16)
     with torch.no_grad():
@@ -312,7 +312,7 @@ def test_interactive_viewer_policy_headless_stability(tmp_path):
     }, ckpt_path)
 
     metrics = run_simulation_headless(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         policy_path=ckpt_path,
         duration=0.5,
         dt=0.002,
@@ -368,7 +368,7 @@ def test_interactive_viewer_fallback_and_stairs_handling(monkeypatch):
     monkeypatch.setattr(mujoco.viewer, "launch_passive", mock_launch_passive)
 
     run_interactive_viewer(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         pose="squat",
         duration=0.01,
         stage=2,
@@ -393,7 +393,7 @@ def test_viewer_stage0_applies_wide_pillars_submerges_stairs_and_spawns_native_h
     from scripts.interactive_viewer import run_simulation_headless
     from training.terrain_curriculum import apply_stage
 
-    model_rel = "duck_v2/cyberduck_v2.xml"
+    model_rel = "robot/cyberduck_v2.xml"
     model_abs = os.path.join(PROJECT_ROOT, model_rel)
     ref_model = mujoco.MjModel.from_xml_path(model_abs)
     apply_stage(ref_model, 0)
@@ -434,7 +434,7 @@ def test_extract_viewer_observation_filters_floor_lidar_hits():
     from training.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
-        model_path=os.path.join(PROJECT_ROOT, "duck_v2", "cyberduck_v2.xml"),
+        model_path=os.path.join(PROJECT_ROOT, "robot", "cyberduck_v2.xml"),
         num_envs=1,
         stage=0,
         terrain_mode="hurdles",
@@ -512,7 +512,7 @@ def test_run_opencv_viewer_handles_getwindowproperty_error_and_passes_stairs(mon
 
     # Should exit gracefully without raising DummyCv2Error when [X] closes the window
     iv.run_opencv_viewer(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         duration=1.0,
         stage=0,
         dt=0.002,

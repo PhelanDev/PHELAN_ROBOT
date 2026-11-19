@@ -6,8 +6,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 def render_leg_joints():
     repo_root = Path(__file__).resolve().parent.parent
-    xml_path = repo_root / "duck_v2" / "cyberduck_v2.xml"
-    media_dir = repo_root / "duck_v2" / "media"
+    xml_path = repo_root / "robot" / "cyberduck_v2.xml"
+    media_dir = repo_root / "robot" / "media"
     media_dir.mkdir(parents=True, exist_ok=True)
 
     model = mujoco.MjModel.from_xml_path(str(xml_path))

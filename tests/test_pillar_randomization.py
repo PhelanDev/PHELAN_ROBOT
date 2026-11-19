@@ -11,7 +11,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from training.terrain_curriculum import apply_stage, randomize_pillars
 
-XML_V2 = Path(__file__).resolve().parent.parent / "duck_v2" / "cyberduck_v2.xml"
+XML_V2 = Path(__file__).resolve().parent.parent / "robot" / "cyberduck_v2.xml"
 
 
 def test_randomize_pillars_respects_spawn_and_gap_safety():
@@ -156,7 +156,7 @@ def test_runner_compute_d_min_filters_submerged_pillars():
 
     # V2 uses LiDAR for live distance; the geometric helper must also ignore submerged pillars.
     runner = ParallelSimRunner(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=2,
         num_threads=1,
         stage=1,

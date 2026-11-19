@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from duck_v2.robot_spec import EXPECTED_JOINTS
+from robot.robot_spec import EXPECTED_JOINTS
 from .assembly import build_assembly
 from .catalogue import printable_parts
 from .collision import interference
@@ -78,7 +78,7 @@ def main():
     parser.add_argument('--nominal-only', action='store_true')
     parser.add_argument('--samples', type=int, default=JOINT_SWEEP_SAMPLES)
     parser.add_argument('--limit', type=int)
-    parser.add_argument('--output', type=Path, default=Path('duck_v2/cad/verification.json'))
+    parser.add_argument('--output', type=Path, default=Path('artifacts/cad/verification.json'))
     args = parser.parse_args()
     variants = VARIANTS if args.variant == 'all' else (args.variant,)
     parts = validate_parts()

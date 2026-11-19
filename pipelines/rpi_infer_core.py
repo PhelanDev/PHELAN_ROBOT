@@ -27,7 +27,7 @@ from training.env_config import (
     scale_actions,
     clip_action_rates,
 )
-from duck_v2.robot_spec import DEFAULT_ONNX_PATH, MODEL_NAME
+from robot.robot_spec import DEFAULT_ONNX_PATH, MODEL_NAME
 
 # Optional hardware libraries
 try:

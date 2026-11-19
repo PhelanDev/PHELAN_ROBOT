@@ -9,7 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from duck_v2.robot_spec import (  # noqa: E402
+from robot.robot_spec import (  # noqa: E402
     BASE_HEIGHT_M,
     EXPECTED_JOINTS,
     ROBOT_ONLY_MJCF_PATH,

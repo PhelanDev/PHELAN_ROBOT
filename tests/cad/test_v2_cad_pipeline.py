@@ -12,19 +12,19 @@ trimesh = pytest.importorskip('trimesh')
 from build123d import Box, CenterOf, Pos, Vector, import_step
 import numpy as np
 
-from duck_v2.cad_src.assembly import build_assembly
-from duck_v2.cad_src.catalogue import printable_parts
-from duck_v2.cad_src.collision import interference
-from duck_v2.cad_src.export_pipeline import clean_tessellation
-from duck_v2.cad_src.geometry import Component
-from duck_v2.cad_src.mass_properties import mass_properties
-from duck_v2.cad_src.params import VARIANTS
-from duck_v2.cad_src.print_plates import pack_plates
-from duck_v2.cad_src.purchased.catalogue import purchased_parts
-from duck_v2.cad_src.purchased.electronics import BOARDS, board_model
-from duck_v2.cad_src.skeleton.interfaces import bearing_plate, insert_boss
-from duck_v2.cad_src.validation import sample_poses
-from duck_v2.cad_src.wiring.routes import measure_harnesses
+from cad.assembly import build_assembly
+from cad.catalogue import printable_parts
+from cad.collision import interference
+from cad.export_pipeline import clean_tessellation
+from cad.geometry import Component
+from cad.mass_properties import mass_properties
+from cad.params import VARIANTS
+from cad.print_plates import pack_plates
+from cad.purchased.catalogue import purchased_parts
+from cad.purchased.electronics import BOARDS, board_model
+from cad.skeleton.interfaces import bearing_plate, insert_boss
+from cad.validation import sample_poses
+from cad.wiring.routes import measure_harnesses
 
 
 @pytest.mark.parametrize('name', printable_parts())
@@ -39,7 +39,7 @@ def test_each_printable_is_a_single_connected_valid_solid(name):
 def test_purchased_reference_step_roundtrip_has_matching_volume(name):
     from pathlib import Path
     shape, _ = purchased_parts()[name]
-    path = Path(__file__).resolve().parents[1] / 'duck_v2/cad_src/purchased/step' / f'{name}.step'
+    path = Path(__file__).resolve().parents[2] / 'cad/purchased/step' / f'{name}.step'
     imported = import_step(path)
     assert imported.is_valid
     assert imported.volume == pytest.approx(shape.volume, rel=1e-8)

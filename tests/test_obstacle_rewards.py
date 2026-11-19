@@ -106,7 +106,7 @@ def test_compute_rewards_backward_compatible():
 def test_parallel_sim_tracks_d_min_and_d_min_dot():
     """Verify DuckParallelSim calculates d_min and d_min_dot across steps."""
     sim = DuckParallelSim(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=2,
         decimation=1,
     )
@@ -127,7 +127,7 @@ def test_lidar_pomdp_d_min_ignores_rear_obstacle():
     """Verify that when LiDAR is active, d_min is derived from LiDAR perception rather than rear obstacles."""
     import mujoco
 
-    model_path = REPO_ROOT / "duck_v2" / "cyberduck_v2.xml"
+    model_path = REPO_ROOT / "robot" / "cyberduck_v2.xml"
     sim = DuckParallelSim(
         model_path=str(model_path),
         num_envs=1,
@@ -280,7 +280,7 @@ def test_compute_d_min_with_slalom_radii():
     import mujoco
 
     sim = DuckParallelSim(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=1,
         decimation=1,
     )

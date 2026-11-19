@@ -20,7 +20,7 @@ from model_test_helpers import (
     assert_sole_clearance,
 )
 
-from duck_v2.robot_spec import MODEL_PATH as MJCF_PATH, URDF_PATH, MJCF_MODEL_NAME, TOTAL_MASS_KG
+from robot.robot_spec import MODEL_PATH as MJCF_PATH, URDF_PATH, MJCF_MODEL_NAME, TOTAL_MASS_KG
 
 
 def test_pizero2w_mjcf_structure_and_joints():

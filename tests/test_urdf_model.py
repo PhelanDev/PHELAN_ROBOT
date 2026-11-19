@@ -2,7 +2,7 @@ import os
 import xml.etree.ElementTree as ET
 import numpy as np
 import pytest
-from duck_v2.robot_spec import MODEL_PATH, URDF_PATH, TOTAL_MASS_KG
+from robot.robot_spec import MODEL_PATH, URDF_PATH, TOTAL_MASS_KG
 
 def test_urdf_structure_and_actuators():
     urdf_path = str(URDF_PATH)

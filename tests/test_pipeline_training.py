@@ -56,7 +56,7 @@ from pipelines.dual_esp32s3_stack.training.run_parallel_sim import (
     run_benchmark as esp32_run_benchmark,
 )
 
-from duck_v2.robot_spec import MODEL_PATH
+from robot.robot_spec import MODEL_PATH
 
 
 def test_rpi5_env_config_dimensions():

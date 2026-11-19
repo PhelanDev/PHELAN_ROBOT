@@ -7,11 +7,11 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-V2_DIR = os.path.join(os.path.dirname(__file__), "..", "duck_v2")
+V2_DIR = os.path.join(os.path.dirname(__file__), "..", "robot")
 MESH_DIR = os.path.join(V2_DIR, "meshes")
 CAD_DIR = os.path.join(V2_DIR, "cad")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from duck_v2.robot_spec import (  # noqa: E402
+from robot.robot_spec import (  # noqa: E402
     MODEL_PATH as CANONICAL_V2_MJCF,
     NUM_ACTIONS,
     NUM_OBSERVATIONS,
@@ -225,7 +225,7 @@ def test_cyberduck_v2_foot_dynamics_and_heading_turn_gate():
     from training.run_parallel_sim import ParallelSimRunner
     from training.env_config import compute_rewards
 
-    runner = ParallelSimRunner(model_path="duck_v2/cyberduck_v2.xml", num_envs=1)
+    runner = ParallelSimRunner(model_path="robot/cyberduck_v2.xml", num_envs=1)
     try:
         assert runner.left_foot_gid != -1 and runner.right_foot_gid != -1
         assert runner.left_foot_bid != -1 and runner.right_foot_bid != -1
@@ -363,7 +363,7 @@ def test_cyberduck_v2_joint_frictionloss_damping_and_sole_calibration():
 
 def test_v2_robot_only_mjcf_is_derived_and_has_no_scene_geometry():
     from duck_v2.scripts.build_robot_only_mjcf import build_robot_only_mjcf
-    from duck_v2.robot_spec import ROBOT_ONLY_MJCF_PATH
+    from robot.robot_spec import ROBOT_ONLY_MJCF_PATH
 
     output = build_robot_only_mjcf()
     assert output == ROBOT_ONLY_MJCF_PATH
@@ -381,7 +381,7 @@ def test_v2_robot_only_mjcf_is_derived_and_has_no_scene_geometry():
 
 
 def test_v2_urdf_is_derived_from_canonical_mjcf_and_has_same_mass():
-    from duck_v2.robot_spec import URDF_PATH
+    from robot.robot_spec import URDF_PATH
     from duck_v2.scripts.export_v2_urdf import export_v2_urdf
     import xml.etree.ElementTree as ET
 

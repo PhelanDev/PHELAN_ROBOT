@@ -12,7 +12,7 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from duck_v2.robot_spec import (  # noqa: E402
+from robot.robot_spec import (  # noqa: E402
     BASE_HEIGHT_M,
     EXPECTED_JOINTS,
     MAX_SPEED_RAD_S,
@@ -242,7 +242,7 @@ def verify_center_of_mass(mjcf_path: str):
 def verify_v2_geometry(mjcf_path: str):
     """Check V2 root/link dimensions and sole footprint in compiled coordinates."""
     import mujoco
-    from duck_v2.robot_spec import SOLE_HALF_SIZE_M
+    from robot.robot_spec import SOLE_HALF_SIZE_M
 
     model = mujoco.MjModel.from_xml_path(mjcf_path)
     data = mujoco.MjData(model)

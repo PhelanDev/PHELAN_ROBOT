@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 import mujoco
 import numpy as np
 
-from duck_v2.robot_spec import MODEL_PATH, ROBOT_ONLY_MJCF_PATH, URDF_PATH
+from robot.robot_spec import MODEL_PATH, ROBOT_ONLY_MJCF_PATH, URDF_PATH
 from duck_v2.scripts.build_robot_only_mjcf import build_robot_only_mjcf
 from duck_v2.scripts import export_v2_urdf as urdf_exporter
 
@@ -14,7 +14,7 @@ def test_robot_only_mjcf_is_fresh_and_has_no_scene(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     generated = build_robot_only_mjcf(output=tmp_path / "robot.xml")
     assert generated.read_bytes() == ROBOT_ONLY_MJCF_PATH.read_bytes(), (
-        "Regenerate duck_v2/cyberduck_v2_robot.xml after editing the canonical MJCF"
+        "Regenerate robot/cyberduck_v2_robot.xml after editing the canonical MJCF"
     )
     source = ET.parse(MODEL_PATH).getroot()
     robot = ET.parse(generated).getroot()
@@ -59,7 +59,7 @@ def test_urdf_is_fresh_and_uses_existing_visual_meshes(tmp_path, monkeypatch):
     monkeypatch.setattr(urdf_exporter, "build_robot_only_mjcf", lambda: robot)
     generated = urdf_exporter.export_v2_urdf(output=tmp_path / "robot.urdf")
     assert generated.read_bytes() == URDF_PATH.read_bytes(), (
-        "Regenerate duck_v2/cyberduck_v2.urdf after editing the canonical MJCF"
+        "Regenerate robot/cyberduck_v2.urdf after editing the canonical MJCF"
     )
     urdf = ET.parse(generated).getroot()
     visual_meshes = urdf.findall("link/visual/geometry/mesh")

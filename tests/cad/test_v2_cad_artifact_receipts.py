@@ -6,8 +6,8 @@ import pytest
 
 pytest.importorskip('build123d')
 
-from duck_v2.cad_src.artifacts import artifact_inventory, verify_artifacts
-from duck_v2.cad_src.provenance import source_receipt
+from cad.artifacts import artifact_inventory, verify_artifacts
+from cad.provenance import source_receipt
 
 
 @pytest.mark.parametrize('declared_ready', [False, True])

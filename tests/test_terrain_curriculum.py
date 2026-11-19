@@ -40,7 +40,7 @@ def test_stage_dataclass_fields():
 
 def test_stage0_submerges_stairs_below_floor():
     """Verify that in Stage 0, top surfaces of all stairs are strictly at or below floor level (z <= 0)."""
-    model = mujoco.MjModel.from_xml_path("duck_v2/cyberduck_v2.xml")
+    model = mujoco.MjModel.from_xml_path("robot/cyberduck_v2.xml")
     apply_stage(model, stage=0)
 
     for s_name in STAIR_GEOMS:
@@ -54,7 +54,7 @@ def test_stage0_submerges_stairs_below_floor():
 
 def test_apply_stage_scales_slalom_pillars():
     """Verify that apply_stage correctly scales slalom pillar XY positions across curriculum stages."""
-    model = mujoco.MjModel.from_xml_path("duck_v2/cyberduck_v2.xml")
+    model = mujoco.MjModel.from_xml_path("robot/cyberduck_v2.xml")
     gid_l1_left = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "pillar_l1_left")
     gid_l2_center = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "pillar_l2_center")
     assert gid_l1_left != -1
@@ -85,7 +85,7 @@ def test_apply_stage_scales_slalom_pillars():
 
 def test_apply_stage_stair_heights():
     """Verify that apply_stage sets correct step elevation heights across stages."""
-    model = mujoco.MjModel.from_xml_path("duck_v2/cyberduck_v2.xml")
+    model = mujoco.MjModel.from_xml_path("robot/cyberduck_v2.xml")
 
     def get_top_z(name: str) -> float:
         gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
@@ -116,7 +116,7 @@ def test_apply_stage_stair_heights():
 
 def test_stage1_slalom_submerges_stairs():
     """Verify that Stage 1 submerges stairs below floor (top_z <= 0.0) while keeping pillars active at 1.35x."""
-    model = mujoco.MjModel.from_xml_path("duck_v2/cyberduck_v2.xml")
+    model = mujoco.MjModel.from_xml_path("robot/cyberduck_v2.xml")
     apply_stage(model, stage=1)
     for s_name in STAIR_GEOMS:
         gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, s_name)
@@ -130,7 +130,7 @@ def test_stage1_slalom_submerges_stairs():
 
 def test_apply_stage_idempotent():
     """Verify that calling apply_stage repeatedly does not multiply positions cumulatively."""
-    model = mujoco.MjModel.from_xml_path("duck_v2/cyberduck_v2.xml")
+    model = mujoco.MjModel.from_xml_path("robot/cyberduck_v2.xml")
     gid_pillar = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "pillar_l1_left")
     gid_stair = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "stair_step_1")
 

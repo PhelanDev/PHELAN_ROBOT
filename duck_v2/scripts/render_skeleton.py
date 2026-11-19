@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 
 def render_skeleton_views():
-    v2_dir = Path(__file__).resolve().parent.parent
+    v2_dir = Path(__file__).resolve().parents[2] / "robot"
     cad_dir = v2_dir / "cad"
     media_dir = v2_dir / "media"
     media_dir.mkdir(parents=True, exist_ok=True)

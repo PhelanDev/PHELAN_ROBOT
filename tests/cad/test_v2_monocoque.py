@@ -8,10 +8,10 @@ import pytest
 pytest.importorskip('build123d')
 from build123d import Vector
 
-from duck_v2.cad_src.assembly import build_assembly
-from duck_v2.cad_src.catalogue import printable_parts
-from duck_v2.cad_src.monocoque import chest_loft_shell
-from duck_v2.cad_src.params import VARIANTS
+from cad.assembly import build_assembly
+from cad.catalogue import printable_parts
+from cad.monocoque import chest_loft_shell
+from cad.params import VARIANTS
 
 
 def test_chest_front_profile_covers_integrated_shoulder_mounts():
@@ -53,7 +53,7 @@ def test_catalogue_exports_only_used_parts_and_no_more_than_28_stls():
 
 def test_assembly_hero_render_excludes_hardware_only_views_keep_it():
     from types import SimpleNamespace
-    from duck_v2.cad_src.render_drafts import _cutaway, _exterior
+    from cad.render_drafts import _cutaway, _exterior
 
     shell = SimpleNamespace(category='printed', name='trunk_front')
     chassis = SimpleNamespace(category='printed', name='hip_clevis_L')

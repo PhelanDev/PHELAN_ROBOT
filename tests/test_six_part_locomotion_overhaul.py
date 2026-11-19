@@ -28,7 +28,7 @@ from training.env_config import (
     MicroDuck8DoFConfig,
 )
 from training.run_parallel_sim import ParallelSimRunner
-from duck_v2.robot_spec import MODEL_PATH, NUM_OBSERVATIONS
+from robot.robot_spec import MODEL_PATH, NUM_OBSERVATIONS
 from training.terrain_curriculum import next_stage, next_stair_stage
 from scripts.interactive_viewer import (
     _setup_viewer_scene,

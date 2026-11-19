@@ -27,7 +27,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from training.env_config import MicroDuck8DoFConfig, _DEFAULT_CFG
 from training.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
-from duck_v2.robot_spec import MODEL_PATH, MODEL_NAME, CHECKPOINT_PREFIX
+from robot.robot_spec import MODEL_PATH, MODEL_NAME, CHECKPOINT_PREFIX
 from training.terrain_curriculum import (
     STAGES,
     STAIR_STAGES,

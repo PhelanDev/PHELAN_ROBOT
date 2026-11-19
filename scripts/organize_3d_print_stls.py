@@ -5,8 +5,8 @@ import zipfile
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_DIR = REPO_ROOT / "duck_v2/meshes"
-TARGET_DIR = REPO_ROOT / "duck_v2/cad"
+SOURCE_DIR = REPO_ROOT / "robot/meshes"
+TARGET_DIR = REPO_ROOT / "robot/cad"
 
 
 def organize() -> None:

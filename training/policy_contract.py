@@ -2,7 +2,7 @@
 import math
 from pathlib import Path
 
-from duck_v2.robot_spec import CHECKPOINT_PREFIX, MODEL_NAME
+from robot.robot_spec import CHECKPOINT_PREFIX, MODEL_NAME
 
 
 RUNTIME_TARGETS = ("rpi5", "pizero2w", "esp32", "v2")

@@ -5,7 +5,7 @@ import pytest
 pytest.importorskip('build123d')
 
 from build123d import Box, Pos
-from duck_v2.cad_src.dfam import sample_wall_thickness
+from cad.dfam import sample_wall_thickness
 
 
 @pytest.mark.parametrize('wall', [1.2, 2.2, 3.0])

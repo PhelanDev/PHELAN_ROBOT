@@ -6,7 +6,7 @@ from torch.distributions import Normal
 _ROOT = str(Path(__file__).resolve().parent.parent)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
-from duck_v2.robot_spec import CHECKPOINT_PREFIX, MODEL_NAME, MODEL_PATH
+from robot.robot_spec import CHECKPOINT_PREFIX, MODEL_NAME, MODEL_PATH
 from training.policy_contract import observation_schema
 from training.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
 

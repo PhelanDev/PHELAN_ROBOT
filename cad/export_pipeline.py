@@ -135,7 +135,7 @@ def export_drafts(output, variants=VARIANTS):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--draft', action='store_true', help='Export explicitly unapproved review assets')
-    parser.add_argument('--output', type=Path, default=Path('duck_v2/cad/draft'))
+    parser.add_argument('--output', type=Path, default=Path('artifacts/cad/draft'))
     args = parser.parse_args()
     if not args.draft:
         parser.error('Manufacturing release is blocked until assembly, sweep and DfAM checks pass; use --draft for review')

@@ -7,7 +7,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from duck_v2.robot_spec import JOINT_ORDER, MODEL_NAME, MODEL_PATH, TOTAL_MASS_KG
+from robot.robot_spec import JOINT_ORDER, MODEL_NAME, MODEL_PATH, TOTAL_MASS_KG
 from scripts.evaluate_models_sim import load_actor
 from scripts.interactive_viewer import load_viewer_policy, policy_step, resolve_viewer_model_path
 from scripts.pretrain_bc import collect_teacher_demonstrations, save_bc_checkpoint
@@ -72,7 +72,7 @@ def test_viewer_and_evaluator_require_declared_v2_checkpoint_identity(tmp_path, 
 
 def test_viewer_accepts_relocated_v2_identity_and_rejects_observation_adaptation(tmp_path):
     checkpoint = tmp_path / "weights.pt"
-    torch.save({"model_path": r"Z:\former-machine\duck_v2\cyberduck_v2.xml", "model_name": MODEL_NAME}, checkpoint)
+    torch.save({"model_path": r"Z:\former-machine\robot\cyberduck_v2.xml", "model_name": MODEL_NAME}, checkpoint)
     assert Path(resolve_viewer_model_path(policy_path=checkpoint)) == MODEL_PATH.resolve()
     with pytest.raises(ValueError, match="42"):
         policy_step(nn.Linear(42, 8), np.zeros(37, dtype=np.float32))

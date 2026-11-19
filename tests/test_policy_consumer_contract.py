@@ -20,7 +20,7 @@ def test_audit_schema_roundtrip_and_rpi_clock_parity(tmp_path, moving):
     model.observation_schema = observation_schema(42, True, 0.006)
     output = export_onnx(model, tmp_path / "clock.onnx")
     engine = BaseRPiInferenceEngine(str(output), mock=True, freq=1 / 0.006)
-    runner = ParallelSimRunner(model_path="duck_v2/cyberduck_v2.xml",
+    runner = ParallelSimRunner(model_path="robot/cyberduck_v2.xml",
         num_envs=1, decimation=3, terrain_mode="flat")
     try:
         runner.reset()
@@ -156,7 +156,7 @@ def test_direct_module_export_carries_advertised_rms_and_model_metadata(tmp_path
 
     model, rms = make_policy()
     model.obs_rms = rms
-    model.model_path = "duck_v2/cyberduck_v2.xml"
+    model.model_path = "robot/cyberduck_v2.xml"
     model.model_name = "cyberduck_v2.xml"
     output = export_onnx(model, tmp_path / "unrelated.onnx")
     raw = np.full((1, 42), 20.0, dtype=np.float32)
@@ -199,7 +199,7 @@ def test_viewer_rejects_conflicting_checkpoint_model_identity(tmp_path):
     from scripts.interactive_viewer import resolve_viewer_model_path
 
     checkpoint = tmp_path / "policy.pt"
-    torch.save(dict(model_path="duck_v2/cyberduck_v2.xml", model_name="microduck_8dof.xml"), checkpoint)
+    torch.save(dict(model_path="robot/cyberduck_v2.xml", model_name="microduck_8dof.xml"), checkpoint)
     with pytest.raises(ValueError, match="model"):
         resolve_viewer_model_path(None, checkpoint)
 
@@ -233,7 +233,7 @@ def test_viewer_schema_clock_and_layout_parity_with_runner(tmp_path, embed_clock
     model.observation_schema = schema
 
     pt_path = tmp_path / f"policy_{obs_dim}_{embed_clock}.pt"
-    model_rel = "duck_v2/cyberduck_v2.xml"
+    model_rel = "robot/cyberduck_v2.xml"
     torch.save({
         "model_state_dict": model.state_dict(),
         "obs_dim": obs_dim,
@@ -304,7 +304,7 @@ def test_viewer_rejects_retired_37_observation_layout(tmp_path):
         with pytest.raises(ValueError, match="dimensions|42 observations"):
             load_viewer_policy(policy_path)
 
-    runner = ParallelSimRunner(model_path="duck_v2/cyberduck_v2.xml", num_envs=1)
+    runner = ParallelSimRunner(model_path="robot/cyberduck_v2.xml", num_envs=1)
     try:
         with pytest.raises(ValueError, match="42 observations, got 37"):
             extract_viewer_observation(runner.model, runner.datas[0], obs_dim=37,
@@ -328,7 +328,7 @@ def test_viewer_rejects_legacy_policy_without_explicit_schema(tmp_path):
     for legacy_file in (legacy_pt, legacy_onnx):
         with pytest.raises(ValueError, match="schema|legacy"):
             run_simulation_headless(
-                model_path="duck_v2/cyberduck_v2.xml",
+                model_path="robot/cyberduck_v2.xml",
                 policy_path=legacy_file,
                 duration=0.02,
                 dt=0.002,
@@ -336,7 +336,7 @@ def test_viewer_rejects_legacy_policy_without_explicit_schema(tmp_path):
 
     # Explicit legacy_observation_schema succeeds
     metrics = run_simulation_headless(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         policy_path=legacy_onnx,
         duration=0.04,
         dt=0.002,

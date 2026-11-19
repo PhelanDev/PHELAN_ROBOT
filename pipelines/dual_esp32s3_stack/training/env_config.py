@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
-from duck_v2.robot_spec import TOTAL_MASS_KG
+from robot.robot_spec import TOTAL_MASS_KG
 
 from training.env_config import (
     MicroDuck8DoFConfig as BaseConfig,

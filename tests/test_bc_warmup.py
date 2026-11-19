@@ -99,7 +99,7 @@ def test_bc_pretrain_decreases_loss_and_loads_into_ppo(tmp_path: Path):
     from scripts.pretrain_bc import collect_gait_demonstrations, train_behavior_cloning, save_bc_checkpoint
     from scripts.train_ppo import train_ppo
 
-    runner = ParallelSimRunner(model_path="duck_v2/cyberduck_v2.xml", num_envs=2, num_threads=1, stage=0)
+    runner = ParallelSimRunner(model_path="robot/cyberduck_v2.xml", num_envs=2, num_threads=1, stage=0)
     try:
         obs_arr, act_arr, ret_arr = collect_gait_demonstrations(runner, num_steps=30)
     finally:
@@ -116,7 +116,7 @@ def test_bc_pretrain_decreases_loss_and_loads_into_ppo(tmp_path: Path):
     ppo_ckpt = tmp_path / "ppo_after_bc.pt"
 
     result = train_ppo(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=2,
         rollout_steps=8,
         max_iterations=1,
@@ -135,7 +135,7 @@ def test_collect_teacher_demonstrations_rejects_retired_v1_dim_slicing():
     from training.run_parallel_sim import ParallelSimRunner
     from scripts.pretrain_bc import collect_teacher_demonstrations
 
-    runner = ParallelSimRunner(model_path="duck_v2/cyberduck_v2.xml", num_envs=2, num_threads=1, stage=0)
+    runner = ParallelSimRunner(model_path="robot/cyberduck_v2.xml", num_envs=2, num_threads=1, stage=0)
     try:
         teacher = nn.Linear(37, 8)
         with pytest.raises(ValueError, match="42-observation"):
@@ -195,7 +195,7 @@ def test_save_bc_checkpoint_includes_obs_rms(tmp_path: Path):
     # Verify train_ppo loads checkpoint with obs_rms cleanly
     ppo_save = tmp_path / "ppo_out.pt"
     res = train_ppo(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=1,
         rollout_steps=8,
         max_iterations=1,

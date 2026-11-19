@@ -21,7 +21,7 @@ from pipelines.rpi_infer_core import (
     run_rpi_cli,
 )
 
-from duck_v2.robot_spec import DEFAULT_ONNX_PATH as DEFAULT_MODEL_PATH
+from robot.robot_spec import DEFAULT_ONNX_PATH as DEFAULT_MODEL_PATH
 
 
 class RPi5InferenceEngine(BaseRPiInferenceEngine):

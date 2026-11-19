@@ -39,7 +39,7 @@ import numpy as np
 # Ensure repository root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from duck_v2.robot_spec import MODEL_NAME, MODEL_PATH, NUM_ACTIONS, NUM_OBSERVATIONS
+from robot.robot_spec import MODEL_NAME, MODEL_PATH, NUM_ACTIONS, NUM_OBSERVATIONS
 from training.policy_contract import validate_model_identity
 from training.run_parallel_sim import resolve_v2_model_path
 

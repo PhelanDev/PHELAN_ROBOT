@@ -6,6 +6,10 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+TESTS_ROOT = Path(__file__).resolve().parent
+for _p in (str(REPO_ROOT), str(TESTS_ROOT)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 
 def make_isolated_env(tmp_path: Path, base_env: dict = None) -> dict:

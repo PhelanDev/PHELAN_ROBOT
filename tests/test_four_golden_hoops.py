@@ -16,7 +16,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from training.env_config import compute_rewards, LocomotionMode, _DEFAULT_CFG
-from duck_v2.robot_spec import MODEL_PATH
+from robot.robot_spec import MODEL_PATH
 
 
 def test_hoop1_single_support_and_double_support_dwell():

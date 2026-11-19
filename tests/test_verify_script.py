@@ -5,7 +5,7 @@ import subprocess
 import sys
 import pytest
 
-from duck_v2.robot_spec import MODEL_PATH, TOTAL_MASS_KG, URDF_PATH
+from robot.robot_spec import MODEL_PATH, TOTAL_MASS_KG, URDF_PATH
 
 
 def test_verify_script_execution():

@@ -9,7 +9,7 @@ import mujoco
 import numpy as np
 
 def export_v2_cad():
-    v2_dir = Path(__file__).resolve().parents[1]
+    v2_dir = Path(__file__).resolve().parents[2] / "robot"
     cad_dir = str(v2_dir / "cad")
     os.makedirs(cad_dir, exist_ok=True)
     brain_dir = os.environ.get("BRAIN_DIR", os.environ.get("GEMINI_BRAIN_DIR", ""))

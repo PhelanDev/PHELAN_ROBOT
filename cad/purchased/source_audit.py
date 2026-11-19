@@ -43,7 +43,7 @@ def audit_sources(root=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', type=Path, default=Path('duck_v2/cad/source_reference_review.json'))
+    parser.add_argument('--output', type=Path, default=Path('artifacts/cad/source_reference_review.json'))
     args = parser.parse_args()
     report = audit_sources()
     args.output.parent.mkdir(parents=True, exist_ok=True)

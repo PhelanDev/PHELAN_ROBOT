@@ -51,7 +51,7 @@ def verify_artifacts(manifest_path):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('manifest', type=Path, nargs='?', default=Path('duck_v2/cad/draft/manifest.json'))
+    parser.add_argument('manifest', type=Path, nargs='?', default=Path('artifacts/cad/draft/manifest.json'))
     args = parser.parse_args()
     report = verify_artifacts(args.manifest)
     print(json.dumps(report))

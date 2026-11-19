@@ -17,7 +17,7 @@ import webbrowser
 from pathlib import Path
 from typing import Optional
 
-from duck_v2.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME, MODEL_PATH, REPO_ROOT
+from robot.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME, MODEL_PATH, REPO_ROOT
 
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -116,8 +116,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(f"  • ESP32-S3 INT8 C-Header: {esp32_status} ({esp32_h.name} + {esp32_config.name})")
 
     # 5. Canonical V2 asset and status
-    v2_cad = REPO_ROOT / "duck_v2" / "cad" / "cyberduck_v2_assembly.obj"
-    v2_zip = REPO_ROOT / "duck_v2" / "cad" / "cyberduck_v2_stl_parts.zip"
+    v2_cad = REPO_ROOT / "robot" / "cad" / "cyberduck_v2_assembly.obj"
+    v2_zip = REPO_ROOT / "robot" / "cad" / "cyberduck_v2_stl_parts.zip"
     print("\n[5] ROBOT CANONICAL CYBERDUCK V2 PRO")
     print(f"  • Mô hình vật lý MuJoCo : {'[SẴN SÀNG]' if MODEL_PATH.exists() else '[CHƯA TẠO]'} ({MODEL_NAME})")
     print(f"  • Checkpoint tốt nhất   : {checkpoint_status} ({best_ckpt.name})")

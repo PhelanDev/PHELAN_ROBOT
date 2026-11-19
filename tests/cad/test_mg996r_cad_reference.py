@@ -6,8 +6,8 @@ pytest.importorskip('build123d')
 
 from build123d import Vector
 
-from duck_v2.cad_src.geometry import cylinder
-from duck_v2.cad_src.purchased.servo import horn_25t, mg996r, wire_clearance
+from cad.geometry import cylinder
+from cad.purchased.servo import horn_25t, mg996r, wire_clearance
 
 
 def test_mg996r_casing_ears_and_shaft_datum():

@@ -325,7 +325,7 @@ def test_mjcf_forward_axis_and_hip_pitch_kinematics():
     causes backward stepping."""
     import mujoco
 
-    xml_path = Path(__file__).resolve().parent.parent / "duck_v2" / "cyberduck_v2.xml"
+    xml_path = Path(__file__).resolve().parent.parent / "robot" / "cyberduck_v2.xml"
     assert xml_path.exists(), f"MJCF model missing at {xml_path}"
 
     model = mujoco.MjModel.from_xml_path(str(xml_path))
@@ -388,7 +388,7 @@ def test_standing_dwell_under_walk_command_yields_negative_reward():
     from training.env_config import compute_rewards, LocomotionMode
 
     # 1. 100 steps with actions = 0 and walk command [0.22, 0.0, 0.0]
-    runner = ParallelSimRunner("duck_v2/cyberduck_v2.xml", num_envs=1, stage=0)
+    runner = ParallelSimRunner("robot/cyberduck_v2.xml", num_envs=1, stage=0)
     try:
         runner.reset()
         runner.commands[0] = np.array([0.22, 0.0, 0.0], dtype=np.float32)
@@ -416,7 +416,7 @@ def test_standing_dwell_under_walk_command_yields_negative_reward():
         runner.close()
 
     # 2. 50 steps of actions = 0 with commands[0] = [0.0, 0.0, 0.0] (stand_still)
-    runner_stand = ParallelSimRunner("duck_v2/cyberduck_v2.xml", num_envs=1, stage=0)
+    runner_stand = ParallelSimRunner("robot/cyberduck_v2.xml", num_envs=1, stage=0)
     try:
         runner_stand.reset()
         runner_stand.commands[0] = np.array([0.0, 0.0, 0.0], dtype=np.float32)

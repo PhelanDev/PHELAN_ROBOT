@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
-from duck_v2.robot_spec import JOINT_ORDER, NUM_ACTIONS, NUM_OBSERVATIONS, TOTAL_MASS_KG
+from robot.robot_spec import JOINT_ORDER, NUM_ACTIONS, NUM_OBSERVATIONS, TOTAL_MASS_KG
 
 
 class EmotionState(IntEnum):

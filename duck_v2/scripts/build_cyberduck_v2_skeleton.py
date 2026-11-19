@@ -15,9 +15,9 @@ Generates a conceptual internal frame for visualization:
 6. Left & Right Shin Load Struts (High-rigidity bipedal shin column)
 7. Left & Right Foot Chassis Plates (Reinforced ground contact baseplate with M2 bolt patterns)
 Exports:
-- duck_v2/cad/cyberduck_v2_skeleton.obj (+ .mtl)
-- duck_v2/cad/cyberduck_v2_skeleton_parts.zip (printable STL parts)
-- duck_v2/media/cyberduck_v2_skeleton_*.png
+- robot/cad/cyberduck_v2_skeleton.obj (+ .mtl)
+- robot/cad/cyberduck_v2_skeleton_parts.zip (printable STL parts)
+- robot/media/cyberduck_v2_skeleton_*.png
 """
 import os
 import struct
@@ -290,7 +290,7 @@ def make_foot_chassis(side=+1):
 # 7. Master Assembly & Export Pipeline
 # =========================================================================
 def build_and_export_skeleton():
-    v2_dir = Path(__file__).resolve().parent.parent
+    v2_dir = Path(__file__).resolve().parents[2] / "robot"
     cad_dir = v2_dir / "cad"
     media_dir = v2_dir / "media"
     stl_dir = cad_dir / "skeleton_stl_parts"

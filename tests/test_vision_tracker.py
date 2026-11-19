@@ -115,8 +115,8 @@ def test_render_head_camera_in_mujoco():
     import mujoco
 
     models = [
-        "duck_v2/cyberduck_v2.xml",
-        "duck_v2/cyberduck_v2.xml",
+        "robot/cyberduck_v2.xml",
+        "robot/cyberduck_v2.xml",
     ]
     for mpath in models:
         model = mujoco.MjModel.from_xml_path(mpath)

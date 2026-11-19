@@ -45,14 +45,14 @@ from training.env_config import (
 from training.terrain_curriculum import apply_stage, apply_stair_stage, STAIR_STAGES, randomize_pillars
 from training.self_righting import FallClassifier, SelfRightingController
 from training.nav_planner import LidarWaypointPlanner, NavPlannerConfig
-from duck_v2.robot_spec import MODEL_PATH, MJCF_MODEL_NAME, REPO_ROOT
+from robot.robot_spec import MODEL_PATH, MJCF_MODEL_NAME, REPO_ROOT
 
 
 def resolve_v2_model_path(model_path: Union[str, Path] = MODEL_PATH) -> Path:
     """Resolve a V2 MJCF, rejecting retired robot identities before simulation."""
     path = Path(str(model_path).replace("\\", "/")).expanduser()
     if path.name.startswith("microduck"):
-        raise ValueError("Retired V1 model is unsupported; use duck_v2/cyberduck_v2.xml")
+        raise ValueError("Retired V1 model is unsupported; use robot/cyberduck_v2.xml")
     if not path.is_absolute():
         path = path if path.is_file() else REPO_ROOT / path
     path = path.resolve()

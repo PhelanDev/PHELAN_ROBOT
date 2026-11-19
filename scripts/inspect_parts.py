@@ -3,7 +3,7 @@ import mujoco
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-xml_path = str(REPO_ROOT / 'duck_v2' / 'cyberduck_v2.xml')
+xml_path = str(REPO_ROOT / 'robot' / 'cyberduck_v2.xml')
 model = mujoco.MjModel.from_xml_path(xml_path)
 data = mujoco.MjData(model)
 mujoco.mj_forward(model, data)

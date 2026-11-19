@@ -9,11 +9,11 @@ import pytest
 pytest.importorskip('build123d')
 
 from build123d import import_step
-from duck_v2.cad_src.purchased.fetch_sources import COMMIT, MODELS
-from duck_v2.cad_src.purchased.source_audit import audit_sources
+from cad.purchased.fetch_sources import COMMIT, MODELS
+from cad.purchased.source_audit import audit_sources
 
 
-SOURCES = Path(__file__).resolve().parents[1] / 'duck_v2/cad_src/purchased/sources'
+SOURCES = Path(__file__).resolve().parents[2] / 'cad/purchased/sources'
 
 
 @pytest.mark.parametrize('name', MODELS)

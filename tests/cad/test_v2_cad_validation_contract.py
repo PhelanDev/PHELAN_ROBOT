@@ -9,11 +9,11 @@ pytest.importorskip('build123d')
 trimesh = pytest.importorskip('trimesh')
 
 from build123d import Box, Pos
-from duck_v2.cad_src.collision import interference
-from duck_v2.cad_src.geometry import Component
-from duck_v2.cad_src.kinematics import frame_transforms
-from duck_v2.cad_src.mass_properties import mass_properties
-from duck_v2.cad_src.print_plates import pack_plates
+from cad.collision import interference
+from cad.geometry import Component
+from cad.kinematics import frame_transforms
+from cad.mass_properties import mass_properties
+from cad.print_plates import pack_plates
 
 
 @pytest.mark.parametrize('tolerance', [-1, np.nan, np.inf, -np.inf])
@@ -69,7 +69,7 @@ def test_duplicate_instance_names_do_not_silently_replace_3mf_geometry(tmp_path)
 
 
 def test_release_requires_dfam_and_complete_hardware_even_if_nominal_and_samples_pass():
-    from duck_v2.cad_src.release import assess_release
+    from cad.release import assess_release
     clean_pose = {'pose': 'straight', 'geometry': {'passed': True, 'complete': True},
                   'wires': [{'passed': True}], 'mass': {'within_plan_budget': True}}
     assemblies = [{'variant': v, 'sweep_requested': True, 'sweep_completed': True,
@@ -81,16 +81,16 @@ def test_release_requires_dfam_and_complete_hardware_even_if_nominal_and_samples
 
 
 def test_source_receipt_changes_with_inputs_but_ignores_generated_outputs(tmp_path):
-    from duck_v2.cad_src.provenance import source_receipt
-    source = tmp_path / 'duck_v2/cad_src'
+    from cad.provenance import source_receipt
+    source = tmp_path / 'cad'
     source.mkdir(parents=True)
     (source / 'params.py').write_text('length = 68\n', encoding='utf-8')
     before = source_receipt(tmp_path)
     assert before == source_receipt(tmp_path)
     (source / '__pycache__').mkdir()
     (source / '__pycache__/params.pyc').write_bytes(b'compiled')
-    generated = tmp_path / 'duck_v2/cad'
-    generated.mkdir()
+    generated = tmp_path / 'artifacts/cad'
+    generated.mkdir(parents=True)
     (generated / 'verification.json').write_text('{}', encoding='utf-8')
     assert before == source_receipt(tmp_path)
     (source / 'params.py').write_text('length = 70\n', encoding='utf-8')

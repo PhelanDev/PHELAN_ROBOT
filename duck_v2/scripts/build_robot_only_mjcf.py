@@ -8,7 +8,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from duck_v2.robot_spec import MODEL_PATH, MJCF_MODEL_NAME, ROBOT_ONLY_MJCF_PATH
+from robot.robot_spec import MODEL_PATH, MJCF_MODEL_NAME, ROBOT_ONLY_MJCF_PATH
 
 
 WORLD_OBJECTS = {

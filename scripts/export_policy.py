@@ -28,7 +28,7 @@ from pipelines.dual_esp32s3_stack.training.env_config import (
     generate_esp32_quant_header,
 )
 from scripts.train_ppo import ActorCritic
-from duck_v2.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME
+from robot.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME
 
 DEFAULT_CHECKPOINT_PATH = REPO_ROOT / "models" / "checkpoints" / f"{CHECKPOINT_PREFIX}_ppo.pt"
 DEFAULT_PIZERO2W_ONNX_PATH = DEFAULT_ONNX_PATH

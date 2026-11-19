@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import torch.nn as nn
 import xml.etree.ElementTree as ET
-from duck_v2.robot_spec import MODEL_PATH
+from robot.robot_spec import MODEL_PATH
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -74,7 +74,7 @@ def test_has_obstacle_contact_detects_collision_and_ignores_non_obstacles():
 
     # Test pre-reset infos preservation on termination step in ParallelSimRunner
     runner = ParallelSimRunner(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=2,
         num_threads=1,
         max_episode_steps=5,
@@ -123,7 +123,7 @@ def test_has_obstacle_contact_detects_collision_and_ignores_non_obstacles():
 def test_run_benchmark_scenario_returns_obstacle_metrics(tmp_path):
     # 1. CyberDuck V2 Stage 1
     runner_v2 = ParallelSimRunner(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=2,
         num_threads=1,
         max_episode_steps=10,
@@ -193,7 +193,7 @@ def test_run_benchmark_scenario_returns_obstacle_metrics(tmp_path):
 
 def test_run_benchmark_scenario_with_nav_planner():
     runner = ParallelSimRunner(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=2,
         num_threads=1,
         max_episode_steps=10,
@@ -223,7 +223,7 @@ def test_run_benchmark_scenario_with_nav_planner():
 
 def test_run_benchmark_scenario_restores_runner_state_and_syncs_cmd():
     runner = ParallelSimRunner(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=2,
         num_threads=1,
         max_episode_steps=10,

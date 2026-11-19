@@ -16,7 +16,7 @@ from training.env_config import compute_rewards, LocomotionMode, MicroDuck8DoFCo
 def test_lidar_d_min_dot_ignores_miss_acquisition_and_bounds_closing_speed():
     """Verify d_min_dot filters ray transitions (reset, miss-acquisition, hit-to-miss) and bounds speed to [-1, 1]."""
     sim = ParallelSimRunner(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         num_envs=1,
         stage=1,
         terrain_mode="hurdles",
@@ -73,7 +73,7 @@ def test_hurdles_wz_lim_scales_by_curriculum_stage():
     }
     for stage, expected_lim in expected_wz_lims.items():
         sim = ParallelSimRunner(
-            model_path="duck_v2/cyberduck_v2.xml",
+            model_path="robot/cyberduck_v2.xml",
             num_envs=256,
             stage=stage,
             terrain_mode="hurdles",

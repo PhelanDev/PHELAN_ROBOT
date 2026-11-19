@@ -1912,7 +1912,7 @@ def test_esp32_schema_clock_parity_and_rejection(tmp_path, embed_clock, moving):
     # 2. Export valid schema and verify C++ MCU2 assembly matches ParallelSimRunner across reset & steps
     cfg = MicroDuck8DoFConfig()
     runner = ParallelSimRunner(
-        model_path="duck_v2/cyberduck_v2.xml",
+        model_path="robot/cyberduck_v2.xml",
         cfg=cfg,
         num_envs=1,
         decimation=10,

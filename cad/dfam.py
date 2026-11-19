@@ -85,7 +85,7 @@ def inspect_printable_walls(max_samples=WALL_SAMPLE_BUDGET):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--max-samples', type=int, default=WALL_SAMPLE_BUDGET)
-    parser.add_argument('--output', type=Path, default=Path('duck_v2/cad/wall_thickness_sampled.json'))
+    parser.add_argument('--output', type=Path, default=Path('artifacts/cad/wall_thickness_sampled.json'))
     args = parser.parse_args()
     report = inspect_printable_walls(args.max_samples)
     args.output.parent.mkdir(parents=True, exist_ok=True)

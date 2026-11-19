@@ -7,13 +7,13 @@ pytest.importorskip('build123d')
 import numpy as np
 from build123d import Axis, Plane, Pos
 
-from duck_v2.cad_src.assembly import build_assembly
-from duck_v2.cad_src.catalogue import printable_parts
-from duck_v2.cad_src.collision import interference
-from duck_v2.cad_src.geometry import Component
-from duck_v2.cad_src.params import MG996R, VARIANTS, VARIANT_SUFFIX
-from duck_v2.cad_src.purchased.hardware import flanged_bearing
-from duck_v2.cad_src.skeleton.interfaces import clevis
+from cad.assembly import build_assembly
+from cad.catalogue import printable_parts
+from cad.collision import interference
+from cad.geometry import Component
+from cad.params import MG996R, VARIANTS, VARIANT_SUFFIX
+from cad.purchased.hardware import flanged_bearing
+from cad.skeleton.interfaces import clevis
 
 
 @pytest.mark.parametrize('stem', ['thigh', 'shin', 'foot'])
@@ -38,7 +38,7 @@ def test_nominal_assembled_legs_have_symmetric_bounding_boxes(stem):
 @pytest.mark.parametrize('double', [False, True])
 def test_bearings_fit_clevis_including_both_outer_flanges(double):
     # All dimensions are in the common horn-face frame; no adjacent-link exemption.
-    from duck_v2.cad_src.skeleton.interfaces import bearing_locations
+    from cad.skeleton.interfaces import bearing_locations
     parts = [Component('clevis', 'moving', clevis(double), 'PETG')]
     for i, location in enumerate(bearing_locations(double)):
         parts.append(Component(f'bearing_{i}', 'moving', location * flanged_bearing(), 'STEEL'))
@@ -49,8 +49,8 @@ def test_bearings_fit_clevis_including_both_outer_flanges(double):
 @pytest.mark.parametrize('double', [False, True])
 @pytest.mark.parametrize('angle', [-90, -50, -30, 0, 30, 45, 50, 85, 90])
 def test_clevis_coupon_bridge_clears_interface_envelopes(double, angle):
-    from duck_v2.cad_src.purchased.servo import mg996r
-    from duck_v2.cad_src.skeleton.interfaces import idler_cap, servo_mount
+    from cad.purchased.servo import mg996r
+    from cad.skeleton.interfaces import idler_cap, servo_mount
     base = Pos(0, 0, -MG996R.horn_face)
     parts = [Component('clevis', 'moving', clevis(double).rotate(Axis.Z, angle), 'PETG'),
              Component('servo', 'fixed', base * mg996r(), 'SERVO'),
@@ -62,7 +62,7 @@ def test_clevis_coupon_bridge_clears_interface_envelopes(double, angle):
 
 @pytest.mark.parametrize('variant', VARIANTS)
 def test_electronics_tray_boards_clamps_screws_and_cooler_fit_as_a_module(variant):
-    from duck_v2.cad_src.skeleton.electronics import TRAY_LAYOUTS
+    from cad.skeleton.electronics import TRAY_LAYOUTS
     wanted = {f'trunk_back_sled_{VARIANT_SUFFIX[variant]}', 'active_cooler'}
     wanted.update(key for key, _ in TRAY_LAYOUTS[variant])
     parts = [p for p in build_assembly(variant, wiring=False)
@@ -77,7 +77,7 @@ def test_electronics_tray_boards_clamps_screws_and_cooler_fit_as_a_module(varian
 
 @pytest.mark.parametrize('variant', VARIANTS)
 def test_backpack_housing_lid_and_tray_are_geometrically_compatible(variant):
-    from duck_v2.cad_src.skeleton.electronics import TRAY_LAYOUTS
+    from cad.skeleton.electronics import TRAY_LAYOUTS
     suffix = VARIANT_SUFFIX[variant]
     wanted = {f'trunk_back_sled_{suffix}', f'trunk_back_cover_{suffix}', 'active_cooler'}
     wanted.update(key for key, _ in TRAY_LAYOUTS[variant])

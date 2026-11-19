@@ -12,7 +12,7 @@ Implements:
 from enum import Enum, IntEnum
 from typing import Optional, Tuple, Union
 import numpy as np
-from duck_v2.robot_spec import BASE_HEIGHT_M
+from robot.robot_spec import BASE_HEIGHT_M
 
 from training.env_config import (
     LocomotionMode,
