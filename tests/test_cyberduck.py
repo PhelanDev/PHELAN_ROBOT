@@ -362,7 +362,7 @@ def test_cyberduck_v2_joint_frictionloss_damping_and_sole_calibration():
 
 
 def test_v2_robot_only_mjcf_is_derived_and_has_no_scene_geometry():
-    from duck_v2.scripts.build_robot_only_mjcf import build_robot_only_mjcf
+    from tools.robot.build_robot_only_mjcf import build_robot_only_mjcf
     from robot.robot_spec import ROBOT_ONLY_MJCF_PATH
 
     output = build_robot_only_mjcf()
@@ -382,7 +382,7 @@ def test_v2_robot_only_mjcf_is_derived_and_has_no_scene_geometry():
 
 def test_v2_urdf_is_derived_from_canonical_mjcf_and_has_same_mass():
     from robot.robot_spec import URDF_PATH
-    from duck_v2.scripts.export_v2_urdf import export_v2_urdf
+    from tools.robot.export_v2_urdf import export_v2_urdf
     import xml.etree.ElementTree as ET
 
     urdf_path = export_v2_urdf()

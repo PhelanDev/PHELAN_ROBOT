@@ -7,13 +7,13 @@ import numpy as np
 import pytest
 import torch
 
-from scripts.train_ppo import ActorCritic, RunningMeanStd
+from tools.train.train_ppo import ActorCritic, RunningMeanStd
 
 
 @pytest.mark.parametrize("moving", [False, True])
 def test_audit_schema_roundtrip_and_rpi_clock_parity(tmp_path, moving):
     from sim.env.policy_contract import observation_schema
-    from scripts.export_policy import export_onnx
+    from tools.robot.export_policy import export_onnx
     from hardware.rpi_infer_core import BaseRPiInferenceEngine, pack_rpi_observation
     from sim.env.run_parallel_sim import ParallelSimRunner
     model, _ = make_policy()
@@ -50,7 +50,7 @@ def test_audit_schema_roundtrip_and_rpi_clock_parity(tmp_path, moving):
 
 
 def test_audit_rpi_legacy_requires_explicit_schema(tmp_path):
-    from scripts.export_policy import export_onnx
+    from tools.robot.export_policy import export_onnx
     from hardware.rpi_infer_core import BaseRPiInferenceEngine
     from sim.env.policy_contract import observation_schema
     model, _ = make_policy()
@@ -66,7 +66,7 @@ def test_audit_rpi_legacy_requires_explicit_schema(tmp_path):
     {"embed_phase_clock": "true"}, {"reset": "stop_when_still"}, {"version": 2}, {"obs_dim": 37}])
 def test_audit_malformed_schema_rejected_before_export(tmp_path, change):
     from sim.env.policy_contract import observation_schema
-    from scripts.export_policy import export_onnx
+    from tools.robot.export_policy import export_onnx
     model, _ = make_policy()
     model.observation_schema = dict(observation_schema(42, True, 0.02), **change)
     with pytest.raises(ValueError, match="schema"):
@@ -75,7 +75,7 @@ def test_audit_malformed_schema_rejected_before_export(tmp_path, change):
 
 
 def test_audit_cli_export_rejects_cross_target_identity(tmp_path):
-    from scripts.export_policy import prepare_target_exports
+    from tools.robot.export_policy import prepare_target_exports
     model, _ = make_policy()
     path = tmp_path / "wrong-target.pt"
     torch.save(dict(model_state_dict=model.state_dict(), model_name="microduck_rpi5_8dof.xml"), path)
@@ -84,7 +84,7 @@ def test_audit_cli_export_rejects_cross_target_identity(tmp_path):
 
 
 def test_audit_both_pi_wrappers_run_metadata_policy(tmp_path):
-    from scripts.export_policy import export_onnx
+    from tools.robot.export_policy import export_onnx
     from sim.env.policy_contract import observation_schema
     from hardware.rpi5.deployment.infer_rpi5 import RPi5InferenceEngine
     from hardware.pizero2w.deployment.infer_pizero2w import PiZero2WInferenceEngine
@@ -123,7 +123,7 @@ def run_generated_policy(tmp_path, weights, config, observation):
 
 
 def test_generated_policy_preserves_clipped_rms_and_actual_hidden_width(tmp_path):
-    from scripts.export_policy import export_esp32_headers
+    from tools.robot.export_policy import export_esp32_headers
     from sim.env.env_config import DEFAULT_OBS_BOUNDS
     from sim.env.policy_contract import observation_schema
 
@@ -151,8 +151,8 @@ def test_generated_policy_preserves_clipped_rms_and_actual_hidden_width(tmp_path
 
 def test_direct_module_export_carries_advertised_rms_and_model_metadata(tmp_path):
     import onnxruntime as ort
-    from scripts.export_policy import export_onnx
-    from scripts.interactive_viewer import resolve_viewer_model_path
+    from tools.robot.export_policy import export_onnx
+    from tools.robot.interactive_viewer import resolve_viewer_model_path
 
     model, rms = make_policy()
     model.obs_rms = rms
@@ -172,7 +172,7 @@ def test_direct_module_export_carries_advertised_rms_and_model_metadata(tmp_path
     {"min_std": "0.1"}, {"clip": True}, {"count": "10"},
 ])
 def test_rms_rejects_non_numeric_or_non_scalar_advertised_fields(change):
-    from scripts.export_policy import apply_obs_norm_to_actor
+    from tools.robot.export_policy import apply_obs_norm_to_actor
 
     model, rms = make_policy()
     values = dict(rms.state_dict(), **change)
@@ -184,7 +184,7 @@ def test_rms_rejects_non_numeric_or_non_scalar_advertised_fields(change):
 
 
 def test_viewer_rejects_nonfinite_checkpoint_weights(tmp_path):
-    from scripts.interactive_viewer import load_viewer_policy
+    from tools.robot.interactive_viewer import load_viewer_policy
 
     model, _ = make_policy()
     with torch.no_grad():
@@ -196,7 +196,7 @@ def test_viewer_rejects_nonfinite_checkpoint_weights(tmp_path):
 
 
 def test_viewer_rejects_conflicting_checkpoint_model_identity(tmp_path):
-    from scripts.interactive_viewer import resolve_viewer_model_path
+    from tools.robot.interactive_viewer import resolve_viewer_model_path
 
     checkpoint = tmp_path / "policy.pt"
     torch.save(dict(model_path="robot/cyberduck_v2.xml", model_name="microduck_8dof.xml"), checkpoint)
@@ -206,7 +206,7 @@ def test_viewer_rejects_conflicting_checkpoint_model_identity(tmp_path):
 
 @pytest.mark.parametrize("scale", [float("nan"), float("inf"), 0, -1])
 def test_esp32_rejects_invalid_quantization_before_writing(tmp_path, scale):
-    from scripts.export_policy import export_esp32_headers
+    from tools.robot.export_policy import export_esp32_headers
 
     model, _ = make_policy()
     with pytest.raises(ValueError, match="scale"):
@@ -223,8 +223,8 @@ def test_viewer_schema_clock_and_layout_parity_with_runner(tmp_path, embed_clock
     """Viewer extraction and headless loops honor the V2 clock schema and control interval."""
     from sim.env.policy_contract import observation_schema
     from sim.env.run_parallel_sim import ParallelSimRunner
-    from scripts.export_policy import export_onnx
-    from scripts.interactive_viewer import extract_viewer_observation, run_simulation_headless
+    from tools.robot.export_policy import export_onnx
+    from tools.robot.interactive_viewer import extract_viewer_observation, run_simulation_headless
 
     obs_dim = 42
     decimation = max(1, int(round(control_dt / 0.002)))
@@ -291,8 +291,8 @@ def test_viewer_schema_clock_and_layout_parity_with_runner(tmp_path, embed_clock
 def test_viewer_rejects_retired_37_observation_layout(tmp_path):
     from sim.env.policy_contract import observation_schema
     from sim.env.run_parallel_sim import ParallelSimRunner
-    from scripts.export_policy import export_onnx
-    from scripts.interactive_viewer import extract_viewer_observation, load_viewer_policy
+    from tools.robot.export_policy import export_onnx
+    from tools.robot.interactive_viewer import extract_viewer_observation, load_viewer_policy
 
     schema = observation_schema(37, True, 0.02)
     model = ActorCritic(obs_dim=37, hidden_dim=16)
@@ -316,8 +316,8 @@ def test_viewer_rejects_retired_37_observation_layout(tmp_path):
 def test_viewer_rejects_legacy_policy_without_explicit_schema(tmp_path):
     """F4: Viewer simulation loops must reject legacy policies lacking observation_schema unless explicit override is given."""
     from sim.env.policy_contract import observation_schema
-    from scripts.export_policy import export_onnx
-    from scripts.interactive_viewer import run_simulation_headless
+    from tools.robot.export_policy import export_onnx
+    from tools.robot.interactive_viewer import run_simulation_headless
 
     model = ActorCritic(obs_dim=42, hidden_dim=16, squash_actions=True)
     legacy_pt = tmp_path / "legacy_no_schema.pt"

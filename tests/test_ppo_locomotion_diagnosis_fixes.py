@@ -124,7 +124,7 @@ def test_terminal_reward_diagnostics_precede_autoreset(fast):
 
 @pytest.mark.parametrize('latent', [0., 5., -5., 10., -10., 20., -20.])
 def test_squashed_latent_roundtrip_and_gradients(latent):
-    from scripts.train_ppo import ActorCritic
+    from tools.train.train_ppo import ActorCritic
 
     ac = ActorCritic(obs_dim=3, action_dim=2, hidden_dim=8, squash_actions=True)
     obs = torch.zeros(4, 3)
@@ -144,7 +144,7 @@ def test_squashed_latent_roundtrip_and_gradients(latent):
 
 
 def train_small(tmp_path, **kwargs):
-    from scripts.train_ppo import train_ppo
+    from tools.train.train_ppo import train_ppo
     opts = dict(model_path='robot/cyberduck_v2.xml', num_envs=2, rollout_steps=4,
                 num_epochs=1, mini_batch_size=4, max_iterations=1, device='cpu', verbose=False,
                 save_path=tmp_path/'run_ppo.pt', best_save_path=tmp_path/'run_best.pt', save_interval=1)
@@ -154,7 +154,7 @@ def train_small(tmp_path, **kwargs):
 
 @pytest.mark.parametrize('distance', [0.01, np.nan, np.inf, None])
 def test_best_rejects_invalid_or_noise_only_candidate(monkeypatch, tmp_path, distance):
-    import scripts.train_ppo as ppo
+    import tools.train.train_ppo as ppo
     calls = []
     def evaluate(**kwargs):
         calls.append(kwargs['stage'])
@@ -170,7 +170,7 @@ def test_best_rejects_invalid_or_noise_only_candidate(monkeypatch, tmp_path, dis
 
 
 def test_checkpoint_accept_resume_reject_and_latent_buffer(monkeypatch, tmp_path):
-    import scripts.train_ppo as ppo
+    import tools.train.train_ppo as ppo
     monkeypatch.setattr(ppo, 'evaluate_deterministic_rollout', lambda **kw: (0.30, 1.0))
     original = ppo.ActorCritic.get_action_and_value
     sampled = []
@@ -213,7 +213,7 @@ def test_checkpoint_accept_resume_reject_and_latent_buffer(monkeypatch, tmp_path
 
 @pytest.mark.parametrize('options', [{'dry_run': True}, {'stand_first': True}])
 def test_standing_and_dry_runs_never_create_walking_best(monkeypatch, tmp_path, options):
-    import scripts.train_ppo as ppo
+    import tools.train.train_ppo as ppo
     def unexpected(**kw):
         pytest.fail('Standing/dry-run must not qualify a walking candidate')
     monkeypatch.setattr(ppo, 'evaluate_deterministic_rollout', unexpected)
@@ -223,7 +223,7 @@ def test_standing_and_dry_runs_never_create_walking_best(monkeypatch, tmp_path, 
 
 
 def test_legacy_resume_preserves_transform_and_transfer_enables_squash(monkeypatch, tmp_path):
-    import scripts.train_ppo as ppo
+    import tools.train.train_ppo as ppo
     monkeypatch.setattr(ppo, 'evaluate_deterministic_rollout', lambda **kw: (0.1, 1.0))
     train_small(tmp_path, dry_run=True)
     ckpt = torch.load(tmp_path/'run_ppo.pt', weights_only=False)
@@ -238,7 +238,7 @@ def test_legacy_resume_preserves_transform_and_transfer_enables_squash(monkeypat
 
 
 def test_deterministic_evaluation_counts_terminal_step_and_restores_state():
-    from scripts.train_ppo import ActorCritic, RunningMeanStd, evaluate_deterministic_rollout
+    from tools.train.train_ppo import ActorCritic, RunningMeanStd, evaluate_deterministic_rollout
     ac = ActorCritic(obs_dim=3, action_dim=2, hidden_dim=8, squash_actions=True)
     rms = RunningMeanStd(3)
     original_rng = np.random.default_rng(123)
@@ -261,7 +261,7 @@ def test_deterministic_evaluation_counts_terminal_step_and_restores_state():
 
 
 def policy_checkpoint(squash=True, obs_dim=42, hidden_dim=32):
-    from scripts.train_ppo import ActorCritic, RunningMeanStd
+    from tools.train.train_ppo import ActorCritic, RunningMeanStd
     model = ActorCritic(obs_dim=obs_dim, action_dim=8, hidden_dim=hidden_dim, squash_actions=squash)
     rms = RunningMeanStd(obs_dim, clip=2.0)
     rms.mean[:] = 0.3
@@ -276,8 +276,8 @@ def policy_checkpoint(squash=True, obs_dim=42, hidden_dim=32):
     {'mean': np.zeros((1, 42))}, {'mean': np.full(42, np.nan)}, {'var': -np.ones(42)},
     {'var': np.full(42, np.inf)}, {'epsilon': -1}, {'min_std': 0}, {'clip': np.nan}, {'count': -1}])
 def test_rms_invalid_rejected_without_mutation(tmp_path, bad):
-    from scripts.export_policy import apply_obs_norm_to_actor
-    from scripts.interactive_viewer import load_viewer_policy
+    from tools.robot.export_policy import apply_obs_norm_to_actor
+    from tools.robot.interactive_viewer import load_viewer_policy
     model, _, ckpt = policy_checkpoint()
     if bad is None or bad == {}:
         ckpt['obs_rms'] = bad
@@ -297,8 +297,8 @@ def test_rms_invalid_rejected_without_mutation(tmp_path, bad):
 @pytest.mark.parametrize('squash', [False, True])
 def test_viewer_onnx_normalization_transform_parity(tmp_path, squash):
     import onnxruntime as ort
-    from scripts.export_policy import export_onnx, load_actor_from_checkpoint, apply_obs_norm_to_actor
-    from scripts.interactive_viewer import load_viewer_policy, policy_step
+    from tools.robot.export_policy import export_onnx, load_actor_from_checkpoint, apply_obs_norm_to_actor
+    from tools.robot.interactive_viewer import load_viewer_policy, policy_step
     model, rms, ckpt = policy_checkpoint(squash)
     path = tmp_path/'unrelated.pt'
     torch.save(ckpt, path)
@@ -318,7 +318,7 @@ def test_viewer_onnx_normalization_transform_parity(tmp_path, squash):
 
 
 def test_viewer_model_resolution_explicitness_and_metadata(tmp_path):
-    from scripts.interactive_viewer import resolve_viewer_model_path, build_arg_parser
+    from tools.robot.interactive_viewer import resolve_viewer_model_path, build_arg_parser
     _, _, ckpt = policy_checkpoint()
     path = tmp_path/'unrelated.pt'
     torch.save(ckpt, path)
@@ -349,8 +349,8 @@ def test_viewer_model_resolution_explicitness_and_metadata(tmp_path):
 @pytest.mark.parametrize('squash', [False, True])
 def test_generated_c_applies_output_transform_before_quantization(tmp_path, squash):
     import subprocess
-    from scripts.export_policy import export_esp32_headers
-    from scripts.train_ppo import ActorCritic
+    from tools.robot.export_policy import export_esp32_headers
+    from tools.train.train_ppo import ActorCritic
     from sim.env.policy_contract import observation_schema
     model = ActorCritic(hidden_dim=256, squash_actions=squash)
     model.model_name = 'cyberduck_v2.xml'
@@ -378,8 +378,8 @@ def test_generated_c_applies_output_transform_before_quantization(tmp_path, squa
 def test_pytorch_viewing_has_no_onnx_dependency(monkeypatch, tmp_path):
     import builtins
     import importlib
-    import scripts.export_policy as exporter
-    from scripts.interactive_viewer import load_viewer_policy
+    import tools.robot.export_policy as exporter
+    from tools.robot.interactive_viewer import load_viewer_policy
     _, _, ckpt = policy_checkpoint()
     path = tmp_path/'policy.pt'
     torch.save(ckpt, path)
@@ -394,7 +394,7 @@ def test_pytorch_viewing_has_no_onnx_dependency(monkeypatch, tmp_path):
 
 
 def test_deterministic_evaluation_repeats_same_episode_seeds():
-    from scripts.train_ppo import ActorCritic, RunningMeanStd, evaluate_deterministic_rollout
+    from tools.train.train_ppo import ActorCritic, RunningMeanStd, evaluate_deterministic_rollout
     from sim.env.run_parallel_sim import ParallelSimRunner
     model = ActorCritic(squash_actions=True)
     runner = ParallelSimRunner('robot/cyberduck_v2.xml', num_envs=1)
@@ -410,9 +410,9 @@ def test_deterministic_evaluation_repeats_same_episode_seeds():
 
 
 def test_shared_checkpoint_consumers_keep_normalization_and_squash(tmp_path):
-    from scripts.evaluate_models_sim import load_actor
-    from scripts.export_policy import load_actor_from_checkpoint
-    from scripts.pretrain_bc import collect_teacher_demonstrations
+    from tools.train.evaluate_models_sim import load_actor
+    from tools.robot.export_policy import load_actor_from_checkpoint
+    from tools.train.pretrain_bc import collect_teacher_demonstrations
     model, rms, ckpt = policy_checkpoint()
     path = tmp_path/'policy.pt'
     torch.save(ckpt, path)
@@ -421,7 +421,7 @@ def test_shared_checkpoint_consumers_keep_normalization_and_squash(tmp_path):
         expected = model.forward_actor(torch.as_tensor(rms.normalize(raw), dtype=torch.float32)).numpy()
         actual = load_actor(path)(torch.from_numpy(raw)).numpy()
     np.testing.assert_allclose(actual, expected, atol=2e-6)
-    import scripts.pretrain_bc as bc
+    import tools.train.pretrain_bc as bc
     # Exercise the teacher policy callback without spending physics steps.
     from unittest.mock import patch
     def collect(runner, policy_fn, steps, gamma):
@@ -433,7 +433,7 @@ def test_shared_checkpoint_consumers_keep_normalization_and_squash(tmp_path):
 
 
 def test_viewer_rejects_invalid_actor_dimensions_and_corrupt_hot_reload(tmp_path, capsys):
-    from scripts.interactive_viewer import load_viewer_policy, _maybe_hot_reload_policy
+    from tools.robot.interactive_viewer import load_viewer_policy, _maybe_hot_reload_policy
     _, _, ckpt = policy_checkpoint(obs_dim=41)
     path = tmp_path/'policy.pt'
     torch.save(ckpt, path)
@@ -451,8 +451,8 @@ def test_viewer_rejects_invalid_actor_dimensions_and_corrupt_hot_reload(tmp_path
 
 def test_direct_module_onnx_transform_and_export_model_metadata(tmp_path):
     import onnxruntime as ort
-    from scripts.export_policy import export_onnx
-    from scripts.interactive_viewer import resolve_viewer_model_path
+    from tools.robot.export_policy import export_onnx
+    from tools.robot.interactive_viewer import resolve_viewer_model_path
     model, rms, ckpt = policy_checkpoint()
     with torch.no_grad():
         model.actor[-1].bias.fill_(2)
@@ -468,7 +468,7 @@ def test_direct_module_onnx_transform_and_export_model_metadata(tmp_path):
 
 
 def test_best_selection_protocol_and_stage_order():
-    from scripts.train_ppo import select_deterministic_candidate
+    from tools.train.train_ppo import select_deterministic_candidate
     previous = dict(stage=1, det_distance_x=0.3, det_reward=2, protocol={'version': 1})
     assert not select_deterministic_candidate(dict(previous, stage=0, det_distance_x=1), previous)[0]
     assert not select_deterministic_candidate(dict(previous, stage=2, det_distance_x=0.01), previous)[0]
@@ -478,7 +478,7 @@ def test_best_selection_protocol_and_stage_order():
 
 
 def test_failed_best_write_preserves_existing_file(monkeypatch, tmp_path):
-    import scripts.train_ppo as ppo
+    import tools.train.train_ppo as ppo
     monkeypatch.setattr(ppo, 'evaluate_deterministic_rollout', lambda **kw: (0.3, 1.0))
     train_small(tmp_path)
     before = (tmp_path/'run_best.pt').read_bytes()
@@ -518,7 +518,7 @@ def test_progress_consistency_uses_world_frame(monkeypatch, yaw, world_vx, dx, v
 
 
 def test_standing_transition_is_evaluated_on_next_walking_rollout(monkeypatch, tmp_path):
-    import scripts.train_ppo as ppo
+    import tools.train.train_ppo as ppo
     monkeypatch.setattr(ppo.ParallelSimRunner, 'get_mean_episode_length', lambda self: 400.)
     calls = []
     def evaluate(**kw):
@@ -540,7 +540,7 @@ def test_checkpoint_path_alias_cannot_bypass_selection(tmp_path):
 
 
 def test_resume_with_corrupt_best_preserves_it_until_qualified(monkeypatch, tmp_path):
-    import scripts.train_ppo as ppo
+    import tools.train.train_ppo as ppo
     train_small(tmp_path, dry_run=True)
     best = tmp_path/'run_best.pt'
     best.write_bytes(b'corrupt non-pickle data')

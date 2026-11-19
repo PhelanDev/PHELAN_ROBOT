@@ -11,7 +11,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from sim.env.terrain_curriculum import apply_stair_stage, STAIR_STAGES, next_stair_stage
 from sim.env.run_parallel_sim import ParallelSimRunner
-from scripts.train_ppo import train_ppo
+from tools.train.train_ppo import train_ppo
 
 
 def test_stair_geoms_exist_in_mjcf():

@@ -101,8 +101,8 @@ def test_pizero2w_infer_cli(tmp_path):
     assert script_path.exists(), f"Missing script: {script_path}"
     import json
     from sim.env.policy_contract import observation_schema
-    from scripts.train_ppo import ActorCritic
-    from scripts.export_policy import export_onnx
+    from tools.train.train_ppo import ActorCritic
+    from tools.robot.export_policy import export_onnx
     policy = ActorCritic(hidden_dim=16)
     policy.observation_schema = observation_schema(42, False, 0.02)
     model_path = export_onnx(policy, tmp_path / "pizero_test.onnx")

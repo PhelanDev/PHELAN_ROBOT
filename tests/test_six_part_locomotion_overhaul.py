@@ -30,7 +30,7 @@ from sim.env.env_config import (
 from sim.env.run_parallel_sim import ParallelSimRunner
 from robot.robot_spec import MODEL_PATH, NUM_OBSERVATIONS
 from sim.env.terrain_curriculum import next_stage, next_stair_stage
-from scripts.interactive_viewer import (
+from tools.robot.interactive_viewer import (
     _setup_viewer_scene,
     extract_viewer_observation,
     get_robot_state,

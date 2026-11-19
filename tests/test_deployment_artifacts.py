@@ -23,8 +23,8 @@ sys.path.insert(0, str(REPO_ROOT))
 
 
 def test_audit_esp32_rejects_37_before_creating_artifacts(tmp_path):
-    from scripts.train_ppo import ActorCritic
-    from scripts.export_policy import export_esp32_headers
+    from tools.train.train_ppo import ActorCritic
+    from tools.robot.export_policy import export_esp32_headers
     output = tmp_path / "new"
     with pytest.raises(ValueError, match="42"):
         export_esp32_headers(ActorCritic(obs_dim=37, hidden_dim=16), output / "w.h", output / "c.h")
@@ -33,8 +33,8 @@ def test_audit_esp32_rejects_37_before_creating_artifacts(tmp_path):
 
 @pytest.mark.parametrize("model_name", [None, "microduck_esp32_8dof.xml"])
 def test_esp32_export_requires_verified_v2_identity(tmp_path, model_name):
-    from scripts.export_policy import export_esp32_headers
-    from scripts.train_ppo import ActorCritic
+    from tools.robot.export_policy import export_esp32_headers
+    from tools.train.train_ppo import ActorCritic
     from sim.env.policy_contract import observation_schema
 
     actor = ActorCritic(hidden_dim=16)
@@ -52,8 +52,8 @@ def test_esp32_firmware_v2_identity_contract(tmp_path, mutation):
     """Compile the contract MCU2 actually includes against valid and legacy/mixed headers."""
     if shutil.which("g++") is None:
         pytest.skip("g++ compiler not available")
-    from scripts.export_policy import export_esp32_headers
-    from scripts.train_ppo import ActorCritic
+    from tools.robot.export_policy import export_esp32_headers
+    from tools.train.train_ppo import ActorCritic
     from sim.env.policy_contract import observation_schema
 
     actor = ActorCritic(hidden_dim=16)
@@ -94,8 +94,8 @@ def test_esp32_firmware_v2_identity_contract(tmp_path, mutation):
 @pytest.mark.parametrize("obs_dim,layer_input,passes", [(42, 42, True), (37, 37, False), (42, 37, False)])
 def test_audit_firmware_guards_and_assembly_canary(tmp_path, obs_dim, layer_input, passes):
     import re
-    from scripts.export_policy import export_esp32_headers
-    from scripts.train_ppo import ActorCritic
+    from tools.robot.export_policy import export_esp32_headers
+    from tools.train.train_ppo import ActorCritic
     from sim.env.policy_contract import observation_schema
     firmware = (REPO_ROOT / "hardware/dual_esp32s3/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
     guards = "\n".join(re.findall(r'^static_assert\([^\n]+', firmware, re.M))
@@ -280,8 +280,8 @@ def test_rpi5_infer_cli(tmp_path):
     from sim.env.policy_contract import observation_schema
     schema_file = tmp_path / "verified-test-schema.json"
     schema_file.write_text(json.dumps(observation_schema(42, False, 0.02)), encoding="utf-8")
-    from scripts.train_ppo import ActorCritic
-    from scripts.export_policy import export_onnx
+    from tools.train.train_ppo import ActorCritic
+    from tools.robot.export_policy import export_onnx
     policy = ActorCritic(hidden_dim=16)
     policy.observation_schema = observation_schema(42, False, 0.02)
     model_path = export_onnx(policy, tmp_path / "rpi_test.onnx")
@@ -1181,8 +1181,8 @@ def test_esp32_int8_export_matches_float32_inference(tmp_path):
     simulate mcu2_main.ino int8 inference, and assert MAE < 0.02 vs float32 actor(obs)."""
     import re
     import torch
-    from scripts.train_ppo import ActorCritic
-    from scripts.export_policy import export_esp32_headers
+    from tools.train.train_ppo import ActorCritic
+    from tools.robot.export_policy import export_esp32_headers
     from hardware.dual_esp32s3.training.env_config import DEFAULT_OBS_BOUNDS
     from sim.env.policy_contract import observation_schema
 
@@ -1535,8 +1535,8 @@ def test_export_policy_obs_norm_and_asymmetric_critic_parity(tmp_path):
     """
     import onnxruntime as ort
     import torch
-    from scripts.train_ppo import ActorCritic
-    from scripts.export_policy import export_onnx, export_esp32_headers
+    from tools.train.train_ppo import ActorCritic
+    from tools.robot.export_policy import export_onnx, export_esp32_headers
     from sim.env.policy_contract import observation_schema
 
     torch.manual_seed(42)
@@ -1614,8 +1614,8 @@ def test_zero_variance_obs_rms_does_not_amplify_by_100x():
     """
     import torch
     import torch.nn as nn
-    from scripts.train_ppo import RunningMeanStd
-    from scripts.export_policy import apply_obs_norm_to_actor
+    from tools.train.train_ppo import RunningMeanStd
+    from tools.robot.export_policy import apply_obs_norm_to_actor
 
     # 1. Test RunningMeanStd with min_std
     rms = RunningMeanStd(shape=(3,), min_std=0.10)
@@ -1892,8 +1892,8 @@ def test_esp32_schema_clock_parity_and_rejection(tmp_path, embed_clock, moving):
     """F3: ESP32 export rejects unsupported schemas before writing; MCU2 C++ clock matches runner on reset/steps/zero-cmd."""
     from sim.env.policy_contract import observation_schema
     from sim.env.run_parallel_sim import ParallelSimRunner
-    from scripts.train_ppo import ActorCritic
-    from scripts.export_policy import export_esp32_headers
+    from tools.train.train_ppo import ActorCritic
+    from tools.robot.export_policy import export_esp32_headers
     from hardware.dual_esp32s3.training.env_config import MicroDuck8DoFConfig
 
     # 1. Unsupported control_dt and missing schema must fail BEFORE creating directory/files

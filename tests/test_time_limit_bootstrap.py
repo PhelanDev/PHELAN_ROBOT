@@ -9,7 +9,7 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.train_ppo import apply_timeout_bootstrap
+from tools.train.train_ppo import apply_timeout_bootstrap
 from sim.env.run_parallel_sim import DuckParallelSim
 
 

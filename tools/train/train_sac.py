@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple, Union
 import numpy as np, torch, torch.nn as nn, torch.nn.functional as F
 from torch.distributions import Normal
-_ROOT = str(Path(__file__).resolve().parent.parent)
+_ROOT = str(Path(__file__).resolve().parents[2])
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 from robot.robot_spec import CHECKPOINT_PREFIX, MODEL_NAME, MODEL_PATH

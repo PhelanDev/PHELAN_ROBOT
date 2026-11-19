@@ -8,11 +8,11 @@ import torch
 import torch.nn as nn
 
 from robot.robot_spec import JOINT_ORDER, MODEL_NAME, MODEL_PATH, TOTAL_MASS_KG
-from scripts.evaluate_models_sim import load_actor
-from scripts.interactive_viewer import load_viewer_policy, policy_step, resolve_viewer_model_path
-from scripts.pretrain_bc import collect_teacher_demonstrations, save_bc_checkpoint
-from scripts.train_ppo import ActorCritic, train_ppo
-from scripts.train_sac import train_sac
+from tools.train.evaluate_models_sim import load_actor
+from tools.robot.interactive_viewer import load_viewer_policy, policy_step, resolve_viewer_model_path
+from tools.train.pretrain_bc import collect_teacher_demonstrations, save_bc_checkpoint
+from tools.train.train_ppo import ActorCritic, train_ppo
+from tools.train.train_sac import train_sac
 from sim.env.env_config import MicroDuck8DoFConfig
 from sim.env.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
 

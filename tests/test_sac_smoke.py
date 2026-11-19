@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from scripts.train_sac import (
+from tools.train.train_sac import (
     SquashedGaussianActor,
     TwinQCritic,
     ReplayBuffer,
@@ -179,7 +179,7 @@ def test_train_sac_cli_runs_directly_from_repo_root():
     import sys
 
     proc = subprocess.run(
-        [sys.executable, "scripts/train_sac.py", "--help"],
+        [sys.executable, "tools/train/train_sac.py", "--help"],
         capture_output=True,
         text=True,
         check=False,
@@ -192,9 +192,9 @@ def test_train_sac_cli_runs_directly_from_repo_root():
 def test_sac_checkpoint_roundtrip_consumers_and_esp32_reject(tmp_path: Path, hidden_dim: int):
     """F9: SAC checkpoints load cleanly across actor/viewer/benchmark/ONNX with 1x tanh and fail-loud on ESP32 export."""
     import onnxruntime as ort
-    from scripts.export_policy import load_actor_from_checkpoint, export_onnx, export_esp32_headers, policy_actor_forward
-    from scripts.interactive_viewer import load_viewer_policy, policy_step
-    from scripts.evaluate_models_sim import load_actor
+    from tools.robot.export_policy import load_actor_from_checkpoint, export_onnx, export_esp32_headers, policy_actor_forward
+    from tools.robot.interactive_viewer import load_viewer_policy, policy_step
+    from tools.train.evaluate_models_sim import load_actor
     from sim.env.policy_contract import observation_schema
 
     torch.manual_seed(7)
@@ -238,7 +238,7 @@ def test_sac_checkpoint_roundtrip_consumers_and_esp32_reject(tmp_path: Path, hid
     with pytest.raises(ValueError, match="SAC|architecture|ELU|unsupported"):
         export_esp32_headers(ckpt_path, esp_dir / "w.h", esp_dir / "c.h")
     assert not esp_dir.exists()
-    from scripts.export_policy import prepare_target_exports
+    from tools.robot.export_policy import prepare_target_exports
     esp_sac_ckpt = tmp_path / f"sac_esp_{hidden_dim}.pt"
     ckpt["model_path"] = "robot/cyberduck_v2.xml"
     ckpt["model_name"] = "microduck_esp32_8dof.xml"

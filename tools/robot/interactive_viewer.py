@@ -37,7 +37,7 @@ if sys.platform == "win32":
 import numpy as np
 
 # Ensure repository root is in sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from robot.robot_spec import MODEL_NAME, MODEL_PATH, NUM_ACTIONS, NUM_OBSERVATIONS
 from sim.env.policy_contract import validate_model_identity
@@ -651,7 +651,7 @@ def load_viewer_policy(
         session._model_metadata = dict(session.get_modelmeta().custom_metadata_map)
         return _attach_viewer_policy_schema(session, obs_width, legacy_observation_schema, require_schema)
 
-    from scripts.export_policy import load_actor_from_checkpoint
+    from tools.robot.export_policy import load_actor_from_checkpoint
     actor = load_actor_from_checkpoint(p_path, obs_dim=obs_dim, action_dim=action_dim)
     obs_width = _validate_viewer_policy_dimensions(actor)
     actor.eval()
@@ -706,7 +706,7 @@ def policy_step(policy: Any, obs: np.ndarray) -> np.ndarray:
         import torch
         with torch.no_grad():
             obs_tensor = torch.from_numpy(obs_arr)
-            from scripts.export_policy import policy_actor_forward
+            from tools.robot.export_policy import policy_actor_forward
             if hasattr(policy, "forward_actor"):
                 out = policy.forward_actor(obs_tensor)
             else:

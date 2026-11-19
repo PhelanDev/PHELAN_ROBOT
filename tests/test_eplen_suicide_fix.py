@@ -307,7 +307,7 @@ def test_initial_policy_rollout_eplen_and_valloss_stability():
     """Verify that a freshly initialized ActorCritic does not die in 15 steps from wild noise
     and keeps initial action std <= 0.40."""
     import torch
-    from scripts.train_ppo import ActorCritic, DEFAULT_MODEL_PATH
+    from tools.train.train_ppo import ActorCritic, DEFAULT_MODEL_PATH
 
     model = ActorCritic(obs_dim=42, action_dim=8)
     std = torch.exp(model.log_std).detach().numpy()
@@ -334,7 +334,7 @@ def test_initial_policy_rollout_eplen_and_valloss_stability():
 
 def test_ppo_iteration_1_valloss_not_exploding(tmp_path):
     """Verify that 1 iteration of train_ppo produces value_loss < 50.0 (preventing ValLoss = 3390 spike)."""
-    from scripts.train_ppo import train_ppo
+    from tools.train.train_ppo import train_ppo
     res = train_ppo(
         num_envs=4,
         rollout_steps=64,
@@ -351,7 +351,7 @@ def test_ppo_iteration_1_valloss_not_exploding(tmp_path):
 def test_interactive_viewer_observation_phase_clock_parity():
     """Verify extract_viewer_observation embeds [clock_sin, clock_cos] at obs[35:37],
     matching ParallelSimRunner._extract_obs()."""
-    from scripts.interactive_viewer import extract_viewer_observation
+    from tools.robot.interactive_viewer import extract_viewer_observation
     from sim.env.run_parallel_sim import ParallelSimRunner
     from sim.env.env_config import compute_gait_phase
 

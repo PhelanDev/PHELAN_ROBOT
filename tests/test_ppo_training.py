@@ -1,13 +1,13 @@
 """Comprehensive Unit Tests for MicroDuck PPO Training Pipeline and Policy Export.
 
 Covers:
-1. scripts/train_ppo.py:
+1. tools/train/train_ppo.py:
    - ActorCritic neural network architecture (42 -> 256 ELU -> 256 ELU -> 8 actions / 1 value)
    - Learnable log_std parameter and forward pass distributions
    - Generalized Advantage Estimation (GAE) calculation
    - PPO training loop with --dry-run option and checkpoint saving
    - CLI interface and argument parsing
-2. scripts/export_policy.py:
+2. tools/robot/export_policy.py:
    - Float32 ONNX model export for Raspberry Pi 5 (input 'obs' [1, 42], output 'actions' [1, 8], opset 13)
    - onnxruntime validation and numerical parity against PyTorch
    - INT8 quantized weights and INT32 biases C/C++ header generation for ESP32-S3
@@ -29,7 +29,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 
 def test_audit_cross_target_resume_and_overwrite_rejected(tmp_path):
-    from scripts.train_ppo import train_ppo
+    from tools.train.train_ppo import train_ppo
     path = tmp_path / "policy_ppo.pt"
     kwargs = dict(num_envs=1, rollout_steps=2, max_iterations=1, num_epochs=1,
                   save_path=path, device="cpu", verbose=False, terrain_mode="flat")
@@ -49,7 +49,7 @@ def test_audit_cross_target_resume_and_overwrite_rejected(tmp_path):
     {"mean": [0, 0], "var": [-1, 1], "count": 1}, {"mean": [0], "var": [1], "count": 1},
     {"mean": [0, 0], "var": [1, 1], "count": float("inf")}])
 def test_audit_rms_load_is_strict_and_atomic(bad):
-    from scripts.train_ppo import RunningMeanStd
+    from tools.train.train_ppo import RunningMeanStd
     rms = RunningMeanStd(shape=2)
     before = rms.state_dict()
     with pytest.raises(ValueError, match="RMS"):
@@ -60,7 +60,7 @@ def test_audit_rms_load_is_strict_and_atomic(bad):
 
 @pytest.mark.parametrize("num_envs,rollout_steps", [(1, 1), (1, 2), (2, 1)])
 def test_audit_small_batches_are_finite(tmp_path, num_envs, rollout_steps):
-    from scripts.train_ppo import train_ppo
+    from tools.train.train_ppo import train_ppo
     path = tmp_path / "tiny_ppo.pt"
     result = train_ppo(num_envs=num_envs, rollout_steps=rollout_steps, max_iterations=1,
         num_epochs=1, save_path=path, device="cpu", verbose=False, terrain_mode="flat")
@@ -70,7 +70,7 @@ def test_audit_small_batches_are_finite(tmp_path, num_envs, rollout_steps):
 
 
 def test_audit_nonfinite_checkpoint_preserves_file(tmp_path):
-    from scripts.train_ppo import _atomic_torch_save
+    from tools.train.train_ppo import _atomic_torch_save
     path = tmp_path / "valid.pt"
     _atomic_torch_save({"model_state_dict": {"w": torch.ones(1)}}, path)
     before = path.read_bytes()
@@ -82,7 +82,7 @@ def test_audit_nonfinite_checkpoint_preserves_file(tmp_path):
 @pytest.mark.parametrize("key,bad", [("obs_rms", None), ("critic_obs_rms", None),
     ("obs_rms", "nan"), ("critic_obs_rms", "shape")])
 def test_audit_resume_rejects_malformed_rms_without_writes(tmp_path, key, bad):
-    from scripts.train_ppo import train_ppo
+    from tools.train.train_ppo import train_ppo
     path = tmp_path / "resume_ppo.pt"
     options = dict(num_envs=1, rollout_steps=2, max_iterations=1, num_epochs=1,
         save_path=path, device="cpu", verbose=False, terrain_mode="flat")
@@ -102,7 +102,7 @@ def test_audit_resume_rejects_malformed_rms_without_writes(tmp_path, key, bad):
 
 
 def test_audit_nonfinite_gradient_rejected_before_update(tmp_path, monkeypatch):
-    from scripts.train_ppo import ActorCritic, train_ppo
+    from tools.train.train_ppo import ActorCritic, train_ppo
     original = ActorCritic.__init__
     def bad_gradient(self, *args, **kwargs):
         original(self, *args, **kwargs)
@@ -117,7 +117,7 @@ def test_audit_nonfinite_gradient_rejected_before_update(tmp_path, monkeypatch):
 @pytest.mark.parametrize("field,bad", [("observation_schema", None), ("terrain_mode", "stairs"),
     ("obs_dim", 37), ("squash_actions", "yes")])
 def test_audit_resume_validates_contract_before_writes(tmp_path, field, bad):
-    from scripts.train_ppo import train_ppo
+    from tools.train.train_ppo import train_ppo
     path = tmp_path / "contract_ppo.pt"
     options = dict(num_envs=1, rollout_steps=2, max_iterations=1, num_epochs=1,
         save_path=path, device="cpu", verbose=False, terrain_mode="flat")
@@ -133,7 +133,7 @@ def test_audit_resume_validates_contract_before_writes(tmp_path, field, bad):
 
 def test_actor_critic_architecture_and_forward():
     """Verify ActorCritic neural architecture, dimensions, activations, and parameter gradients."""
-    from scripts.train_ppo import ActorCritic
+    from tools.train.train_ppo import ActorCritic
 
     obs_dim = 42
     action_dim = 8
@@ -216,7 +216,7 @@ def test_actor_critic_architecture_and_forward():
 
 def test_gae_advantages_calculation():
     """Verify Generalized Advantage Estimation (GAE) with discount gamma and lambda."""
-    from scripts.train_ppo import compute_gae
+    from tools.train.train_ppo import compute_gae
 
     num_steps = 4
     num_envs = 2
@@ -246,7 +246,7 @@ def test_gae_advantages_calculation():
 
 def test_ppo_training_dry_run_api(tmp_path):
     """Test train_ppo function executes 1 dry-run iteration and saves a valid checkpoint."""
-    from scripts.train_ppo import train_ppo, ActorCritic
+    from tools.train.train_ppo import train_ppo, ActorCritic
 
     checkpoint_path = tmp_path / "microduck_ppo_dryrun.pt"
 
@@ -283,8 +283,8 @@ def test_ppo_training_dry_run_api(tmp_path):
 
 
 def test_ppo_training_cli_dry_run(tmp_path):
-    """Test invoking scripts/train_ppo.py via CLI with --dry-run flag."""
-    script_path = REPO_ROOT / "scripts" / "train_ppo.py"
+    """Test invoking tools/train/train_ppo.py via CLI with --dry-run flag."""
+    script_path = REPO_ROOT / "tools" / "train" / "train_ppo.py"
     assert script_path.exists(), f"Missing script: {script_path}"
 
     ckpt_path = tmp_path / "cli_checkpoint.pt"
@@ -313,7 +313,7 @@ def test_ppo_training_cli_dry_run(tmp_path):
 
 def test_ppo_training_cli_dry_run_iters_alias(tmp_path):
     """Test train_ppo.py --iters alias and 2-iteration dry-run execution."""
-    script_path = REPO_ROOT / "scripts" / "train_ppo.py"
+    script_path = REPO_ROOT / "tools" / "train" / "train_ppo.py"
     ckpt_path = tmp_path / "cli_checkpoint_2iters.pt"
     cmd = [
         sys.executable,
@@ -360,8 +360,8 @@ def test_export_policy_onnx_and_onnxruntime(tmp_path):
     """Verify ONNX model export for Raspberry Pi 5 with input 'obs' [1, 42], output 'actions' [1, 8]."""
     import onnx
     import onnxruntime as ort
-    from scripts.train_ppo import ActorCritic
-    from scripts.export_policy import export_onnx
+    from tools.train.train_ppo import ActorCritic
+    from tools.robot.export_policy import export_onnx
 
     # Create model
     torch.manual_seed(42)
@@ -407,8 +407,8 @@ def test_export_policy_onnx_and_onnxruntime(tmp_path):
 
 def test_export_esp32_c_headers_syntax_and_compilation(tmp_path):
     """Verify INT8 quantized weights and INT32 biases header generation and C++ compilation."""
-    from scripts.train_ppo import ActorCritic
-    from scripts.export_policy import export_esp32_headers
+    from tools.train.train_ppo import ActorCritic
+    from tools.robot.export_policy import export_esp32_headers
     from sim.env.policy_contract import observation_schema
 
     torch.manual_seed(42)
@@ -511,8 +511,8 @@ int main() {{
 
 def test_cli_train_and_export_end_to_end(tmp_path):
     """Verify full CLI flow from PPO dry-run checkpoint generation to RPi5 ONNX and ESP32 headers export."""
-    train_script = REPO_ROOT / "scripts" / "train_ppo.py"
-    export_script = REPO_ROOT / "scripts" / "export_policy.py"
+    train_script = REPO_ROOT / "tools" / "train" / "train_ppo.py"
+    export_script = REPO_ROOT / "tools" / "robot" / "export_policy.py"
 
     ckpt_path = tmp_path / "pipeline_test.pt"
     best_path = tmp_path / "pipeline_test_best.pt"
@@ -555,8 +555,8 @@ def test_cli_train_and_export_end_to_end(tmp_path):
 
 def test_best_model_saved_separately_from_latest(tmp_path, monkeypatch):
     """Verify that training maintains separate latest and best model checkpoints."""
-    from scripts.train_ppo import train_ppo
-    monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
+    from tools.train.train_ppo import train_ppo
+    monkeypatch.setattr("tools.train.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
 
     latest_path = tmp_path / "microduck_ppo.pt"
     best_path = tmp_path / "microduck_best.pt"
@@ -583,7 +583,7 @@ def test_best_model_saved_separately_from_latest(tmp_path, monkeypatch):
 
 
 def test_train_ppo_resume_preserves_timesteps_iterations_and_target_latest(tmp_path):
-    from scripts.train_ppo import train_ppo
+    from tools.train.train_ppo import train_ppo
     save_p = tmp_path / "cyberduck_v2_ppo.pt"
     best_p = tmp_path / "cyberduck_v2_best.pt"
     res1 = train_ppo(
@@ -667,8 +667,8 @@ def test_runner_mean_distance_y_and_fast_rollout_parity():
 
 def test_best_save_path_strips_ppo_suffix_consistently(tmp_path, monkeypatch):
     """Default best_save_path strips trailing _ppo just like _latest.pt."""
-    monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
-    from scripts.train_ppo import train_ppo
+    monkeypatch.setattr("tools.train.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
+    from tools.train.train_ppo import train_ppo
 
     save_p = tmp_path / "cyberduck_v2_ppo.pt"
     res = train_ppo(
@@ -687,7 +687,7 @@ def test_best_save_path_strips_ppo_suffix_consistently(tmp_path, monkeypatch):
 
 def test_actor_critic_clamps_extreme_loaded_log_std_in_forward():
     """Extreme log_std values must clamp std to [exp(min_log_std), exp(max_log_std)] without breaking normal grads."""
-    from scripts.train_ppo import ActorCritic
+    from tools.train.train_ppo import ActorCritic
 
     model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256)
     assert model.min_log_std == pytest.approx(-3.0)
@@ -709,7 +709,7 @@ def test_actor_critic_clamps_extreme_loaded_log_std_in_forward():
 
 def test_critic_value_loss_updates_across_large_return_gap(monkeypatch, tmp_path):
     """Critic must update values even when |mb_ret - mb_val| >> clip_epsilon (no v_clipped zero-grad lock)."""
-    from scripts.train_ppo import ActorCritic, train_ppo
+    from tools.train.train_ppo import ActorCritic, train_ppo
     import sim.env.run_parallel_sim as sim_mod
 
     orig_step_arrays = sim_mod.ParallelSimRunner.step_arrays
@@ -745,7 +745,7 @@ def test_critic_value_loss_updates_across_large_return_gap(monkeypatch, tmp_path
 
 def test_actor_critic_rejects_inverted_log_std_bounds():
     """ActorCritic must raise ValueError when min_log_std > max_log_std."""
-    from scripts.train_ppo import ActorCritic
+    from tools.train.train_ppo import ActorCritic
 
     with pytest.raises(ValueError, match="min_log_std .* must be <= max_log_std"):
         ActorCritic(min_log_std=1.0, max_log_std=-1.0)
@@ -753,7 +753,7 @@ def test_actor_critic_rejects_inverted_log_std_bounds():
 
 def test_ppo_adaptive_kl_and_entropy_decay(tmp_path):
     """Strict target_kl lowers learning_rate; entropy_coef linearly reaches effective end."""
-    from scripts.train_ppo import train_ppo
+    from tools.train.train_ppo import train_ppo
 
     res = train_ppo(
         model_path="robot/cyberduck_v2.xml",
@@ -780,7 +780,7 @@ def test_ppo_adaptive_kl_and_entropy_decay(tmp_path):
 
 def test_ppo_target_kl_zero_disables_adaptive_lr_and_zero_entropy_stays_zero(tmp_path):
     """target_kl=0 disables LR adaptation/early-stop; entropy_coef=0 stays 0 even with entropy_coef_end=None."""
-    from scripts.train_ppo import train_ppo
+    from tools.train.train_ppo import train_ppo
 
     res = train_ppo(
         model_path="robot/cyberduck_v2.xml",
@@ -803,7 +803,7 @@ def test_ppo_target_kl_zero_disables_adaptive_lr_and_zero_entropy_stays_zero(tmp
 
 def test_resume_restores_lr_and_handles_legacy_checkpoint_without_lr(tmp_path):
     """Resuming restores saved learning_rate and handles older checkpoints missing that key."""
-    from scripts.train_ppo import train_ppo
+    from tools.train.train_ppo import train_ppo
 
     save_p = tmp_path / "resume_lr_ppo.pt"
     train_ppo(
@@ -842,8 +842,8 @@ def test_resume_restores_lr_and_handles_legacy_checkpoint_without_lr(tmp_path):
 
 def test_stage_promotion_best_ckpt_uses_rollout_stage_and_resets_baseline(monkeypatch, tmp_path):
     """Promoting Stage 0->1 after iter 1 must label best_ckpt Stage 0; iter 2 Stage 1 rollout resets baseline."""
-    monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
-    import scripts.train_ppo as ppo_mod
+    monkeypatch.setattr("tools.train.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
+    import tools.train.train_ppo as ppo_mod
     import sim.env.run_parallel_sim as sim_mod
 
     orig_step = sim_mod.ParallelSimRunner.step_arrays
@@ -889,8 +889,8 @@ def test_stage_promotion_best_ckpt_uses_rollout_stage_and_resets_baseline(monkey
 
 def test_collapsed_promoted_stage_rollout_does_not_overwrite_best_ckpt(monkeypatch, tmp_path):
     """Negative-distance collapsed Stage 1 rollout must NOT overwrite a valid Stage 0 best checkpoint."""
-    monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
-    import scripts.train_ppo as ppo_mod
+    monkeypatch.setattr("tools.train.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
+    import tools.train.train_ppo as ppo_mod
     import sim.env.run_parallel_sim as sim_mod
 
     save_p = tmp_path / "collapse_ppo.pt"
@@ -935,8 +935,8 @@ def test_collapsed_promoted_stage_rollout_does_not_overwrite_best_ckpt(monkeypat
 
 def test_resume_stage1_with_legacy_stage0_best_ckpt_unlocks_stage1_best(monkeypatch, tmp_path):
     """Resuming legacy Stage 1 ppo.pt (missing 'best_stage') + Stage 0 best.pt allows Stage 1 rollout to update best.pt."""
-    monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
-    import scripts.train_ppo as ppo_mod
+    monkeypatch.setattr("tools.train.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
+    import tools.train.train_ppo as ppo_mod
     import sim.env.run_parallel_sim as sim_mod
 
     save_p = tmp_path / "legacy_stage_ppo.pt"
@@ -983,7 +983,7 @@ def test_resume_stage1_with_legacy_stage0_best_ckpt_unlocks_stage1_best(monkeypa
 
 def test_stage_promotion_caps_learning_rate_to_base_lr(monkeypatch, tmp_path):
     """When adaptive KL boosts LR, advancing stage caps current_lr to base learning_rate."""
-    import scripts.train_ppo as ppo_mod
+    import tools.train.train_ppo as ppo_mod
 
     monkeypatch.setattr(ppo_mod, "next_stage", lambda **kw: (1, 0))
 
@@ -1001,8 +1001,8 @@ def test_stage_promotion_caps_learning_rate_to_base_lr(monkeypatch, tmp_path):
 
 def test_stair_stage_promotion_caps_learning_rate_and_labels_best_ckpt(monkeypatch, tmp_path):
     """When terrain_mode='stairs', advancing stair stage caps current_lr and labels best_ckpt correctly."""
-    monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
-    import scripts.train_ppo as ppo_mod
+    monkeypatch.setattr("tools.train.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
+    import tools.train.train_ppo as ppo_mod
 
     monkeypatch.setattr(ppo_mod, "next_stair_stage", lambda **kw: (1, 0))
 
@@ -1027,7 +1027,7 @@ def test_stair_stage_promotion_caps_learning_rate_and_labels_best_ckpt(monkeypat
 
 def test_corrupted_best_checkpoint_does_not_crash(tmp_path):
     """Corrupted _best.pt is gracefully handled without crash and training completes."""
-    import scripts.train_ppo as ppo_mod
+    import tools.train.train_ppo as ppo_mod
 
     save_p = tmp_path / "corrupt_ppo.pt"
     best_p = tmp_path / "corrupt_best.pt"
@@ -1043,8 +1043,8 @@ def test_corrupted_best_checkpoint_does_not_crash(tmp_path):
 
 def test_transfer_load_checkpoint_skips_velocity_warmup_and_iter1_best_lockout(monkeypatch, tmp_path):
     """Transfer loading skips early velocity clamping and prevents Iter-1 rollout from locking best_checkpoint."""
-    monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
-    import scripts.train_ppo as ppo_mod
+    monkeypatch.setattr("tools.train.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
+    import tools.train.train_ppo as ppo_mod
     import sim.env.run_parallel_sim as sim_mod
 
     seed_save_p = tmp_path / "seed_transfer_ppo.pt"
@@ -1117,8 +1117,8 @@ def test_transfer_load_checkpoint_skips_velocity_warmup_and_iter1_best_lockout(m
 
 def test_transfer_load_checkpoint_warms_up_initial_lr_without_adam_shock(monkeypatch, tmp_path):
     """Transfer loading caps initial Adam lr to <= 1e-4 on Iter 1 update, bounds from ckpt lr, and an eligible deterministic candidate creates best.pt."""
-    monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
-    import scripts.train_ppo as ppo_mod
+    monkeypatch.setattr("tools.train.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
+    import tools.train.train_ppo as ppo_mod
 
     seed_p = tmp_path / "seed_no_lr_ppo.pt"
     ppo_mod.train_ppo(
@@ -1173,8 +1173,8 @@ def test_transfer_load_checkpoint_warms_up_initial_lr_without_adam_shock(monkeyp
 
 def test_missing_load_checkpoint_falls_back_to_scratch_warmup(monkeypatch, tmp_path):
     """When load_checkpoint does not exist, training falls back to scratch with velocity warmup applied."""
-    monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
-    import scripts.train_ppo as ppo_mod
+    monkeypatch.setattr("tools.train.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
+    import tools.train.train_ppo as ppo_mod
     import sim.env.run_parallel_sim as sim_mod
 
     missing_ckpt = tmp_path / "does_not_exist.pt"
@@ -1220,7 +1220,7 @@ def test_missing_load_checkpoint_falls_back_to_scratch_warmup(monkeypatch, tmp_p
 
 def test_running_mean_std_statistics_no_nan_and_clipping():
     """RunningMeanStd online Welford updates, variance convergence, no NaN, and clipping bounds."""
-    from scripts.train_ppo import RunningMeanStd
+    from tools.train.train_ppo import RunningMeanStd
 
     rms = RunningMeanStd(shape=42, clip=5.0)
     rng = np.random.default_rng(123)
@@ -1301,7 +1301,7 @@ def test_parallel_sim_runner_privileged_obs_and_terminal_critic_obs():
 
 def test_asymmetric_critic_actor_critic_forward_and_checkpoint():
     """ActorCritic supports asymmetric critic_obs_dim != obs_dim with clean forward and state_dict."""
-    from scripts.train_ppo import ActorCritic
+    from tools.train.train_ppo import ActorCritic
 
     obs_dim = 42
     critic_obs_dim = 53
@@ -1335,7 +1335,7 @@ def test_asymmetric_critic_actor_critic_forward_and_checkpoint():
 
 def test_legacy_42dim_checkpoint_transfer_to_asymmetric_critic(tmp_path):
     """Legacy 42-dim critic checkpoint transfers cleanly into 53-dim asymmetric critic model."""
-    from scripts.train_ppo import ActorCritic, train_ppo
+    from tools.train.train_ppo import ActorCritic, train_ppo
 
     # 1. Create a legacy checkpoint where both actor and critic have obs_dim=42
     legacy_model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256, critic_obs_dim=42)
@@ -1382,8 +1382,8 @@ def test_legacy_42dim_checkpoint_transfer_to_asymmetric_critic(tmp_path):
 
 def test_scratch_run_ignores_stale_higher_stage_best_checkpoint(tmp_path, monkeypatch):
     """A fresh scratch run (resume=False) must overwrite a stale higher-stage _best.pt rather than being locked out."""
-    monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
-    from scripts.train_ppo import train_ppo
+    monkeypatch.setattr("tools.train.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
+    from tools.train.train_ppo import train_ppo
 
     best_path = tmp_path / "scratch_best.pt"
     save_path = tmp_path / "scratch_ppo.pt"
@@ -1419,7 +1419,7 @@ def test_scratch_run_ignores_stale_higher_stage_best_checkpoint(tmp_path, monkey
 
 def test_evaluate_deterministic_rollout_returns_metrics_and_logs(tmp_path, capsys):
     """evaluate_deterministic_rollout computes finite metrics and train_ppo logs DetDistX/DetRew for real runs."""
-    from scripts.train_ppo import (
+    from tools.train.train_ppo import (
         ActorCritic,
         RunningMeanStd,
         evaluate_deterministic_rollout,
@@ -1464,7 +1464,7 @@ def test_atomic_torch_save_replaces_cleanly(tmp_path):
     """Verify that _atomic_torch_save creates an atomic checkpoint, replaces existing cleanly,
     and cleans up temporary files on failure.
     """
-    from scripts.train_ppo import _atomic_torch_save
+    from tools.train.train_ppo import _atomic_torch_save
 
     ckpt_path = tmp_path / "model_ckpt.pt"
     data1 = {"step": 1, "weights": torch.tensor([1.0, 2.0, 3.0])}
@@ -1511,7 +1511,7 @@ def test_atomic_torch_save_replaces_cleanly(tmp_path):
 def test_get_privileged_obs_vectorized_subsets_and_eval_runner_reuse(tmp_path):
     """ParallelSimRunner.get_privileged_obs handles empty/arbitrary subsets and eval_runner reuse."""
     from sim.env.run_parallel_sim import ParallelSimRunner
-    from scripts.train_ppo import ActorCritic, RunningMeanStd, evaluate_deterministic_rollout
+    from tools.train.train_ppo import ActorCritic, RunningMeanStd, evaluate_deterministic_rollout
 
     # 1. Privileged obs with hurdles
     runner = ParallelSimRunner(
@@ -1602,8 +1602,8 @@ def test_get_privileged_obs_vectorized_subsets_and_eval_runner_reuse(tmp_path):
 @pytest.mark.parametrize("source_squash,expected_action_val", [(False, 0.8), (True, math.tanh(0.8))])
 def test_transfer_preserves_squash_actions_and_pre_optimizer_parity(monkeypatch, tmp_path, source_squash, expected_action_val):
     """F8: Warm-start transfer must preserve source squash_actions metadata and pre-optimizer action semantics."""
-    import scripts.train_ppo as ppo_mod
-    from scripts.train_ppo import ActorCritic, RunningMeanStd
+    import tools.train.train_ppo as ppo_mod
+    from tools.train.train_ppo import ActorCritic, RunningMeanStd
     from sim.env.policy_contract import observation_schema
 
     obs_dim, act_dim, hidden_dim = 42, 8, 256
@@ -1664,8 +1664,8 @@ def test_transfer_preserves_squash_actions_and_pre_optimizer_parity(monkeypatch,
 
 def test_transfer_bc_and_legacy_squash_metadata_and_invalid_rejected(tmp_path):
     """F8: BC checkpoints declare squash_actions=False; legacy without metadata fails loud unless explicit; bad type writes nothing."""
-    from scripts.pretrain_bc import train_behavior_cloning, save_bc_checkpoint
-    from scripts.train_ppo import ActorCritic, train_ppo
+    from tools.train.pretrain_bc import train_behavior_cloning, save_bc_checkpoint
+    from tools.train.train_ppo import ActorCritic, train_ppo
     from sim.env.policy_contract import observation_schema
 
     obs = np.random.randn(20, 42).astype(np.float32)
@@ -1720,17 +1720,17 @@ def test_transfer_bc_and_legacy_squash_metadata_and_invalid_rejected(tmp_path):
             verbose=False,
         )
     assert not out_fail.exists()
-    from scripts.export_policy import load_actor_from_checkpoint
+    from tools.robot.export_policy import load_actor_from_checkpoint
     with pytest.raises(ValueError, match="boolean"):
         load_actor_from_checkpoint(bad_path)
-    help_proc = subprocess.run([sys.executable, str(REPO_ROOT / "scripts/train_ppo.py"), "--help"], capture_output=True, text=True, check=False)
+    help_proc = subprocess.run([sys.executable, str(REPO_ROOT / "tools/train/train_ppo.py"), "--help"], capture_output=True, text=True, check=False)
     assert help_proc.returncode == 0 and "--no-squash-actions" in help_proc.stdout
 
 
 def test_running_mean_std_clip_zero_roundtrip_and_negative_rejected(tmp_path):
     """F10: RunningMeanStd with clip=0 disables clipping and round-trips through state_dict, PPO resume, and exporter."""
-    from scripts.train_ppo import RunningMeanStd, train_ppo
-    from scripts.export_policy import apply_obs_norm_to_actor
+    from tools.train.train_ppo import RunningMeanStd, train_ppo
+    from tools.robot.export_policy import apply_obs_norm_to_actor
     import torch.nn as nn
 
     rms = RunningMeanStd(shape=3, clip=0.0)

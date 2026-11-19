@@ -458,13 +458,13 @@ def test_esp32_truncation_randomization_aligned_obs():
 
 
 def test_evaluate_models_sim_checkpoint_loading_and_architecture_inference(tmp_path):
-    """Verify scripts/evaluate_models_sim.py load_actor loads with weights_only=False
+    """Verify tools/train/evaluate_models_sim.py load_actor loads with weights_only=False
 
     and dynamically infers obs_dim, hidden_dim, and action_dim from checkpoint.
     """
     import torch
     import torch.nn as nn
-    from scripts.evaluate_models_sim import load_actor
+    from tools.train.evaluate_models_sim import load_actor
 
     # 1. Create a 37-dim custom actor checkpoint
     dummy_actor_37 = nn.Sequential(

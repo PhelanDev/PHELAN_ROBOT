@@ -8,7 +8,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.train_ppo import ActorCritic, train_ppo
+from tools.train.train_ppo import ActorCritic, train_ppo
 
 def test_train_ppo_signature_and_caps_action_std(tmp_path: Path):
     sig = inspect.signature(train_ppo)

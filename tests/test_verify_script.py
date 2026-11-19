@@ -1,4 +1,4 @@
-"""Tests for scripts/verify_model.py physical model verification script."""
+"""Tests for tools/robot/verify_model.py physical model verification script."""
 
 import os
 import subprocess
@@ -10,7 +10,7 @@ from robot.robot_spec import MODEL_PATH, TOTAL_MASS_KG, URDF_PATH
 
 def test_verify_script_execution():
     """Verify that verify_model.py runs successfully and reports success."""
-    script_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_model.py")
+    script_path = os.path.join(os.path.dirname(__file__), "..", "tools", "robot", "verify_model.py")
     res = subprocess.run([sys.executable, script_path], capture_output=True, text=True)
     assert res.returncode == 0, f"Script failed with code {res.returncode}:\n{res.stderr}"
     assert "Verification SUCCESS" in res.stdout
@@ -19,7 +19,7 @@ def test_verify_script_execution():
 
 def test_verify_script_cli_custom_paths():
     """Verify that CLI flags for --mjcf and --urdf work."""
-    script_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_model.py")
+    script_path = os.path.join(os.path.dirname(__file__), "..", "tools", "robot", "verify_model.py")
     mjcf_path = str(MODEL_PATH)
     urdf_path = str(URDF_PATH)
 
@@ -34,7 +34,7 @@ def test_verify_script_cli_custom_paths():
 
 def test_verify_script_cli_invalid_path():
     """Verify that providing an invalid path causes the script to fail with non-zero exit code."""
-    script_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_model.py")
+    script_path = os.path.join(os.path.dirname(__file__), "..", "tools", "robot", "verify_model.py")
     res = subprocess.run(
         [sys.executable, script_path, "--mjcf", "nonexistent_model.xml"],
         capture_output=True,
@@ -46,7 +46,7 @@ def test_verify_script_cli_invalid_path():
 def test_verify_rejects_non_v2_identity(tmp_path):
     """A physically identical file cannot bypass the declared robot identity."""
     import xml.etree.ElementTree as ET
-    from scripts.verify_model import verify_joint_consistency
+    from tools.robot.verify_model import verify_joint_consistency
 
     tree = ET.parse(MODEL_PATH)
     tree.getroot().set("model", "retired_robot")
@@ -59,7 +59,7 @@ def test_verify_rejects_non_v2_identity(tmp_path):
 def test_verify_script_functions():
     """Verify unit-level functions of verify_model."""
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-    from scripts.verify_model import (
+    from tools.robot.verify_model import (
         verify_joint_consistency,
         verify_mass_and_inertials,
         verify_center_of_mass,

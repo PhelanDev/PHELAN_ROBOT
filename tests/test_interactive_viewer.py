@@ -1,7 +1,7 @@
 """Tests for Interactive 3D Viewer and Project Documentation (Task 6).
 
 Covers:
-- Verification that scripts/interactive_viewer.py and README.md exist.
+- Verification that tools/robot/interactive_viewer.py and README.md exist.
 - Verification of comprehensive Vietnamese documentation sections in README.md.
 - Interactive viewer pose presets, kinematics limits, and headless execution.
 - Headless gait demonstration and stability verification.
@@ -23,7 +23,7 @@ if PROJECT_ROOT not in sys.path:
 
 def test_viewer_and_docs_exist():
     """Step 1 baseline test as specified in task-6-brief.md."""
-    assert os.path.exists(os.path.join(PROJECT_ROOT, "scripts", "interactive_viewer.py"))
+    assert os.path.exists(os.path.join(PROJECT_ROOT, "tools", "robot", "interactive_viewer.py"))
     assert os.path.exists(os.path.join(PROJECT_ROOT, "README.md"))
     with open(os.path.join(PROJECT_ROOT, "README.md"), "r", encoding="utf-8") as f:
         content = f.read()
@@ -71,7 +71,7 @@ def test_readme_comprehensive_content():
 
 def test_interactive_viewer_presets_and_limits():
     """Verify interactive_viewer module exports valid joint configurations and presets."""
-    from scripts.interactive_viewer import (
+    from tools.robot.interactive_viewer import (
         JOINT_NAMES,
         POSE_PRESETS,
         JOINT_LIMITS,
@@ -108,7 +108,7 @@ def test_interactive_viewer_presets_and_limits():
 
 def test_interactive_viewer_cli_parser():
     """Verify CLI argument parsing handles options correctly."""
-    from scripts.interactive_viewer import build_arg_parser
+    from tools.robot.interactive_viewer import build_arg_parser
 
     parser = build_arg_parser()
     args = parser.parse_args(["--headless", "--duration", "2.5", "--pose", "squat"])
@@ -122,7 +122,7 @@ def test_interactive_viewer_cli_parser():
 
 def test_interactive_viewer_headless_simulation():
     """Run headless simulation for a short duration to test physical stability."""
-    from scripts.interactive_viewer import run_simulation_headless
+    from tools.robot.interactive_viewer import run_simulation_headless
 
     metrics = run_simulation_headless(
         model_path="robot/cyberduck_v2.xml",
@@ -139,7 +139,7 @@ def test_interactive_viewer_headless_simulation():
 
 def test_interactive_viewer_gait_demo_headless():
     """Run gait demonstration in headless mode."""
-    from scripts.interactive_viewer import run_simulation_headless
+    from tools.robot.interactive_viewer import run_simulation_headless
 
     metrics = run_simulation_headless(
         model_path="robot/cyberduck_v2.xml",
@@ -157,7 +157,7 @@ def test_interactive_viewer_gait_demo_headless():
 def test_interactive_viewer_pd_gains_sync():
     """Verify interactive viewer PD gains match MicroDuck8DoFConfig."""
     import inspect
-    from scripts.interactive_viewer import apply_pd_control
+    from tools.robot.interactive_viewer import apply_pd_control
     from sim.env.env_config import _DEFAULT_CFG
 
     sig = inspect.signature(apply_pd_control)
@@ -211,7 +211,7 @@ def test_reset_last_actions_fix():
 
 def test_interactive_viewer_main_headless(monkeypatch):
     """Verify interactive_viewer main() function returns 0 in headless mode."""
-    from scripts.interactive_viewer import main
+    from tools.robot.interactive_viewer import main
 
     monkeypatch.setattr(
         sys,
@@ -224,7 +224,7 @@ def test_interactive_viewer_main_headless(monkeypatch):
 
 def test_interactive_viewer_cli_simulation(monkeypatch):
     """Verify run_interactive_cli processes standard commands and exits gracefully."""
-    from scripts.interactive_viewer import run_interactive_cli
+    from tools.robot.interactive_viewer import run_interactive_cli
 
     commands = iter([
         "pose squat",
@@ -243,7 +243,7 @@ def test_interactive_viewer_cli_simulation(monkeypatch):
 
 def test_configure_viewer_camera():
     """Verify configure_viewer_camera sets default camera orientation to avoid black screen on hybrid GPUs."""
-    from scripts.interactive_viewer import configure_viewer_camera
+    from tools.robot.interactive_viewer import configure_viewer_camera
 
     class DummyCamera:
         def __init__(self):
@@ -289,11 +289,11 @@ def test_configure_viewer_camera():
 
 def test_interactive_viewer_policy_headless_stability(tmp_path):
     """A deterministic zero-action V2 policy holds the nominal stance in the viewer."""
-    from scripts.interactive_viewer import run_simulation_headless
+    from tools.robot.interactive_viewer import run_simulation_headless
     from sim.env.policy_contract import observation_schema
 
     import torch
-    from scripts.train_ppo import ActorCritic
+    from tools.train.train_ppo import ActorCritic
     from robot.robot_spec import MODEL_NAME
 
     actor = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=16)
@@ -327,7 +327,7 @@ def test_interactive_viewer_policy_headless_stability(tmp_path):
 def test_interactive_viewer_fallback_and_stairs_handling(monkeypatch):
     """Verify interactive viewer fallback branch and stair stage application work cleanly without TypeError or missing args."""
     import inspect
-    from scripts.interactive_viewer import (
+    from tools.robot.interactive_viewer import (
         run_interactive_viewer,
         run_opencv_viewer,
         run_simulation_headless,
@@ -339,7 +339,7 @@ def test_interactive_viewer_fallback_and_stairs_handling(monkeypatch):
     assert sig_cv.parameters["stairs"].default is False
 
     # 2. Check source of run_opencv_viewer applies stair stage
-    src_path = Path(PROJECT_ROOT) / "scripts" / "interactive_viewer.py"
+    src_path = Path(PROJECT_ROOT) / "tools" / "robot" / "interactive_viewer.py"
     src = src_path.read_text(encoding="utf-8")
     assert "if stairs and apply_stair_stage is not None:" in src, (
         "run_opencv_viewer must apply stair stage when stairs=True"
@@ -359,8 +359,8 @@ def test_interactive_viewer_fallback_and_stairs_handling(monkeypatch):
             "right_touch": 1.0,
         }
 
-    monkeypatch.setattr("scripts.interactive_viewer._CV2_AVAILABLE", False)
-    monkeypatch.setattr("scripts.interactive_viewer.run_simulation_headless", mock_headless)
+    monkeypatch.setattr("tools.robot.interactive_viewer._CV2_AVAILABLE", False)
+    monkeypatch.setattr("tools.robot.interactive_viewer.run_simulation_headless", mock_headless)
 
     import mujoco
     def mock_launch_passive(*a, **k):
@@ -390,7 +390,7 @@ def test_interactive_viewer_fallback_and_stairs_handling(monkeypatch):
 def test_viewer_stage0_applies_wide_pillars_submerges_stairs_and_spawns_native_height(monkeypatch):
     """Stage 0 in viewer must still apply terrain_curriculum.apply_stage(model, 0) and spawn at model.qpos0[2]."""
     import mujoco
-    from scripts.interactive_viewer import run_simulation_headless
+    from tools.robot.interactive_viewer import run_simulation_headless
     from sim.env.terrain_curriculum import apply_stage
 
     model_rel = "robot/cyberduck_v2.xml"
@@ -430,7 +430,7 @@ def test_viewer_stage0_applies_wide_pillars_submerges_stairs_and_spawns_native_h
 def test_extract_viewer_observation_filters_floor_lidar_hits():
     """Viewer extract_viewer_observation must filter z_hit <= 0.012 floor rays to 2.0m like ParallelSimRunner."""
     import mujoco
-    from scripts.interactive_viewer import extract_viewer_observation
+    from tools.robot.interactive_viewer import extract_viewer_observation
     from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
@@ -475,7 +475,7 @@ def test_run_opencv_viewer_handles_getwindowproperty_error_and_passes_stairs(mon
     """OpenCV viewer exits cleanly if getWindowProperty raises cv2.error, and main() passes stairs=args.stairs."""
     import types
     import mujoco
-    import scripts.interactive_viewer as iv
+    import tools.robot.interactive_viewer as iv
 
     class DummyCv2Error(Exception):
         pass
@@ -532,7 +532,7 @@ def test_run_opencv_viewer_handles_getwindowproperty_error_and_passes_stairs(mon
 
 def test_maybe_hot_reload_policy_reloads_when_mtime_increases(monkeypatch, tmp_path):
     """Verify _maybe_hot_reload_policy throttles checks, reloads on mtime bump, and handles errors safely."""
-    from scripts.interactive_viewer import _maybe_hot_reload_policy
+    from tools.robot.interactive_viewer import _maybe_hot_reload_policy
 
     dummy_policy_old = "old_policy"
     dummy_policy_new = "new_policy"
@@ -571,7 +571,7 @@ def test_maybe_hot_reload_policy_reloads_when_mtime_increases(monkeypatch, tmp_p
 
     # 2. When mtime increases past check_interval, reloads updated weights via load_viewer_policy
     monkeypatch.setattr(
-        "scripts.interactive_viewer.load_viewer_policy",
+        "tools.robot.interactive_viewer.load_viewer_policy",
         lambda p: dummy_policy_new,
     )
     new_mtime = mtime0 + 10.0
@@ -606,7 +606,7 @@ def test_maybe_hot_reload_policy_reloads_when_mtime_increases(monkeypatch, tmp_p
     def broken_loader(p):
         raise RuntimeError("Mock file partially written / corrupt")
 
-    monkeypatch.setattr("scripts.interactive_viewer.load_viewer_policy", broken_loader)
+    monkeypatch.setattr("tools.robot.interactive_viewer.load_viewer_policy", broken_loader)
     monkeypatch.setattr(os.path, "getmtime", lambda p: new_mtime + 5.0)
 
     pol4, mtime4, last_check4 = _maybe_hot_reload_policy(

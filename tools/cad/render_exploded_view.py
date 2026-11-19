@@ -5,7 +5,7 @@ import runpy
 
 
 def render_exploded() -> None:
-    renderer = Path(__file__).resolve().parents[1] / "duck_v2/scripts/render_cyberduck_v2.py"
+    renderer = Path(__file__).resolve().with_name("render_cyberduck_v2.py")
     runpy.run_path(str(renderer), run_name="__main__")
 
 

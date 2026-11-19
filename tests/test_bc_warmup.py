@@ -96,8 +96,8 @@ def test_unscale_actions_out_of_bounds_clamping():
 def test_bc_pretrain_decreases_loss_and_loads_into_ppo(tmp_path: Path):
     import torch
     from sim.env.run_parallel_sim import ParallelSimRunner
-    from scripts.pretrain_bc import collect_gait_demonstrations, train_behavior_cloning, save_bc_checkpoint
-    from scripts.train_ppo import train_ppo
+    from tools.train.pretrain_bc import collect_gait_demonstrations, train_behavior_cloning, save_bc_checkpoint
+    from tools.train.train_ppo import train_ppo
 
     runner = ParallelSimRunner(model_path="robot/cyberduck_v2.xml", num_envs=2, num_threads=1, stage=0)
     try:
@@ -133,7 +133,7 @@ def test_collect_teacher_demonstrations_rejects_retired_v1_dim_slicing():
     import torch
     import torch.nn as nn
     from sim.env.run_parallel_sim import ParallelSimRunner
-    from scripts.pretrain_bc import collect_teacher_demonstrations
+    from tools.train.pretrain_bc import collect_teacher_demonstrations
 
     runner = ParallelSimRunner(model_path="robot/cyberduck_v2.xml", num_envs=2, num_threads=1, stage=0)
     try:
@@ -149,7 +149,7 @@ def test_pretrain_bc_cli_runs_directly_from_repo_root():
     import sys
 
     proc = subprocess.run(
-        [sys.executable, "scripts/pretrain_bc.py", "--help"],
+        [sys.executable, "tools/train/pretrain_bc.py", "--help"],
         capture_output=True,
         text=True,
         check=False,
@@ -161,9 +161,9 @@ def test_pretrain_bc_cli_runs_directly_from_repo_root():
 def test_save_bc_checkpoint_includes_obs_rms(tmp_path: Path):
     """train_behavior_cloning attaches _bc_obs_rms and save_bc_checkpoint embeds obs_rms."""
     import torch
-    from scripts.pretrain_bc import train_behavior_cloning, save_bc_checkpoint
-    from scripts.export_policy import load_actor_from_checkpoint
-    from scripts.train_ppo import train_ppo
+    from tools.train.pretrain_bc import train_behavior_cloning, save_bc_checkpoint
+    from tools.robot.export_policy import load_actor_from_checkpoint
+    from tools.train.train_ppo import train_ppo
 
     np.random.seed(42)
     obs = np.random.randn(80, 42).astype(np.float32) + 2.0

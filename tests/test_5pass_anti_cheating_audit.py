@@ -50,7 +50,7 @@ from sim.env.env_config import (
 )
 from sim.env.run_parallel_sim import ParallelSimRunner
 from sim.env.terrain_curriculum import next_stage, next_stair_stage
-from scripts.interactive_viewer import extract_viewer_observation
+from tools.robot.interactive_viewer import extract_viewer_observation
 from sim.behaviors.self_righting import (
     SelfRightingController,
     FallClassifier,

@@ -10,12 +10,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-_ROOT = str(Path(__file__).resolve().parent.parent)
+_ROOT = str(Path(__file__).resolve().parents[2])
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from scripts.export_policy import load_actor_from_checkpoint, policy_actor_forward
-from scripts.train_ppo import ActorCritic, RunningMeanStd
+from tools.robot.export_policy import load_actor_from_checkpoint, policy_actor_forward
+from tools.train.train_ppo import ActorCritic, RunningMeanStd
 from robot.robot_spec import CHECKPOINT_PREFIX, CONTROL_DT_S, MODEL_NAME, MODEL_PATH, NUM_ACTIONS, NUM_OBSERVATIONS
 from sim.behaviors.advanced_gaits import BipedalGaitGenerator
 from sim.env.env_config import unscale_actions

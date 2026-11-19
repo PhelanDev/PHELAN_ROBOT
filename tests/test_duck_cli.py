@@ -29,7 +29,7 @@ def test_runtime_target_aliases_train_same_v2_checkpoint(monkeypatch, target):
 
 def test_export_all_uses_same_v2_checkpoint_and_preflights_missing(tmp_path, monkeypatch):
     import duck
-    import scripts.export_policy as exporter
+    import tools.robot.export_policy as exporter
     monkeypatch.setattr(duck, "REPO_ROOT", tmp_path)
     directory = tmp_path / "models/checkpoints"
     directory.mkdir(parents=True)
@@ -165,7 +165,7 @@ def test_pi_deployment_profiles_share_canonical_v2_policy():
 def test_duck_cli_train_v2_resume_dry_run(tmp_path, isolated_cli_env):
     """Verify duck.py train --target v2 --resume --dry-run executes cleanly."""
     duck_py = REPO_ROOT / "duck.py"
-    from scripts.train_ppo import train_ppo
+    from tools.train.train_ppo import train_ppo
     checkpoint = tmp_path / "v2_ppo.pt"
     train_ppo(model_path=REPO_ROOT / "robot/cyberduck_v2.xml", num_envs=1,
         rollout_steps=2, max_iterations=1, num_epochs=1, save_path=checkpoint, verbose=False, device="cpu")
@@ -289,7 +289,7 @@ def test_duck_cli_export_target_routing_isolated(tmp_path, isolated_cli_env):
     """Test duck.py export target routing without dirtying models/ or pipelines/."""
     duck_py = REPO_ROOT / "duck.py"
     import torch
-    from scripts.train_ppo import ActorCritic
+    from tools.train.train_ppo import ActorCritic
     from sim.env.policy_contract import observation_schema
     ckpt_path = tmp_path / "export.pt"
     model = ActorCritic(hidden_dim=16)
@@ -348,8 +348,8 @@ def test_duck_cli_export_target_routing_isolated(tmp_path, isolated_cli_env):
 
 
 def test_export_rejects_non_v2_checkpoint_identity(tmp_path):
-    from scripts.export_policy import export_onnx, prepare_target_exports
-    from scripts.train_ppo import ActorCritic
+    from tools.robot.export_policy import export_onnx, prepare_target_exports
+    from tools.train.train_ppo import ActorCritic
     import torch
 
     checkpoint_path = tmp_path / "legacy.pt"
@@ -393,10 +393,10 @@ def test_no_orphan_scripts_and_no_machine_hardcoded_paths():
     assert not (REPO_ROOT / "scripts" / "check_pollen_repo.py").exists(), "scripts/check_pollen_repo.py should be removed"
 
     checked_scripts = [
-        REPO_ROOT / "scripts" / "render_model_3d.py",
-        REPO_ROOT / "scripts" / "render_exploded_view.py",
-        REPO_ROOT / "duck_v2" / "scripts" / "export_cyberduck_v2_cad.py",
-        REPO_ROOT / "scripts" / "inspect_parts.py",
+        REPO_ROOT / "tools" / "cad" / "render_cyberduck_v2.py",
+        REPO_ROOT / "tools" / "cad" / "render_exploded_view.py",
+        REPO_ROOT / "tools" / "cad" / "export_cyberduck_v2_cad.py",
+        REPO_ROOT / "tools" / "cad" / "inspect_parts.py",
     ]
     for p in checked_scripts:
         assert p.exists(), f"Missing script {p}"

@@ -6,8 +6,8 @@ import mujoco
 import numpy as np
 
 from robot.robot_spec import MODEL_PATH, ROBOT_ONLY_MJCF_PATH, URDF_PATH
-from duck_v2.scripts.build_robot_only_mjcf import build_robot_only_mjcf
-from duck_v2.scripts import export_v2_urdf as urdf_exporter
+from tools.robot.build_robot_only_mjcf import build_robot_only_mjcf
+from tools.robot import export_v2_urdf as urdf_exporter
 
 
 def test_robot_only_mjcf_is_fresh_and_has_no_scene(tmp_path, monkeypatch):

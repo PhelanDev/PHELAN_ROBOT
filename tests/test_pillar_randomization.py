@@ -206,7 +206,7 @@ def test_runner_compute_d_min_filters_submerged_pillars():
 
 
 def test_train_ppo_smoke_with_randomize_pillars(tmp_path):
-    from scripts.train_ppo import train_ppo
+    from tools.train.train_ppo import train_ppo
 
     res = train_ppo(
         model_path=str(XML_V2),

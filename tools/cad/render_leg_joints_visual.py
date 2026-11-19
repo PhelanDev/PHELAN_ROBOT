@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 def render_leg_joints():
-    repo_root = Path(__file__).resolve().parent.parent
+    repo_root = Path(__file__).resolve().parents[2]
     xml_path = repo_root / "robot" / "cyberduck_v2.xml"
     media_dir = repo_root / "robot" / "media"
     media_dir.mkdir(parents=True, exist_ok=True)

@@ -20,7 +20,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -29,7 +29,7 @@ from sim.env.env_config import _DEFAULT_CFG, quat_to_yaw
 from sim.env.policy_contract import validate_model_identity
 from sim.env.run_parallel_sim import ParallelSimRunner, has_obstacle_contact, resolve_v2_model_path
 from sim.behaviors.nav_planner import LidarWaypointPlanner
-from scripts.export_policy import load_actor_from_checkpoint, PolicyOnnxWrapper
+from tools.robot.export_policy import load_actor_from_checkpoint, PolicyOnnxWrapper
 
 __all__ = [
     "compute_path_unstability",

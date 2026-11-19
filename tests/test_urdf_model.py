@@ -125,7 +125,7 @@ def test_urdf_mujoco_compilation():
 
 def test_urdf_head_link_com_synchronization():
     """Verify V2 head CoM and all body tensors match the canonical MJCF."""
-    from scripts.verify_model import verify_urdf_physics
+    from tools.robot.verify_model import verify_urdf_physics
     root = ET.parse(URDF_PATH).getroot()
     head = root.find("link[@name='head']")
     xyz = [float(value) for value in head.find("inertial/origin").get("xyz").split()]

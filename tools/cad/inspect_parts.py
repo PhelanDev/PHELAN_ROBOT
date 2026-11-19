@@ -2,7 +2,7 @@ from pathlib import Path
 import mujoco
 import numpy as np
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 xml_path = str(REPO_ROOT / 'robot' / 'cyberduck_v2.xml')
 model = mujoco.MjModel.from_xml_path(xml_path)
 data = mujoco.MjData(model)

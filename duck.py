@@ -139,7 +139,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 def cmd_verify(args: argparse.Namespace) -> int:
     """Verify physical kinematics consistency and run automated test suite."""
     print(">>> [1/2] Đang xác thực mô hình vật lý 3D (MJCF vs URDF)...")
-    res_physics = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "verify_model.py")])
+    res_physics = subprocess.run([sys.executable, str(REPO_ROOT / "tools" / "robot" / "verify_model.py")])
     if res_physics.returncode != 0:
         print("LỖI: Xác thực mô hình vật lý thất bại!")
         return res_physics.returncode
@@ -174,7 +174,7 @@ def cmd_view(args: argparse.Namespace) -> int:
 
     cmd = [
         sys.executable,
-        str(REPO_ROOT / "scripts" / "interactive_viewer.py"),
+        str(REPO_ROOT / "tools" / "robot" / "interactive_viewer.py"),
         "--stage",
         str(args.stage),
     ]
@@ -213,7 +213,7 @@ def cmd_train(args: argparse.Namespace) -> int:
         iters = 1 if getattr(args, "dry_run", False) else 500
     cmd = [
         sys.executable,
-        str(REPO_ROOT / "scripts" / "train_ppo.py"),
+        str(REPO_ROOT / "tools" / "train" / "train_ppo.py"),
         "--num-envs",
         str(args.envs),
         "--max-iterations",
@@ -276,7 +276,7 @@ def cmd_export(args: argparse.Namespace) -> int:
         print(f"[Export] {exc}")
         return 1
 
-    from scripts.export_policy import (
+    from tools.robot.export_policy import (
         export_onnx,
         export_esp32_headers,
         DEFAULT_ONNX_PATH as EXPORT_ONNX_PATH,

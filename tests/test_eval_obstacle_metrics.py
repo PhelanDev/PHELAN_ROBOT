@@ -11,7 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.evaluate_models_sim import (
+from tools.train.evaluate_models_sim import (
     compute_path_unstability,
     has_obstacle_contact,
     run_benchmark_scenario,

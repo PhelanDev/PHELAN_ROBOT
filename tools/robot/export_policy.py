@@ -19,7 +19,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -27,7 +27,7 @@ from hardware.dual_esp32s3.training.env_config import (
     DEFAULT_OBS_BOUNDS,
     generate_esp32_quant_header,
 )
-from scripts.train_ppo import ActorCritic
+from tools.train.train_ppo import ActorCritic
 from robot.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME
 
 DEFAULT_CHECKPOINT_PATH = REPO_ROOT / "models" / "checkpoints" / f"{CHECKPOINT_PREFIX}_ppo.pt"

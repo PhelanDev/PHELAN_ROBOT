@@ -15,7 +15,7 @@ from robot.robot_spec import (  # noqa: E402
     ROBOT_ONLY_MJCF_PATH,
     URDF_PATH,
 )
-from duck_v2.scripts.build_robot_only_mjcf import build_robot_only_mjcf  # noqa: E402
+from tools.robot.build_robot_only_mjcf import build_robot_only_mjcf  # noqa: E402
 
 
 def _values(element, attribute, default):

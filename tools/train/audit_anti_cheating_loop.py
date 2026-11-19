@@ -19,7 +19,7 @@ import traceback
 from typing import Callable, List, Tuple
 
 # Ensure repository root is in sys.path
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from tests.test_5pass_anti_cheating_audit import (
