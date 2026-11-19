@@ -15,8 +15,8 @@ tiếp cận dụng cụ hay tải trọng liên tục MG996R.
 
 ```powershell
 python -m venv .venv_cad
-.\.venv_cad\Scripts\python.exe -m pip install -r duck_v2/cad_src/requirements-lock.txt
-.\.venv_cad\Scripts\python.exe -m pytest tests/test_mg996r_cad_reference.py tests/test_v2_cad_pipeline.py tests/test_v2_mechanical_interfaces.py tests/test_v2_cad_validation_contract.py tests/test_v2_pinned_cad_sources.py tests/test_v2_dfam_sampling.py tests/test_v2_cad_artifact_receipts.py -q
+.\.venv_cad\Scripts\python.exe -m pip install -r cad/requirements-lock.txt
+.\.venv_cad\Scripts\python.exe -m pytest tests/cad -q -p no:cacheprovider
 ```
 
 `requirements.txt` khai báo phụ thuộc trực tiếp; `requirements-lock.txt` ghi lại
@@ -27,32 +27,32 @@ báo skipped nếu chạy bằng Python thiếu CAD; vì thế phải chạy l�
 
 ```powershell
 # Thư viện linh kiện: 32 STEP tham chiếu và manifest có hash
-.\.venv_cad\Scripts\python.exe -m duck_v2.cad_src.reference_export
+.\.venv_cad\Scripts\python.exe -m cad.reference_export
 
 # Tải STEP nguồn từ commit đã khóa; kiểm hash LFS trước khi lưu
-.\.venv_cad\Scripts\python.exe -m duck_v2.cad_src.purchased.fetch_sources
-.\.venv_cad\Scripts\python.exe -m duck_v2.cad_src.purchased.source_audit
+.\.venv_cad\Scripts\python.exe -m cad.purchased.fetch_sources
+.\.venv_cad\Scripts\python.exe -m cad.purchased.source_audit
 
 # Kiểm tra B-rep giao cắt thật: exit 1 nếu chưa đủ điều kiện phát hành
-.\.venv_cad\Scripts\python.exe -m duck_v2.cad_src.validation --nominal-only
-.\.venv_cad\Scripts\python.exe -m duck_v2.cad_src.validation --samples 9
+.\.venv_cad\Scripts\python.exe -m cad.validation --nominal-only
+.\.venv_cad\Scripts\python.exe -m cad.validation --samples 9
 
 # Đo mẫu thành theo normal B-rep; không chứng minh minimum toàn cục
-.\.venv_cad\Scripts\python.exe -m duck_v2.cad_src.dfam --max-samples 128
+.\.venv_cad\Scripts\python.exe -m cad.dfam --max-samples 128
 
 # Chỉ xuất bộ nháp để review, không xuất sang thư mục sản xuất chính
-.\.venv_cad\Scripts\python.exe -m duck_v2.cad_src.export_pipeline --draft
-.\.venv_cad\Scripts\python.exe -m duck_v2.cad_src.artifacts
-.\.venv_cad\Scripts\python.exe -m duck_v2.cad_src.render_drafts
+.\.venv_cad\Scripts\python.exe -m cad.export_pipeline --draft
+.\.venv_cad\Scripts\python.exe -m cad.artifacts
+.\.venv_cad\Scripts\python.exe -m cad.render_drafts
 ```
 
-`cad/verification.json` chứa các cặp giao cắt và thể tích đo được bằng
+`artifacts/cad/verification.json` chứa các cặp giao cắt và thể tích đo được bằng
 OpenCASCADE. Validator dừng trước các tư thế tiếp theo nếu nominal còn cấn;
 `sweep_completed=false` là chưa quét xong, không phải quét thành công.
-Các tư thế đứng/ngồi/nằm lấy trực tiếp từ `training/env_config.py`.
+Các tư thế đứng/ngồi/nằm lấy trực tiếp từ `sim/env/env_config.py`.
 Lấy mẫu từng trục không chứng minh an toàn trên toàn bộ không gian 8 khớp.
 
-`cad/draft/` chứa STEP từng part/lắp ráp, STL đặt lên bàn in theo heuristic,
+`artifacts/cad/draft/` chứa STEP từng part/lắp ráp, STL đặt lên bàn in theo heuristic,
 3MF xếp bản sao trên bàn 256×256 mm, ảnh review, manifest và inventory nháp.
 STL được kiểm tra watertight, thể tích dương và một solid. Hướng đặt chưa có
 phân tích support; độ dày thành tối thiểu toàn bộ chưa được đo xác nhận.

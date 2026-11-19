@@ -17,11 +17,11 @@ hiện tại, nhưng policy đó chỉ ứng với hình học và inertial đan
 
 | File | Vai trò |
 | --- | --- |
-| `duck_v2/cyberduck_v2.xml` | Nguồn MJCF chính, có robot, sàn và địa hình |
-| `duck_v2/robot_spec.py` | Danh tính, thứ tự khớp và thông số V2 dùng chung |
-| `duck_v2/cyberduck_v2_robot.xml` | MJCF robot riêng, bỏ sàn/địa hình/đèn |
-| `duck_v2/cyberduck_v2.urdf` | Asset dẫn xuất để thử URDF importer |
-| `duck_v2/meshes/` | Mesh hiển thị theo từng link |
+| `robot/cyberduck_v2.xml` | Nguồn MJCF chính, có robot, sàn và địa hình |
+| `robot/robot_spec.py` | Danh tính, thứ tự khớp và thông số V2 dùng chung |
+| `robot/cyberduck_v2_robot.xml` | MJCF robot riêng, bỏ sàn/địa hình/đèn |
+| `robot/cyberduck_v2.urdf` | Asset dẫn xuất để thử URDF importer |
+| `robot/meshes/` | Mesh hiển thị theo từng link |
 | `archive/v1/` | Tài sản lịch sử; không dùng cho training hoặc làm fallback |
 
 Giữ nguyên vị trí hai file dẫn xuất cạnh thư mục `meshes/` để đường dẫn mesh
@@ -31,9 +31,9 @@ body sẽ làm mất cấu trúc 8 khớp.
 Tạo lại asset sau mỗi lần sửa MJCF:
 
 ```powershell
-python duck_v2/scripts/build_robot_only_mjcf.py
-python duck_v2/scripts/export_v2_urdf.py
-python scripts/verify_model.py --steps 1000
+python tools/robot/build_robot_only_mjcf.py
+python tools/robot/export_v2_urdf.py
+python tools/robot/verify_model.py --steps 1000
 ```
 
 URDF giữ inertial, frame, giới hạn khớp và collision. MJCF capsule được tách thành
@@ -47,8 +47,8 @@ contact filtering, solver và armature của MJCF; phải cấu hình lại tron
    Không cài đè môi trường MuJoCo đang chạy của dự án. Python được kiểm tra trong
    phiên chuẩn hóa này chưa có `isaaclab`, `isaacsim`, `pxr`; Torch là bản CPU.
 2. **Nhập một robot.** Với Isaac Sim, thử URDF importer bằng
-   `duck_v2/cyberduck_v2.urdf`; cũng có thể thử MJCF importer với bản robot riêng
-   nếu phiên bản đã chọn hỗ trợ. Xuất USD vào `duck_v2/usd/` sau khi kiểm tra.
+   `robot/cyberduck_v2.urdf`; cũng có thể thử MJCF importer với bản robot riêng
+   nếu phiên bản đã chọn hỗ trợ. Xuất USD vào `robot/usd/` sau khi kiểm tra.
    Đặt đơn vị mét, kg, giây; Z hướng lên; robot có floating base, không cố định
    thân vào world. Kiểm tra importer xử lý đúng floating joint và link `world`.
 3. **Kiểm tra hình học và inertial sau import.** Dùng mesh cho hiển thị và
@@ -59,8 +59,8 @@ contact filtering, solver và armature của MJCF; phải cấu hình lại tron
    thứ tự từng khớp, đứng tại nominal pose, rồi thử target nhỏ và đẩy nhẹ.
    Đọc state/contact bằng sensor hoặc API của backend; không dùng ground-truth
    base velocity trong actor nếu deployment không có tín hiệu tương đương.
-5. **Port task sang Isaac Lab.** Viết environment/config riêng cho V2; ánh xạ
-   observation, action, reward, termination, reset và terrain từ code `training/`.
+5. **Port task sang Isaac Lab.** Viết environment/config riêng cho V2 trong `sim/isaac/`; ánh xạ
+   observation, action, reward, termination, reset và terrain từ code `sim/env/`.
    Runner hiện tại gọi MuJoCo trực tiếp; đổi `--device cuda` không chuyển mô
    phỏng sang Isaac hoặc làm physics chạy GPU.
 6. **Train tăng dần.** Bắt đầu 1 robot và ít environment không render, sau đó
@@ -96,13 +96,13 @@ Thứ tự khớp: `head_yaw`, `head_pitch`, `left_hip_roll`, `left_hip_pitch`,
 Actor nhận: gyro thân 3, projected gravity 3, command 3, góc khớp 8, vận tốc
 khớp 8, action trước 8, contact hai chân 2, phase sin/cos 2, range 5.
 Đối chiếu cách scale góc/vận tốc và xử lý range bằng `compute_observations`
-trong `training/env_config.py`; giữ normalizer và clip khi export. Clock nằm ở
+trong `sim/env/env_config.py`; giữ normalizer và clip khi export. Clock nằm ở
 hai vị trí cuối của block trước LiDAR. Quaternion API giữa các backend có thể
 khác thứ tự; kiểm tra rõ trước khi tính projected gravity.
 
 Action hiện là residual quanh nominal pose và có rate limit, giới hạn góc,
 torque/tốc độ. Port `scale_actions`, `clip_action_rates` và vòng điều khiển từ
-`training/run_parallel_sim.py`; không đưa trực tiếp [-1, 1] vào khớp như radian.
+`sim/env/run_parallel_sim.py`; không đưa trực tiếp [-1, 1] vào khớp như radian.
 Runner MuJoCo cập nhật PD ở physics step; nếu dùng PD tự viết trong Isaac thì
 không bật thêm một bộ drive PD khác. Bộ drive tích hợp cần được so sánh đáp ứng,
 không chỉ điền cùng kp/kd rồi giả định hai solver tương đương.

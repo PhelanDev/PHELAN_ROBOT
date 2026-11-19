@@ -6,11 +6,14 @@
 
 ---
 
-## 📁 Cấu Trúc Thư Mục `duck_v2/`
+## 📁 Cấu Trúc Thư Mục `robot/`
 
 ```text
-duck_v2/
+robot/
 ├── cyberduck_v2.xml            # Mô hình vật lý MuJoCo 8-DOF hoàn chỉnh (Giáp xám nhám & vàng đồng)
+├── cyberduck_v2_robot.xml      # MJCF robot-only dẫn xuất để nhập sang Isaac Lab
+├── cyberduck_v2.urdf           # URDF dẫn xuất từ MJCF chuẩn
+├── robot_spec.py               # Danh tính, thứ tự khớp và thông số V2 dùng chung
 ├── meshes/                     # 17 file STL lưới 3D độ nét cao (>1000 tris/file)
 │   ├── cyber_helm.stl          # Nón bảo hộ bo cong + gờ crest + tai nghe cảm biến (12.586 tris)
 │   ├── cyber_visor.stl         # Kính ngắm toàn cảnh Cyan Neon (2.588 tris)
@@ -48,14 +51,9 @@ duck_v2/
 │   ├── leg_joints_iso.png              # Sơ đồ 3 khớp chân 3D Isometric
 │   ├── leg_joints_side.png             # Sơ đồ 3 khớp chân 3D nhìn ngang
 │   └── leg_joints_front.png            # Sơ đồ 3 khớp chân 3D nhìn trực diện
-├── scripts/
-│   ├── build_cyberduck_v2.py          # Tái tạo 17 file STL vỏ giáp từ toán học tham số
-│   ├── build_cyberduck_v2_skeleton.py # Tái tạo khung xương cơ khí và 8 servo
-│   ├── render_cyberduck_v2.py         # Render bộ ảnh trực quan HD
-│   ├── render_v2_hd.py                # Render & tự động kiểm tra pixel artifact
-│   ├── render_skeleton.py             # Render bộ ảnh khung xương cơ khí
-│   └── export_cyberduck_v2_cad.py     # Xuất file CAD OBJ + MTL + ZIP
 ```
+
+Các script dựng mesh, URDF, render và xuất CAD visual đã được hợp nhất tại `tools/robot/` và `tools/cad/`. Mã nguồn CAD tham số `build123d` nằm tại `cad/`, còn các bản xuất nháp và báo cáo kiểm định sinh ra nằm tại `artifacts/cad/`.
 
 ---
 
@@ -84,17 +82,17 @@ duck_v2/
 
 ```powershell
 # 1. Mở mô hình 3D vỏ giáp ngoài hoàn chỉnh bằng Windows 3D Viewer / Blender:
-Start-Process "duck_v2/cad/cyberduck_v2_assembly.obj"
+Start-Process "robot/cad/cyberduck_v2_assembly.obj"
 
 # 2. Mở mô hình 3D bộ khung xương cơ khí & 8 servo:
-Start-Process "duck_v2/cad/cyberduck_v2_skeleton.obj"
+Start-Process "robot/cad/cyberduck_v2_skeleton.obj"
 
 # 3. Chạy trình giả lập tương tác 3D MuJoCo Viewer:
 python duck.py view --v2
 
-# 2. Mở mô hình 3D phân rã bung linh kiện (Exploded View):
-Start-Process "duck_v2/cad/cyberduck_v2_exploded.obj"
+# 4. Mở mô hình 3D phân rã bung linh kiện (Exploded View):
+Start-Process "robot/cad/cyberduck_v2_exploded.obj"
 
-# 3. Mở thư mục chứa file STL để đưa vào máy in 3D:
-explorer.exe "duck_v2\cad"
+# 5. Mở thư mục chứa file STL để đưa vào máy in 3D:
+explorer.exe "robot\cad"
 ```

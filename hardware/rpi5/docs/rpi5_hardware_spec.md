@@ -1,11 +1,11 @@
 # Tài Liệu Đặc Tả Phần Cứng: Nhánh Raspberry Pi 5 (CyberDuck V2 8-DOF)
 
 **Dự án:** Robot Bipedal 8 bậc tự do CyberDuck V2 8-DOF
-**Nhánh phần cứng:** `pipelines/rpi5_stack`  
+**Nhánh phần cứng:** `hardware/rpi5`  
 **Bộ xử lý trung tâm:** Raspberry Pi 5 (4GB RAM, Broadcom BCM2712 Quad-core Cortex-A76 @ 2.4GHz)  
 **Khối lượng mô phỏng V2 dùng chung:** **0.811 kg (811 g)**; khối lượng robot lắp thực tế cần cân lại theo BOM và nền tảng điện tử.
 
-**Chuẩn train/deploy hiện tại:** `duck_v2/cyberduck_v2.xml`, actor **42 quan sát / 8 hành động**, điều khiển **50 Hz**. Các nhánh Pi 5, Pi Zero 2 W và ESP32 dùng cùng mô hình vật lý V2; tên nhánh chỉ chọn phần cứng và cách xuất policy. Tham số chuẩn nằm trong `duck_v2/robot_spec.py`.
+**Chuẩn train/deploy hiện tại:** `robot/cyberduck_v2.xml`, actor **42 quan sát / 8 hành động**, điều khiển **50 Hz**. Các nhánh Pi 5, Pi Zero 2 W và ESP32 dùng cùng mô hình vật lý V2; tên nhánh chỉ chọn phần cứng và cách xuất policy. Tham số chuẩn nằm trong `duck_v2/robot_spec.py`.
 
 **Cơ khí MG996R:** Servo mục tiêu là **8 × MG996R**. Skeleton CAD hiện vẫn là bản concept theo micro-servo 23 × 12 × 22 mm, chưa xác nhận gá lắp MG996R. Cần thiết kế lại khoang servo, gá/horn, kiểm tra va chạm và đo khối lượng/CoM/inertia trước khi chế tạo hoặc chuyển policy sang robot thật. 811 g là số của mô hình mô phỏng hiện tại, chưa phải số cân của cấu hình MG996R đã lắp.
 
@@ -140,7 +140,7 @@ Bo mạch mở rộng I2C PCA9685 được gán 8 kênh PWM đầu tiên tương
 
 ## 5. Kiến Trúc Bộ Lọc Quán Tính IMU 3 Tầng & Mahony AHRS (Locomotion Stability)
 
-Trên nền tảng Raspberry Pi 5, tác vụ tiếp nhận và lọc cảm biến quán tính được thực thi qua lớp `MPU6050FilterReader` trong `pipelines/rpi5_stack/deployment/infer_rpi5.py`. Với 4 nhân Cortex-A76 @ 2.4GHz, hệ thống xử lý bộ lọc quán tính 3 tầng kết hợp Mahony AHRS với độ trễ cực thấp:
+Trên nền tảng Raspberry Pi 5, tác vụ tiếp nhận và lọc cảm biến quán tính được thực thi qua lớp `MPU6050FilterReader` trong `hardware/rpi5/deployment/infer_rpi5.py`. Với 4 nhân Cortex-A76 @ 2.4GHz, hệ thống xử lý bộ lọc quán tính 3 tầng kết hợp Mahony AHRS với độ trễ cực thấp:
 
 ```
     ┌────────────────────────────────────────────────────────┐
