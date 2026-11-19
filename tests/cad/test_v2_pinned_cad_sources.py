@@ -13,7 +13,7 @@ from cad.purchased.fetch_sources import COMMIT, MODELS
 from cad.purchased.source_audit import audit_sources
 
 
-SOURCES = Path(__file__).resolve().parents[2] / 'cad/purchased/sources'
+SOURCES = Path(__file__).resolve().parents[2] / 'src/cad/purchased/sources'
 
 
 @pytest.mark.parametrize('name', MODELS)

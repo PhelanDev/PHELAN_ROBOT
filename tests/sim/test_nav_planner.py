@@ -109,7 +109,7 @@ def test_parallel_sim_runner_nav_planner_integration():
     from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
         num_threads=1,
         max_episode_steps=20,
@@ -168,7 +168,7 @@ def test_nav_planner_stage0_bearing_heading_and_yaw_termination(goal_xy, yaw):
     from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=1,
         num_threads=1,
         max_episode_steps=50,

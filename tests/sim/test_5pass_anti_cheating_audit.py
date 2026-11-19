@@ -626,7 +626,7 @@ def test_audit_13_four_golden_hoops_anti_vibration():
 
     # 4. Hoop 4: Floor friction >= 1.5 & Foot slip penalty (-0.8)
     assert _DEFAULT_CFG.REWARD_WEIGHTS.get("foot_slip_penalty") == -0.8
-    xml_path = Path(__file__).resolve().parents[2] / "robot" / "cyberduck_v2.xml"
+    xml_path = Path(__file__).resolve().parents[2] / "src" / "robot" / "cyberduck_v2.xml"
     with open(xml_path, "r", encoding="utf-8") as f:
         xml_text = f.read()
     assert 'friction="1.5' in xml_text
@@ -734,7 +734,7 @@ def test_audit_14_anti_backward_and_forward_gait_lock():
     assert r_fwd_gait["feet_air_time"] > 0.0, "vx=0.05 must receive >0.0 feet_air_time"
 
     # 4. Kinematics verification
-    xml_path = Path(__file__).resolve().parents[2] / "robot" / "cyberduck_v2.xml"
+    xml_path = Path(__file__).resolve().parents[2] / "src" / "robot" / "cyberduck_v2.xml"
     model = mujoco.MjModel.from_xml_path(str(xml_path))
     data = mujoco.MjData(model)
     mujoco.mj_forward(model, data)

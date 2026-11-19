@@ -109,7 +109,7 @@ def test_status_requires_v2_checkpoint_metadata_and_both_esp32_headers(tmp_path,
         assert "123 iterations" not in output
 
     torch.save(metadata, checkpoint)
-    deployment = tmp_path / "hardware/dual_esp32s3/deployment"
+    deployment = tmp_path / "src/hardware/dual_esp32s3/deployment"
     deployment.mkdir(parents=True)
     weights = deployment / "esp32_policy_weights.h"
     config = deployment / "esp32_quant_config.h"
@@ -167,7 +167,7 @@ def test_duck_cli_train_v2_resume_dry_run(tmp_path, isolated_cli_env):
     duck_py = REPO_ROOT / "duck.py"
     from tools.train.train_ppo import train_ppo
     checkpoint = tmp_path / "v2_ppo.pt"
-    train_ppo(model_path=REPO_ROOT / "robot/cyberduck_v2.xml", num_envs=1,
+    train_ppo(model_path=REPO_ROOT / "src/robot/cyberduck_v2.xml", num_envs=1,
         rollout_steps=2, max_iterations=1, num_epochs=1, save_path=checkpoint, verbose=False, device="cpu")
     res = subprocess.run(
         [sys.executable, str(duck_py), "train", "--target", "v2", "--resume", "--dry-run",
@@ -229,7 +229,7 @@ def test_duck_cli_view_gait_and_track_headless():
 
 def test_viewer_3d_html_single_active_tab_and_this_contract():
     """Verify viewer_3d.html has single active tab and passes 'this' in showTab(tabId, this)."""
-    html_path = REPO_ROOT / "viewer_3d.html"
+    html_path = REPO_ROOT / "src" / "tools" / "viewer_3d.html"
     assert html_path.exists(), "viewer_3d.html must exist"
     html = html_path.read_text(encoding="utf-8")
 
@@ -375,7 +375,7 @@ def test_pizero2w_runner_walk_min_z_and_no_duplicate_info():
     assert "walk_min_z" in sig.parameters, "ParallelSimRunner.__init__ must have walk_min_z parameter"
     assert sig.parameters["walk_min_z"].default == 0.060
 
-    runner_src_path = REPO_ROOT / "hardware" / "pizero2w" / "training" / "run_parallel_sim.py"
+    runner_src_path = REPO_ROOT / "src" / "hardware" / "pizero2w" / "training" / "run_parallel_sim.py"
     src = runner_src_path.read_text(encoding="utf-8")
     assert "self.walk_min_z" in src, "ParallelSimRunner must store self.walk_min_z"
     assert "root_z < self.walk_min_z" in src or "root_z < getattr(self, 'walk_min_z'" in src, (
@@ -393,10 +393,10 @@ def test_no_orphan_scripts_and_no_machine_hardcoded_paths():
     assert not (REPO_ROOT / "scripts" / "check_pollen_repo.py").exists(), "scripts/check_pollen_repo.py should be removed"
 
     checked_scripts = [
-        REPO_ROOT / "tools" / "cad" / "render_cyberduck_v2.py",
-        REPO_ROOT / "tools" / "cad" / "render_exploded_view.py",
-        REPO_ROOT / "tools" / "cad" / "export_cyberduck_v2_cad.py",
-        REPO_ROOT / "tools" / "cad" / "inspect_parts.py",
+        REPO_ROOT / "src" / "tools" / "cad" / "render_cyberduck_v2.py",
+        REPO_ROOT / "src" / "tools" / "cad" / "render_exploded_view.py",
+        REPO_ROOT / "src" / "tools" / "cad" / "export_cyberduck_v2_cad.py",
+        REPO_ROOT / "src" / "tools" / "cad" / "inspect_parts.py",
     ]
     for p in checked_scripts:
         assert p.exists(), f"Missing script {p}"

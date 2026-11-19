@@ -69,7 +69,7 @@ def test_leg_pose_relaxation_requires_real_forward_progress(batch):
 
 @pytest.mark.parametrize("decimation", [5, 10, 20])
 def test_consistent_large_displacement_is_clipped_for_control_timestep(monkeypatch, decimation):
-    runner = ParallelSimRunner("robot/cyberduck_v2.xml", num_envs=1,
+    runner = ParallelSimRunner("src/robot/cyberduck_v2.xml", num_envs=1,
                                num_threads=1, decimation=decimation)
     try:
         d = runner.datas[0]
@@ -91,7 +91,7 @@ def test_consistent_large_displacement_is_clipped_for_control_timestep(monkeypat
 
 
 def test_turning_acceleration_keeps_world_progress_and_body_forward_gates_separate(monkeypatch):
-    runner = ParallelSimRunner("robot/cyberduck_v2.xml", num_envs=1, num_threads=1)
+    runner = ParallelSimRunner("src/robot/cyberduck_v2.xml", num_envs=1, num_threads=1)
     try:
         d = runner.datas[0]
         runner.commands[0] = [0.2, 0.0, 0.2]  # allow the scripted turn at stage 0
@@ -116,7 +116,7 @@ def test_turning_acceleration_keeps_world_progress_and_body_forward_gates_separa
 
 @pytest.mark.parametrize("fast", [False, True])
 def test_terminal_fall_penalty_is_in_weighted_reward_snapshot(monkeypatch, fast):
-    runner = ParallelSimRunner("robot/cyberduck_v2.xml", num_envs=1, num_threads=1)
+    runner = ParallelSimRunner("src/robot/cyberduck_v2.xml", num_envs=1, num_threads=1)
     try:
         d = runner.datas[0]
 

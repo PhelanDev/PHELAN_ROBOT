@@ -33,7 +33,7 @@ def test_audit_cross_target_resume_and_overwrite_rejected(tmp_path):
     path = tmp_path / "policy_ppo.pt"
     kwargs = dict(num_envs=1, rollout_steps=2, max_iterations=1, num_epochs=1,
                   save_path=path, device="cpu", verbose=False, terrain_mode="flat")
-    train_ppo(model_path=REPO_ROOT / "robot/cyberduck_v2.xml", **kwargs)
+    train_ppo(model_path=REPO_ROOT / "src/robot/cyberduck_v2.xml", **kwargs)
     retired = torch.load(path, map_location="cpu", weights_only=False)
     retired["model_name"] = "microduck_rpi5_8dof.xml"
     retired["model_path"] = "pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml"
@@ -41,7 +41,7 @@ def test_audit_cross_target_resume_and_overwrite_rejected(tmp_path):
     before = {p.name: p.read_bytes() for p in tmp_path.glob("*.pt")}
     for resume in (True, False):
         with pytest.raises(ValueError, match="identity|model"):
-            train_ppo(model_path=REPO_ROOT / "robot/cyberduck_v2.xml", resume=resume, **kwargs)
+            train_ppo(model_path=REPO_ROOT / "src/robot/cyberduck_v2.xml", resume=resume, **kwargs)
         assert before == {p.name: p.read_bytes() for p in tmp_path.glob("*.pt")}
 
 
@@ -284,7 +284,7 @@ def test_ppo_training_dry_run_api(tmp_path):
 
 def test_ppo_training_cli_dry_run(tmp_path):
     """Test invoking tools/train/train_ppo.py via CLI with --dry-run flag."""
-    script_path = REPO_ROOT / "tools" / "train" / "train_ppo.py"
+    script_path = REPO_ROOT / "src" / "tools" / "train" / "train_ppo.py"
     assert script_path.exists(), f"Missing script: {script_path}"
 
     ckpt_path = tmp_path / "cli_checkpoint.pt"
@@ -313,7 +313,7 @@ def test_ppo_training_cli_dry_run(tmp_path):
 
 def test_ppo_training_cli_dry_run_iters_alias(tmp_path):
     """Test train_ppo.py --iters alias and 2-iteration dry-run execution."""
-    script_path = REPO_ROOT / "tools" / "train" / "train_ppo.py"
+    script_path = REPO_ROOT / "src" / "tools" / "train" / "train_ppo.py"
     ckpt_path = tmp_path / "cli_checkpoint_2iters.pt"
     cmd = [
         sys.executable,
@@ -415,7 +415,7 @@ def test_export_esp32_c_headers_syntax_and_compilation(tmp_path):
     model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256)
     model.observation_schema = observation_schema(42, True, 0.02)
     model.model_name = "cyberduck_v2.xml"
-    model.model_path = "robot/cyberduck_v2.xml"
+    model.model_path = "src/robot/cyberduck_v2.xml"
 
     weights_header_path = tmp_path / "esp32_policy_weights.h"
     config_header_path = tmp_path / "esp32_quant_config.h"
@@ -511,8 +511,8 @@ int main() {{
 
 def test_cli_train_and_export_end_to_end(tmp_path):
     """Verify full CLI flow from PPO dry-run checkpoint generation to RPi5 ONNX and ESP32 headers export."""
-    train_script = REPO_ROOT / "tools" / "train" / "train_ppo.py"
-    export_script = REPO_ROOT / "tools" / "robot" / "export_policy.py"
+    train_script = REPO_ROOT / "src" / "tools" / "train" / "train_ppo.py"
+    export_script = REPO_ROOT / "src" / "tools" / "robot" / "export_policy.py"
 
     ckpt_path = tmp_path / "pipeline_test.pt"
     best_path = tmp_path / "pipeline_test_best.pt"
@@ -587,7 +587,7 @@ def test_train_ppo_resume_preserves_timesteps_iterations_and_target_latest(tmp_p
     save_p = tmp_path / "cyberduck_v2_ppo.pt"
     best_p = tmp_path / "cyberduck_v2_best.pt"
     res1 = train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2, max_iterations=1, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         save_path=str(save_p), best_save_path=str(best_p), device="cpu", log_interval=1, save_interval=1,
     )
@@ -596,7 +596,7 @@ def test_train_ppo_resume_preserves_timesteps_iterations_and_target_latest(tmp_p
     assert not (tmp_path / "microduck_latest.pt").exists()
 
     res2 = train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2, max_iterations=1, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         save_path=str(save_p), best_save_path=str(best_p), resume=True, device="cpu", log_interval=1, save_interval=1,
     )
@@ -640,7 +640,7 @@ def test_runner_mean_distance_y_and_fast_rollout_parity():
     """Verify runner.get_mean_distance_y() and fast rollout step parity against standard step."""
     from sim.env.run_parallel_sim import ParallelSimRunner
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=4,
         decimation=2,
     )
@@ -672,7 +672,7 @@ def test_best_save_path_strips_ppo_suffix_consistently(tmp_path, monkeypatch):
 
     save_p = tmp_path / "cyberduck_v2_ppo.pt"
     res = train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
         rollout_steps=4,
         max_iterations=1,
@@ -724,7 +724,7 @@ def test_critic_value_loss_updates_across_large_return_gap(monkeypatch, tmp_path
     monkeypatch.setattr(sim_mod.ParallelSimRunner, "step_arrays", high_reward_step)
     save_p = tmp_path / "critic_ppo.pt"
     train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=4,
         rollout_steps=8,
         mini_batch_size=8,
@@ -756,7 +756,7 @@ def test_ppo_adaptive_kl_and_entropy_decay(tmp_path):
     from tools.train.train_ppo import train_ppo
 
     res = train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=4,
         rollout_steps=8,
         mini_batch_size=8,
@@ -783,7 +783,7 @@ def test_ppo_target_kl_zero_disables_adaptive_lr_and_zero_entropy_stays_zero(tmp
     from tools.train.train_ppo import train_ppo
 
     res = train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=4,
         rollout_steps=4,
         mini_batch_size=4,
@@ -807,7 +807,7 @@ def test_resume_restores_lr_and_handles_legacy_checkpoint_without_lr(tmp_path):
 
     save_p = tmp_path / "resume_lr_ppo.pt"
     train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
         rollout_steps=4,
         mini_batch_size=4,
@@ -825,7 +825,7 @@ def test_resume_restores_lr_and_handles_legacy_checkpoint_without_lr(tmp_path):
     torch.save(ckpt, str(save_p))
 
     res_legacy = train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
         rollout_steps=4,
         mini_batch_size=4,
@@ -864,7 +864,7 @@ def test_stage_promotion_best_ckpt_uses_rollout_stage_and_resets_baseline(monkey
     save_p = tmp_path / "stage_ppo.pt"
     best_p = tmp_path / "stage_best.pt"
     res1 = ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
     )
@@ -878,7 +878,7 @@ def test_stage_promotion_best_ckpt_uses_rollout_stage_and_resets_baseline(monkey
     reward_per_iter["val"] = 1.1
     dist_per_iter["val"] = 0.7
     ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, resume=True, save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
     )
@@ -906,7 +906,7 @@ def test_collapsed_promoted_stage_rollout_does_not_overwrite_best_ckpt(monkeypat
 
     # Seed valid Stage 0 best and Stage 1 resume ckpt
     ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
     )
@@ -924,7 +924,7 @@ def test_collapsed_promoted_stage_rollout_does_not_overwrite_best_ckpt(monkeypat
     monkeypatch.setattr(sim_mod.ParallelSimRunner, "get_mean_distance_x", lambda self: -0.2)
     monkeypatch.setattr(ppo_mod, "next_stage", lambda **kw: (1, 0))
     ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, resume=True, save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
     )
@@ -942,7 +942,7 @@ def test_resume_stage1_with_legacy_stage0_best_ckpt_unlocks_stage1_best(monkeypa
     save_p = tmp_path / "legacy_stage_ppo.pt"
     best_p = tmp_path / "legacy_stage_best.pt"
     ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
     )
@@ -972,7 +972,7 @@ def test_resume_stage1_with_legacy_stage0_best_ckpt_unlocks_stage1_best(monkeypa
     monkeypatch.setattr(sim_mod.ParallelSimRunner, "get_mean_distance_x", lambda self: 0.6)
     monkeypatch.setattr(ppo_mod, "next_stage", lambda **kw: (1, 0))
     ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, resume=True, save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
     )
@@ -989,7 +989,7 @@ def test_stage_promotion_caps_learning_rate_to_base_lr(monkeypatch, tmp_path):
 
     save_p = tmp_path / "lr_cap_ppo.pt"
     res = ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, learning_rate=2e-4, target_kl=0.015,
         save_path=str(save_p), device="cpu",
@@ -1009,7 +1009,7 @@ def test_stair_stage_promotion_caps_learning_rate_and_labels_best_ckpt(monkeypat
     save_p = tmp_path / "stairs_ppo.pt"
     best_p = tmp_path / "stairs_best.pt"
     res = ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, learning_rate=2e-4, terrain_mode="stairs",
         save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
@@ -1034,7 +1034,7 @@ def test_corrupted_best_checkpoint_does_not_crash(tmp_path):
     best_p.write_text("corrupted non-pickle data")
 
     res = ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, save_path=str(save_p), best_save_path=str(best_p), device="cpu",
     )
@@ -1049,7 +1049,7 @@ def test_transfer_load_checkpoint_skips_velocity_warmup_and_iter1_best_lockout(m
 
     seed_save_p = tmp_path / "seed_transfer_ppo.pt"
     ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
         rollout_steps=4,
         mini_batch_size=4,
@@ -1091,7 +1091,7 @@ def test_transfer_load_checkpoint_skips_velocity_warmup_and_iter1_best_lockout(m
     transfer_best_p = tmp_path / "transfer_best.pt"
 
     ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         load_checkpoint=str(seed_save_p),
         num_envs=2,
         rollout_steps=4,
@@ -1122,7 +1122,7 @@ def test_transfer_load_checkpoint_warms_up_initial_lr_without_adam_shock(monkeyp
 
     seed_p = tmp_path / "seed_no_lr_ppo.pt"
     ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
         rollout_steps=4,
         mini_batch_size=4,
@@ -1150,7 +1150,7 @@ def test_transfer_load_checkpoint_warms_up_initial_lr_without_adam_shock(monkeyp
     best_p = tmp_path / "warmup_best.pt"
 
     res = ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         load_checkpoint=str(seed_p),
         learning_rate=3e-4,
         target_kl=0.015,
@@ -1198,7 +1198,7 @@ def test_missing_load_checkpoint_falls_back_to_scratch_warmup(monkeypatch, tmp_p
     monkeypatch.setattr(sim_mod.ParallelSimRunner, "step_arrays", scripted_step)
 
     res = ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         load_checkpoint=str(missing_ckpt),
         learning_rate=3e-4,
         target_kl=0.015,
@@ -1264,7 +1264,7 @@ def test_parallel_sim_runner_privileged_obs_and_terminal_critic_obs():
     from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=4,
         decimation=10,
         stage=1,
@@ -1342,7 +1342,7 @@ def test_legacy_42dim_checkpoint_transfer_to_asymmetric_critic(tmp_path):
     legacy_ckpt_path = tmp_path / "legacy_42dim_ckpt.pt"
     legacy_payload = {
         "model_name": "cyberduck_v2.xml",
-        "model_path": "robot/cyberduck_v2.xml",
+        "model_path": "src/robot/cyberduck_v2.xml",
         "model_state_dict": legacy_model.state_dict(),
         "actor_state_dict": legacy_model.actor.state_dict(),
         "critic_state_dict": legacy_model.critic.state_dict(),
@@ -1359,7 +1359,7 @@ def test_legacy_42dim_checkpoint_transfer_to_asymmetric_critic(tmp_path):
     save_path = tmp_path / "asym_trained.pt"
     best_save_path = tmp_path / "asym_best.pt"
     res = train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
         rollout_steps=4,
         max_iterations=1,
@@ -1397,7 +1397,7 @@ def test_scratch_run_ignores_stale_higher_stage_best_checkpoint(tmp_path, monkey
     torch.save(stale_best, str(best_path))
 
     res = train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         start_stage=0,
         num_envs=2,
         rollout_steps=8,
@@ -1431,7 +1431,7 @@ def test_evaluate_deterministic_rollout_returns_metrics_and_logs(tmp_path, capsy
     det_dist_x, det_rew = evaluate_deterministic_rollout(
         model=model,
         obs_rms=obs_rms,
-        model_path=str(REPO_ROOT / "robot" / "cyberduck_v2.xml"),
+        model_path=str(REPO_ROOT / "src" / "robot" / "cyberduck_v2.xml"),
         stage=0,
         terrain_mode="hurdles",
         max_steps=40,
@@ -1442,7 +1442,7 @@ def test_evaluate_deterministic_rollout_returns_metrics_and_logs(tmp_path, capsy
 
     capsys.readouterr()
     res = train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         start_stage=0,
         num_envs=1,
         rollout_steps=64,
@@ -1515,7 +1515,7 @@ def test_get_privileged_obs_vectorized_subsets_and_eval_runner_reuse(tmp_path):
 
     # 1. Privileged obs with hurdles
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=4,
         decimation=10,
         stage=1,
@@ -1540,7 +1540,7 @@ def test_get_privileged_obs_vectorized_subsets_and_eval_runner_reuse(tmp_path):
 
     # 2. Privileged obs on stairs terrain
     stairs_runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
         decimation=10,
         stage=1,
@@ -1567,7 +1567,7 @@ def test_get_privileged_obs_vectorized_subsets_and_eval_runner_reuse(tmp_path):
 
     # 3. evaluate_deterministic_rollout with reused eval_runner
     eval_r = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=1,
         decimation=10,
         stage=0,
@@ -1579,7 +1579,7 @@ def test_get_privileged_obs_vectorized_subsets_and_eval_runner_reuse(tmp_path):
         det_dist_x, det_rew = evaluate_deterministic_rollout(
             model=model,
             obs_rms=obs_rms,
-            model_path="robot/cyberduck_v2.xml",
+            model_path="src/robot/cyberduck_v2.xml",
             stage=1,
             terrain_mode="hurdles",
             stand_still=True,
@@ -1622,7 +1622,7 @@ def test_transfer_preserves_squash_actions_and_pre_optimizer_parity(monkeypatch,
         "critic_obs_dim": 53,
         "action_dim": act_dim,
         "hidden_dim": hidden_dim,
-        "model_path": "robot/cyberduck_v2.xml",
+        "model_path": "src/robot/cyberduck_v2.xml",
         "model_name": "cyberduck_v2.xml",
         "observation_schema": observation_schema(obs_dim, True, 0.02),
         "obs_rms": src_rms.state_dict(),
@@ -1645,7 +1645,7 @@ def test_transfer_preserves_squash_actions_and_pre_optimizer_parity(monkeypatch,
 
     dst_path = tmp_path / f"dst_squash_{source_squash}.pt"
     ppo_mod.train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=1,
         rollout_steps=2,
         max_iterations=1,
@@ -1681,7 +1681,7 @@ def test_transfer_bc_and_legacy_squash_metadata_and_invalid_rejected(tmp_path):
     legacy_path = tmp_path / "legacy_no_squash.pt"
     torch.save({
         "model_name": "cyberduck_v2.xml",
-        "model_path": "robot/cyberduck_v2.xml",
+        "model_path": "src/robot/cyberduck_v2.xml",
         "model_state_dict": legacy.state_dict(),
         "obs_dim": 42,
         "critic_obs_dim": 53,
@@ -1692,7 +1692,7 @@ def test_transfer_bc_and_legacy_squash_metadata_and_invalid_rejected(tmp_path):
     out_fail = tmp_path / "should_not_exist.pt"
     with pytest.raises(ValueError, match="squash"):
         train_ppo(
-            model_path="robot/cyberduck_v2.xml",
+            model_path="src/robot/cyberduck_v2.xml",
             num_envs=1,
             rollout_steps=2,
             max_iterations=1,
@@ -1710,7 +1710,7 @@ def test_transfer_bc_and_legacy_squash_metadata_and_invalid_rejected(tmp_path):
     torch.save(bad_ckpt, bad_path)
     with pytest.raises(ValueError, match="boolean|squash"):
         train_ppo(
-            model_path="robot/cyberduck_v2.xml",
+            model_path="src/robot/cyberduck_v2.xml",
             num_envs=1,
             rollout_steps=2,
             max_iterations=1,
@@ -1723,7 +1723,7 @@ def test_transfer_bc_and_legacy_squash_metadata_and_invalid_rejected(tmp_path):
     from tools.robot.export_policy import load_actor_from_checkpoint
     with pytest.raises(ValueError, match="boolean"):
         load_actor_from_checkpoint(bad_path)
-    help_proc = subprocess.run([sys.executable, str(REPO_ROOT / "tools/train/train_ppo.py"), "--help"], capture_output=True, text=True, check=False)
+    help_proc = subprocess.run([sys.executable, str(REPO_ROOT / "src/tools/train/train_ppo.py"), "--help"], capture_output=True, text=True, check=False)
     assert help_proc.returncode == 0 and "--no-squash-actions" in help_proc.stdout
 
 

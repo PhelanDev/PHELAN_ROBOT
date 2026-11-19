@@ -90,7 +90,7 @@ def test_replay_buffer_wraparound_and_train_sac_smoke(tmp_path: Path):
     # Smoke train_sac run
     ckpt_out = tmp_path / "train_smoke.pt"
     res = train_sac(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
         total_steps=16,
         warmup_steps=8,
@@ -108,7 +108,7 @@ def test_train_sac_handles_timeouts_and_runner_cleanup(tmp_path: Path, monkeypat
     # Verify configurable target_entropy
     ckpt_out = tmp_path / "custom_entropy.pt"
     res = train_sac(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
         total_steps=16,
         warmup_steps=8,
@@ -165,7 +165,7 @@ def test_train_sac_handles_timeouts_and_runner_cleanup(tmp_path: Path, monkeypat
 
     with pytest.raises(RuntimeError, match="Sim crash simulation"):
         train_sac(
-            model_path="robot/cyberduck_v2.xml",
+            model_path="src/robot/cyberduck_v2.xml",
             num_envs=2,
             total_steps=16,
             warmup_steps=8,
@@ -179,7 +179,7 @@ def test_train_sac_cli_runs_directly_from_repo_root():
     import sys
 
     proc = subprocess.run(
-        [sys.executable, "tools/train/train_sac.py", "--help"],
+        [sys.executable, "src/tools/train/train_sac.py", "--help"],
         capture_output=True,
         text=True,
         check=False,
@@ -205,7 +205,7 @@ def test_sac_checkpoint_roundtrip_consumers_and_esp32_reject(tmp_path: Path, hid
     schema = observation_schema(obs_dim, True, 0.02)
     save_sac_checkpoint(ckpt_path, actor, log_alpha, obs_dim, act_dim, hidden_dim=hidden_dim)
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    ckpt["model_path"] = "robot/cyberduck_v2.xml"
+    ckpt["model_path"] = "src/robot/cyberduck_v2.xml"
     ckpt["model_name"] = "cyberduck_v2.xml"
     ckpt["observation_schema"] = schema
     torch.save(ckpt, ckpt_path)
@@ -240,7 +240,7 @@ def test_sac_checkpoint_roundtrip_consumers_and_esp32_reject(tmp_path: Path, hid
     assert not esp_dir.exists()
     from tools.robot.export_policy import prepare_target_exports
     esp_sac_ckpt = tmp_path / f"sac_esp_{hidden_dim}.pt"
-    ckpt["model_path"] = "robot/cyberduck_v2.xml"
+    ckpt["model_path"] = "src/robot/cyberduck_v2.xml"
     ckpt["model_name"] = "microduck_esp32_8dof.xml"
     torch.save(ckpt, esp_sac_ckpt)
     with pytest.raises(ValueError, match="identity"):

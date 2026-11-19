@@ -32,7 +32,7 @@ def _reward_inputs(**overrides):
 
 def test_cyberduck_v2_foot_touch_sensors_and_double_support_dwell():
     """CyberDuck V2 standing on flat floor must report touch > 0.1 N on both feet and accumulate dwell."""
-    runner = ParallelSimRunner(model_path="robot/cyberduck_v2.xml", num_envs=2, stage=0)
+    runner = ParallelSimRunner(model_path="src/robot/cyberduck_v2.xml", num_envs=2, stage=0)
     try:
         runner.reset()
         actions = np.zeros((2, 8), dtype=np.float32)
@@ -123,7 +123,7 @@ def test_gait_sync_blocks_in_place_bobbing_airborne_and_dwell():
 
 def test_stage0_flat_lidar_filters_floor_hits():
     """Pitching forward on flat floor must filter phantom floor strikes; inactive obstacles report d_min=None."""
-    runner = ParallelSimRunner(model_path="robot/cyberduck_v2.xml", num_envs=2, stage=0, terrain_mode="hurdles")
+    runner = ParallelSimRunner(model_path="src/robot/cyberduck_v2.xml", num_envs=2, stage=0, terrain_mode="hurdles")
     try:
         runner.reset()
         theta = np.deg2rad(15.0)

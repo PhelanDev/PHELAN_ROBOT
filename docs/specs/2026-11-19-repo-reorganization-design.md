@@ -227,3 +227,12 @@ e:\Phelan_Duck/
    python tools/robot/verify_model.py --steps 1000
    ```
 5. Kiểm tra `git status` xác nhận cây thư mục sạch, không còn thư mục cũ `duck_v2/`, `training/`, `pipelines/`, `scripts/` và không có tệp trong `artifacts/` bị theo dõi bởi Git.
+
+## 7. Phần bổ sung: Gom tầng `src/` và làm sạch mặt tiền gốc (2026-11-19)
+
+Sau khi nghiệm thu bố cục 5 trụ cột ở gốc, người dùng tiếp tục yêu cầu làm gọn tối đa thư mục gốc của repository:
+
+- Đưa 5 trụ cột `robot/`, `cad/`, `sim/`, `hardware/`, `tools/` vào dưới `src/`, đồng thời giữ nguyên tên import Python (`robot.*`, `cad.*`, `sim.*`, `hardware.*`, `tools.*`) bằng cách đưa `src/` vào `sys.path` trong `duck.py`, `tests/conftest.py` và các script chạy trực tiếp.
+- Chuyển `viewer_3d.html` sang `src/tools/viewer_3d.html`, cập nhật đường dẫn ảnh tương đối `../robot/media/*.png` và lệnh `duck.py view --web`.
+- Dồn `his.md`, `plans/`, `archive/v1/` về dưới `docs/` (`docs/his.md`, `docs/plans/`, `docs/archive/v1/`) và xóa các bản sao trùng trong `docs/superpowers/`.
+- Cập nhật `tests/robot/test_repo_layout_contract.py` kiểm tra toàn bộ cấu trúc mặt tiền sạch `src/`, `tests/`, `models/`, `docs/`, `artifacts/` cùng `duck.py`, `README.md`, `LICENSE`, `.gitignore`.

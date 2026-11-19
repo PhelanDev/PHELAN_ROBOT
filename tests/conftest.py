@@ -6,14 +6,15 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+SRC_ROOT = REPO_ROOT / "src"
 TESTS_ROOT = Path(__file__).resolve().parent
-for _p in (str(REPO_ROOT), str(TESTS_ROOT)):
+for _p in (str(SRC_ROOT), str(REPO_ROOT), str(TESTS_ROOT)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
 
 def make_isolated_env(tmp_path: Path, base_env: dict = None) -> dict:
-    """Create isolated subprocess environment redirecting checkpoint writes away from tracked models/ and hardware/."""
+    """Create isolated subprocess environment redirecting checkpoint writes away from tracked models/ and src/hardware/."""
     site_file = tmp_path / "sitecustomize.py"
     repo_root = REPO_ROOT.resolve().as_posix()
     tmp_dir = tmp_path.resolve().as_posix()
@@ -26,7 +27,7 @@ try:
     _orig = torch.save
     _repo_root = Path(r"{repo_root}").resolve()
     _models_dir = _repo_root / "models"
-    _hardware_dir = _repo_root / "hardware"
+    _hardware_dir = _repo_root / "src" / "hardware"
     _tmp_dir = Path(r"{tmp_dir}").resolve()
 
     def _safe_save(obj, f, *a, **k):
@@ -67,8 +68,12 @@ except Exception:
     site_file.write_text(site_code, encoding="utf-8")
 
     env = dict(base_env if base_env is not None else os.environ)
+    src_root_str = str(SRC_ROOT.resolve())
     existing_py_path = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = f"{tmp_path}{os.pathsep}{existing_py_path}" if existing_py_path else str(tmp_path)
+    parts = [str(tmp_path), src_root_str, str(REPO_ROOT.resolve())]
+    if existing_py_path:
+        parts.append(existing_py_path)
+    env["PYTHONPATH"] = os.pathsep.join(parts)
     env["PYTHONIOENCODING"] = "utf-8"
     return env
 

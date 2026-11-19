@@ -337,7 +337,7 @@ def test_cli_benchmark_both_stacks():
     res_rpi5 = subprocess.run(
         [
             sys.executable,
-            "hardware/rpi5/training/run_parallel_sim.py",
+            "src/hardware/rpi5/training/run_parallel_sim.py",
             "--num_envs",
             "4",
             "--steps",
@@ -355,7 +355,7 @@ def test_cli_benchmark_both_stacks():
     res_esp32 = subprocess.run(
         [
             sys.executable,
-            "hardware/dual_esp32s3/training/run_parallel_sim.py",
+            "src/hardware/dual_esp32s3/training/run_parallel_sim.py",
             "--num_envs",
             "4",
             "--steps",

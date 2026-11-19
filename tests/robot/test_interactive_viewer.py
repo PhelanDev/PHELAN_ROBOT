@@ -23,7 +23,7 @@ if PROJECT_ROOT not in sys.path:
 
 def test_viewer_and_docs_exist():
     """Step 1 baseline test as specified in task-6-brief.md."""
-    assert os.path.exists(os.path.join(PROJECT_ROOT, "tools", "robot", "interactive_viewer.py"))
+    assert os.path.exists(os.path.join(PROJECT_ROOT, "src", "tools", "robot", "interactive_viewer.py"))
     assert os.path.exists(os.path.join(PROJECT_ROOT, "README.md"))
     with open(os.path.join(PROJECT_ROOT, "README.md"), "r", encoding="utf-8") as f:
         content = f.read()
@@ -125,7 +125,7 @@ def test_interactive_viewer_headless_simulation():
     from tools.robot.interactive_viewer import run_simulation_headless
 
     metrics = run_simulation_headless(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         pose="stand",
         duration=0.1,
         dt=0.002,
@@ -142,7 +142,7 @@ def test_interactive_viewer_gait_demo_headless():
     from tools.robot.interactive_viewer import run_simulation_headless
 
     metrics = run_simulation_headless(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         pose="stand",
         duration=0.1,
         gait_demo=True,
@@ -172,7 +172,7 @@ def test_reset_last_actions_fix():
     from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=4,
         decimation=5,
     )
@@ -238,7 +238,7 @@ def test_interactive_viewer_cli_simulation(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda prompt="": next(commands))
 
     # Should run and exit without raising an exception
-    run_interactive_cli(model_path="robot/cyberduck_v2.xml", dt=0.005)
+    run_interactive_cli(model_path="src/robot/cyberduck_v2.xml", dt=0.005)
 
 
 def test_configure_viewer_camera():
@@ -312,7 +312,7 @@ def test_interactive_viewer_policy_headless_stability(tmp_path):
     }, ckpt_path)
 
     metrics = run_simulation_headless(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         policy_path=ckpt_path,
         duration=0.5,
         dt=0.002,
@@ -339,7 +339,7 @@ def test_interactive_viewer_fallback_and_stairs_handling(monkeypatch):
     assert sig_cv.parameters["stairs"].default is False
 
     # 2. Check source of run_opencv_viewer applies stair stage
-    src_path = Path(PROJECT_ROOT) / "tools" / "robot" / "interactive_viewer.py"
+    src_path = Path(PROJECT_ROOT) / "src" / "tools" / "robot" / "interactive_viewer.py"
     src = src_path.read_text(encoding="utf-8")
     assert "if stairs and apply_stair_stage is not None:" in src, (
         "run_opencv_viewer must apply stair stage when stairs=True"
@@ -368,7 +368,7 @@ def test_interactive_viewer_fallback_and_stairs_handling(monkeypatch):
     monkeypatch.setattr(mujoco.viewer, "launch_passive", mock_launch_passive)
 
     run_interactive_viewer(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         pose="squat",
         duration=0.01,
         stage=2,
@@ -393,7 +393,7 @@ def test_viewer_stage0_applies_wide_pillars_submerges_stairs_and_spawns_native_h
     from tools.robot.interactive_viewer import run_simulation_headless
     from sim.env.terrain_curriculum import apply_stage
 
-    model_rel = "robot/cyberduck_v2.xml"
+    model_rel = "src/robot/cyberduck_v2.xml"
     model_abs = os.path.join(PROJECT_ROOT, model_rel)
     ref_model = mujoco.MjModel.from_xml_path(model_abs)
     apply_stage(ref_model, 0)
@@ -434,7 +434,7 @@ def test_extract_viewer_observation_filters_floor_lidar_hits():
     from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
-        model_path=os.path.join(PROJECT_ROOT, "robot", "cyberduck_v2.xml"),
+        model_path=os.path.join(PROJECT_ROOT, "src", "robot", "cyberduck_v2.xml"),
         num_envs=1,
         stage=0,
         terrain_mode="hurdles",
@@ -512,7 +512,7 @@ def test_run_opencv_viewer_handles_getwindowproperty_error_and_passes_stairs(mon
 
     # Should exit gracefully without raising DummyCv2Error when [X] closes the window
     iv.run_opencv_viewer(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         duration=1.0,
         stage=0,
         dt=0.002,

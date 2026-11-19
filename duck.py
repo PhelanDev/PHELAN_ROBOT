@@ -17,10 +17,11 @@ import webbrowser
 from pathlib import Path
 from typing import Optional
 
-from robot.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME, MODEL_PATH, REPO_ROOT
+SRC_ROOT = Path(__file__).resolve().parent / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+from robot.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME, MODEL_PATH, REPO_ROOT
 from sim.env.policy_contract import CHECKPOINT_PREFIXES, resolve_target_checkpoints
 
 # Safe UTF-8 console output for Windows CLI
@@ -91,7 +92,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     # 4. Hardware Deployment Targets
     onnx_file = DEFAULT_ONNX_PATH
-    esp32_h = REPO_ROOT / "hardware" / "dual_esp32s3" / "deployment" / "esp32_policy_weights.h"
+    esp32_h = REPO_ROOT / "src" / "hardware" / "dual_esp32s3" / "deployment" / "esp32_policy_weights.h"
     esp32_config = esp32_h.with_name("esp32_quant_config.h")
     import re
     esp32_ready = True
@@ -116,8 +117,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(f"  • ESP32-S3 INT8 C-Header: {esp32_status} ({esp32_h.name} + {esp32_config.name})")
 
     # 5. Canonical V2 asset and status
-    v2_cad = REPO_ROOT / "robot" / "cad" / "cyberduck_v2_assembly.obj"
-    v2_zip = REPO_ROOT / "robot" / "cad" / "cyberduck_v2_stl_parts.zip"
+    v2_cad = REPO_ROOT / "src" / "robot" / "cad" / "cyberduck_v2_assembly.obj"
+    v2_zip = REPO_ROOT / "src" / "robot" / "cad" / "cyberduck_v2_stl_parts.zip"
     print("\n[5] ROBOT CANONICAL CYBERDUCK V2 PRO")
     print(f"  • Mô hình vật lý MuJoCo : {'[SẴN SÀNG]' if MODEL_PATH.exists() else '[CHƯA TẠO]'} ({MODEL_NAME})")
     print(f"  • Checkpoint tốt nhất   : {checkpoint_status} ({best_ckpt.name})")
@@ -139,7 +140,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 def cmd_verify(args: argparse.Namespace) -> int:
     """Verify physical kinematics consistency and run automated test suite."""
     print(">>> [1/2] Đang xác thực mô hình vật lý 3D (MJCF vs URDF)...")
-    res_physics = subprocess.run([sys.executable, str(REPO_ROOT / "tools" / "robot" / "verify_model.py")])
+    res_physics = subprocess.run([sys.executable, str(REPO_ROOT / "src" / "tools" / "robot" / "verify_model.py")])
     if res_physics.returncode != 0:
         print("LỖI: Xác thực mô hình vật lý thất bại!")
         return res_physics.returncode
@@ -167,14 +168,14 @@ def cmd_verify(args: argparse.Namespace) -> int:
 def cmd_view(args: argparse.Namespace) -> int:
     """Launch interactive 3D visualizer or open web dashboard."""
     if args.web:
-        web_file = REPO_ROOT / "viewer_3d.html"
+        web_file = REPO_ROOT / "src" / "tools" / "viewer_3d.html"
         print(f">>> Đang mở giao diện 3D Web Dashboard: {web_file}")
         webbrowser.open(f"file://{web_file.resolve()}")
         return 0
 
     cmd = [
         sys.executable,
-        str(REPO_ROOT / "tools" / "robot" / "interactive_viewer.py"),
+        str(REPO_ROOT / "src" / "tools" / "robot" / "interactive_viewer.py"),
         "--stage",
         str(args.stage),
     ]
@@ -213,7 +214,7 @@ def cmd_train(args: argparse.Namespace) -> int:
         iters = 1 if getattr(args, "dry_run", False) else 500
     cmd = [
         sys.executable,
-        str(REPO_ROOT / "tools" / "train" / "train_ppo.py"),
+        str(REPO_ROOT / "src" / "tools" / "train" / "train_ppo.py"),
         "--num-envs",
         str(args.envs),
         "--max-iterations",

@@ -97,7 +97,7 @@ def test_pizero2w_infer_cli(tmp_path):
     """Verify CLI flags --mock, --mock-pca, --freq, --rate work properly."""
     import subprocess
 
-    script_path = REPO_ROOT / "hardware" / "pizero2w" / "deployment" / "infer_pizero2w.py"
+    script_path = REPO_ROOT / "src" / "hardware" / "pizero2w" / "deployment" / "infer_pizero2w.py"
     assert script_path.exists(), f"Missing script: {script_path}"
     import json
     from sim.env.policy_contract import observation_schema

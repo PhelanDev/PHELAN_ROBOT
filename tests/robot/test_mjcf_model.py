@@ -95,6 +95,6 @@ def test_cyberduck_v2_sole_clearance():
 
 def test_inspect_parts_script_runs():
     import subprocess
-    script_path = os.path.join(os.path.dirname(__file__), "..", "..", "tools", "cad", "inspect_parts.py")
+    script_path = os.path.join(os.path.dirname(__file__), "..", "..", "src", "tools", "cad", "inspect_parts.py")
     res = subprocess.run([sys.executable, script_path], capture_output=True, text=True)
     assert res.returncode == 0, f"inspect_parts.py failed with: {res.stderr}\nOutput: {res.stdout}"

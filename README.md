@@ -7,19 +7,19 @@ An 8-DOF bipedal robot for simulation training and sim-to-real research. CyberDu
 [![Physics: MuJoCo 3.x](https://img.shields.io/badge/Physics-MuJoCo%203.x-black.svg)](https://mujoco.org/)
 
 <p align="center">
-  <img src="robot/media/cyberduck_v2_iso.png" width="48%" alt="CyberDuck V2 Isometric View" />
-  <img src="robot/media/cyberduck_v2_front.png" width="48%" alt="CyberDuck V2 Front View" />
+  <img src="src/robot/media/cyberduck_v2_iso.png" width="48%" alt="CyberDuck V2 Isometric View" />
+  <img src="src/robot/media/cyberduck_v2_front.png" width="48%" alt="CyberDuck V2 Front View" />
 </p>
 
 ---
 
 ## 1. Robot And Deployment Profiles
 
-`robot/cyberduck_v2.xml` is the canonical physical model. Platform-specific code under `hardware/` selects hardware I/O and inference format; it must not define a different robot geometry or training checkpoint.
+`src/robot/cyberduck_v2.xml` is the canonical physical model. Platform-specific code under `src/hardware/` selects hardware I/O and inference format; it must not define a different robot geometry or training checkpoint.
 
 | Parameter | Raspberry Pi 5 | Dual ESP32-S3 | Raspberry Pi Zero 2 W |
 | :--- | :--- | :--- | :--- |
-| **Hardware path** | `hardware/rpi5/` | `hardware/dual_esp32s3/` | `hardware/pizero2w/` |
+| **Hardware path** | `src/hardware/rpi5/` | `src/hardware/dual_esp32s3/` | `src/hardware/pizero2w/` |
 | **Robot model** | CyberDuck V2 | CyberDuck V2 | CyberDuck V2 |
 | **Main compute** | Broadcom BCM2712 Quad A76 @ 2.4 GHz | 2× ESP32-S3 Dual LX7 @ 240 MHz | Broadcom BCM2710A1 Quad A53 @ 1.0 GHz |
 | **Memory** | 4 GB / 8 GB LPDDR4X | 2× 512 KB SRAM + 8 MB PSRAM | 512 MB LPDDR2 |
@@ -38,7 +38,7 @@ CyberDuck V2 Pro redesigns the bipedal chassis with high-definition bionic styli
 - **17 Precision CAD Parts**: High-density STL meshes (>125,000 triangles total) comprising an aero helmet, cyan visor, metallic beak, filleted neck collar, chest plate, rear thruster pack, leg linkages, and 3-claw athletic feet.
 - **Universal Gimbal Neck**: Dual-DOF universal joint matching hip gimbal mechanics. Head is lowered by 8 mm into an aggressive athletic stance, with a filleted collar eliminating visual gaps.
 - **Athletic Soles**: The simulation support collider is $50\text{ mm} \times 26\text{ mm} \times 8\text{ mm}$, aligned to the tread footprint and the ground plane at $Z = 0.000\text{ m}$.
-- **CAD Exports**: Full 3D assembly in `robot/cad/cyberduck_v2_assembly.obj` with MTL PBR materials, accompanied by printable parts in `robot/cad/cyberduck_v2_stl_parts.zip`.
+- **CAD Exports**: Full 3D assembly in `src/robot/cad/cyberduck_v2_assembly.obj` with MTL PBR materials, accompanied by printable parts in `src/robot/cad/cyberduck_v2_stl_parts.zip`.
 - **Integrated Simulation Sensors**: Base IMU, dual foot contact, eight joint states, five forward range rays, and a head camera. The actor observation contract is 42 dimensions; hardware sensor availability must be verified separately before deployment.
 
 ---
@@ -77,7 +77,7 @@ The canonical V2 MJCF currently specifies:
 
 ### Kinematic Gaits and Reflexes
 
-Located in `sim/behaviors/advanced_gaits.py`:
+Located in `src/sim/behaviors/advanced_gaits.py`:
 
 - **Waddling Gait**: Open-loop V2 preview with pelvic roll sway (0.08 rad) and double-frequency head nodding. These demos do not provide feedback balance for hardware or uneven terrain.
 - **Spot Turn**: 360-degree rotation in place ($v_x = 0, \omega_z \ne 0$) without forward translation.
@@ -86,11 +86,11 @@ Located in `sim/behaviors/advanced_gaits.py`:
 
 ### AI Vision and Visual Servoing
 
-Located in `sim/perception/vision_tracker.py`:
+Located in `src/sim/perception/vision_tracker.py`:
 
 - **Color Blob Tracking**: High-throughput HSV segmentation for yellow targets and red objects running at 30+ FPS.
 - **Visual Servoing**: Closed-loop proportional tracking for `head_yaw` and `head_pitch` with an anti-jitter deadband (0.06) and slew rate limiting.
-- **Embedded C++ Loop**: Sub-sampled RGB565 scan routine in `hardware/dual_esp32s3/deployment/mcu1_vision_audio_s3/mcu1_main.ino` streaming 8-byte binary UART servo packets to MCU 2.
+- **Embedded C++ Loop**: Sub-sampled RGB565 scan routine in `src/hardware/dual_esp32s3/deployment/mcu1_vision_audio_s3/mcu1_main.ino` streaming 8-byte binary UART servo packets to MCU 2.
 
 ---
 
@@ -166,43 +166,19 @@ và đưa vào Git vì test CLI hiện kiểm contract của file này.
 ```text
 cyberduck-v2/
 ├── duck.py                                   # Unified operations CLI
-├── viewer_3d.html                            # Browser 3D asset dashboard
 ├── README.md                                 # Technical documentation
 ├── LICENSE                                   # MIT License
-├── .gitignore                                # Git ignore configuration (incl. artifacts/)
-├── robot/                                    # Canonical V2 robot assets & specification
-│   ├── cyberduck_v2.xml                      # Canonical MuJoCo MJCF and full sensor suite
-│   ├── cyberduck_v2_robot.xml                # Robot-only MJCF generated for Isaac import
-│   ├── cyberduck_v2.urdf                     # URDF generated from the canonical robot model
-│   ├── robot_spec.py                         # Shared V2 model and policy identity
-│   ├── cad/                                  # Canonical visual CAD OBJ, MTL & STL Zip
-│   ├── meshes/                               # 17 high-definition STL meshes
-│   └── media/                                # High-res renders (ISO, front, exploded)
-├── cad/                                      # Parametric build123d CAD sources (.venv_cad)
-├── sim/                                      # Simulation, RL & autonomy core
-│   ├── env/                                  # env_config.py, run_parallel_sim.py, curriculum, policy_contract
-│   ├── behaviors/                            # advanced_gaits.py, self_righting.py, nav_planner.py
-│   └── perception/                           # vision_tracker.py, voice_commander.py
-├── hardware/                                 # Hardware deployment profiles (same V2 robot)
-│   ├── rpi_infer_core.py                     # Shared Pi ONNX inference & sensor core
-│   ├── rpi5/                                 # Raspberry Pi 5 target
-│   ├── dual_esp32s3/                         # Dual ESP32-S3 firmware & quantized C headers
-│   └── pizero2w/                             # Raspberry Pi Zero 2 W target
-├── tools/                                    # Unified CLI & utility scripts
-│   ├── train/                                # train_ppo.py, train_sac.py, pretrain_bc.py, evaluate.py
-│   ├── robot/                                # verify_model.py, interactive_viewer.py, export_policy.py
-│   └── cad/                                  # CAD visual export, BOM, STL packaging & renderers
-├── tests/                                    # Domain-grouped pytest suite
-│   ├── robot/                                # MJCF, URDF, layout contract, viewer & CLI tests
-│   ├── sim/                                  # RL, rewards, curriculum, gaits & perception tests
-│   ├── hardware/                             # Pi 5, Pi Zero 2 W, ESP32-S3 & policy contract tests
-│   └── cad/                                  # build123d B-rep, DFAM & provenance tests (.venv_cad)
-├── models/                                   # V2 policy and checkpoint artifacts
-│   ├── cyberduck_v2_policy.onnx              # Canonical Pi policy
-│   └── checkpoints/cyberduck_v2_*.pt         # V2-only training checkpoints
+├── .gitignore                                # Git ignore configuration (incl. artifacts/, docs/his.md)
+├── src/                                      # Source modules & canonical V2 robot assets
+│   ├── robot/                                # cyberduck_v2.xml, cyberduck_v2.urdf, robot_spec.py, meshes/, cad/, media/
+│   ├── cad/                                  # Parametric build123d CAD sources (.venv_cad)
+│   ├── sim/                                  # env/ (env_config.py, run_parallel_sim.py), behaviors/, perception/
+│   ├── hardware/                             # rpi_infer_core.py, rpi5/, dual_esp32s3/, pizero2w/
+│   └── tools/                                # train/, robot/ (verify_model.py, interactive_viewer.py, export_policy.py), cad/, viewer_3d.html
+├── tests/                                    # Domain-grouped pytest suite (robot/, sim/, hardware/, cad/)
+├── models/                                   # V2 policy and checkpoint artifacts (.onnx & checkpoints/*.pt)
 ├── artifacts/                                # Gitignored generated CAD drafts, reviews & reports
-├── archive/v1/                               # Retired V1 assets and policies; never auto-loaded
-└── docs/                                     # Architecture docs, specs & Isaac migration guide
+└── docs/                                     # Specs, migration guide, audit, plans/, archive/v1/ & his.md
 ```
 
 ---
@@ -216,8 +192,8 @@ Mesh và articulation đủ để bắt đầu kiểm tra import. Khung gá MG99
 ## 7. Trạng Thái Hiện Tại & Điểm Neo Khôi Phục
 
 - **Đang dừng ở đâu (2026-11-18):** Đang triển khai CAD MG996R trên `wip/fix-project-audit` tại `6ac4c124`, chưa commit/tag mới; **chưa qua nghiệm thu Phase 1, chưa sẵn sàng chế tạo**. Canonical V2 vẫn 0.811 kg / 128–44–36 mm, contract 42 obs / 8 actions / 50 Hz.
-- **Đã làm:** Tạo `.venv_cad`, 77 part B-rep, 32 fit reference + 9 STEP nguồn có hash; sửa và kiểm tra riêng càng/vòng bi, chân phải, pin/nguồn và ba module điện tử; xuất 180 STEP/STL/3MF/BOM artifact nháp tại `duck_v2/cad/draft/`; đã xóa ảnh `archive/v1/assets/media/microduck_concept_render.jpg`.
-- **Kiểm chứng:** 198 CAD tests đạt; `python duck.py verify` exit 0 với `579 passed, 7 skipped, 38 warnings` (7 module CAD chạy riêng). Assembly đầy đủ còn giao cắt và quá ngân sách mass; `release_ready=false`. Xem [báo cáo thực thi](plans/261118-1705-cyberduck-v2-mg996r-3d-rebuild/execution.md).
+- **Đã làm:** Tạo `.venv_cad`, 77 part B-rep, 32 fit reference + 9 STEP nguồn có hash; sửa và kiểm tra riêng càng/vòng bi, chân phải, pin/nguồn và ba module điện tử; xuất 180 STEP/STL/3MF/BOM artifact nháp tại `duck_v2/cad/draft/` (nay chuyển về `artifacts/cad/draft/`); đã xóa ảnh `microduck_concept_render.jpg` khỏi kho lưu trữ V1 (`docs/archive/v1/`).
+- **Kiểm chứng:** 198 CAD tests đạt; `python duck.py verify` exit 0 với `579 passed, 7 skipped, 38 warnings` (7 module CAD chạy riêng). Assembly đầy đủ còn giao cắt và quá ngân sách mass; `release_ready=false`. Xem [báo cáo thực thi](docs/plans/261118-1705-cyberduck-v2-mg996r-3d-rebuild/execution.md).
 - **Bước tiếp theo:** Sửa giao cắt toàn cụm/cổ rỗng, mating ốc và 22 part có mẫu thành mỏng; giảm mass có cơ sở, nghiệm thu sweep + DfAM rồi mới đồng bộ CAD sang MJCF/URDF/mesh/biến thể và torque smoke; chưa train hoặc tạo neo weights V2 mới.
 
 ### Rà soát thuật toán ngày 2026-11-19
@@ -229,10 +205,10 @@ Mesh và articulation đủ để bắt đầu kiểm tra import. Khung gá MG99
 
 ### Quy hoạch lại kiến trúc thư mục ngày 2026-11-19
 
-- **Đang dừng ở đâu:** Nhánh `wip/repo-reorg` tách từ commit mốc `482511ba` trên `wip/fix-project-audit`; toàn bộ dự án đã chuyển sang cấu trúc 5 trụ cột `robot/`, `cad/`, `sim/`, `hardware/`, `tools/` cùng `tests/{robot,sim,hardware,cad}/` và `artifacts/` được bỏ qua trong `.gitignore`; chưa tạo tag neo weights V2 mới.
-- **Đã làm:** Tách 150 MB đầu ra CAD nháp sang `artifacts/cad/`, dọn rác cục bộ `.superpowers/{cad_parallel,codex_backup}` và `docs/plans/`, bỏ 3 script wrapper trùng, sửa thứ tự `importorskip('build123d')` trong `tests/cad/test_v2_monocoque.py`, bổ sung contract test `tests/robot/test_repo_layout_contract.py`, cập nhật toàn bộ import, `cad/provenance.py`, `duck.py`, `viewer_3d.html` và tài liệu theo đặc tả `docs/specs/2026-11-19-repo-reorganization-design.md`.
-- **Kiểm chứng:** `pytest tests/robot tests/sim tests/hardware` đạt `585 passed`, `.venv_cad` `pytest tests/cad` đạt `169 passed`, `python duck.py verify` và `python tools/robot/verify_model.py --steps 1000` đạt exit 0.
-- **Bước tiếp theo:** Xử lý các hạng mục F01–F04 trong báo cáo audit `docs/project_algorithm_audit_2026-11-19.md`, hoàn thiện cơ khí MG996R trong `cad/` và nhập `robot/cyberduck_v2.urdf` sang Isaac Lab trước khi huấn luyện lại policy V2 mang metadata đầy đủ.
+- **Đang dừng ở đâu:** Nhánh `wip/repo-reorg` trên cấu trúc mặt tiền sạch `src/{robot,cad,sim,hardware,tools}`, `tests/{robot,sim,hardware,cad}/`, `models/`, `docs/{specs,plans,archive/v1,his.md}`, `artifacts/` (gitignored); chưa tạo tag neo weights V2 mới.
+- **Đã làm:** Chuyển 5 trụ cột vào `src/`, dời `viewer_3d.html` sang `src/tools/viewer_3d.html`, dời `his.md`, `plans/`, `archive/v1/` vào `docs/`, xóa phần trùng trong `docs/superpowers/`, ẩn thư mục cache/AI trên Windows Explorer, sửa thứ tự `importorskip('build123d')`, cập nhật contract test `tests/robot/test_repo_layout_contract.py` và toàn bộ đường dẫn trong `duck.py`, `src/`, `tests/`, tài liệu.
+- **Kiểm chứng:** `pytest tests/robot tests/sim tests/hardware`, `.venv_cad` `pytest tests/cad`, `python duck.py verify` và `python src/tools/robot/verify_model.py --steps 1000` đều pass 100%, `git ls-files artifacts` rỗng.
+- **Bước tiếp theo:** Xử lý các hạng mục F01–F04 trong báo cáo audit `docs/project_algorithm_audit_2026-11-19.md`, hoàn thiện cơ khí MG996R trong `src/cad/` và nhập `src/robot/cyberduck_v2.urdf` sang Isaac Lab trước khi huấn luyện lại policy V2 mang metadata đầy đủ.
 
 ---
 

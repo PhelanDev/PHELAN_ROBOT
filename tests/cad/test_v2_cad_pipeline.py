@@ -39,7 +39,7 @@ def test_each_printable_is_a_single_connected_valid_solid(name):
 def test_purchased_reference_step_roundtrip_has_matching_volume(name):
     from pathlib import Path
     shape, _ = purchased_parts()[name]
-    path = Path(__file__).resolve().parents[2] / 'cad/purchased/step' / f'{name}.step'
+    path = Path(__file__).resolve().parents[2] / 'src/cad/purchased/step' / f'{name}.step'
     imported = import_step(path)
     assert imported.is_valid
     assert imported.volume == pytest.approx(shape.volume, rel=1e-8)

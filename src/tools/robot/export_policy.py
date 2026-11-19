@@ -1,0 +1,685 @@
+"""Policy Export Tool for CyberDuck V2 8-DOF Bipedal Robot.
+
+Exports trained Actor policy checkpoints to deployment targets:
+1. Float32 ONNX model for Raspberry Pi 5 (Cortex-A76 ONNX Runtime)
+2. INT8 quantized weights & INT32 biases C/C++ header for ESP32-S3 (Xtensa LX7 PIE vector accelerator)
+3. Quantization configuration header (esp32_quant_config.h)
+"""
+
+from pathlib import Path
+import argparse
+import json
+import copy
+import hashlib
+import math
+import sys
+from typing import Any, Optional, Tuple, Union
+
+import numpy as np
+import torch
+import torch.nn as nn
+
+SRC_ROOT = Path(__file__).resolve().parents[2]
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from hardware.dual_esp32s3.training.env_config import (
+    DEFAULT_OBS_BOUNDS,
+    generate_esp32_quant_header,
+)
+from tools.train.train_ppo import ActorCritic
+from robot.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME, REPO_ROOT
+
+DEFAULT_CHECKPOINT_PATH = REPO_ROOT / "models" / "checkpoints" / f"{CHECKPOINT_PREFIX}_ppo.pt"
+DEFAULT_PIZERO2W_ONNX_PATH = DEFAULT_ONNX_PATH
+DEFAULT_ESP32_WEIGHTS_PATH = (
+    SRC_ROOT / "hardware" / "dual_esp32s3" / "deployment" / "esp32_policy_weights.h"
+)
+DEFAULT_ESP32_CONFIG_PATH = (
+    SRC_ROOT / "hardware" / "dual_esp32s3" / "deployment" / "esp32_quant_config.h"
+)
+
+
+def _validate_esp32_actor_arch(actor: nn.Module) -> None:
+    if getattr(actor, "_policy_arch", None) == "sac_squashed_gaussian" or any(isinstance(m, nn.ReLU) for m in actor.modules()):
+        raise ValueError("Unsupported ESP32 policy architecture: SAC ReLU actor is unsupported by quantized ELU firmware")
+
+
+def _validate_ckpt_dims(ckpt: dict, expected: Tuple[Tuple[str, int], ...]) -> None:
+    for key, actual in expected:
+        if key in ckpt:
+            val = ckpt[key]
+            if isinstance(val, bool) or not isinstance(val, (int, np.integer)) or int(val) != actual:
+                raise ValueError(f"Checkpoint {key} disagrees with actor weights")
+
+
+def _validate_v2_actor_identity(actor: nn.Module, required: bool = False) -> None:
+    metadata = getattr(actor, "_model_metadata", {})
+    if required or metadata.get("model_name") or metadata.get("model_path"):
+        from sim.env.policy_contract import validate_model_identity
+        validate_model_identity(metadata, MODEL_NAME)
+
+
+def prepare_target_exports(checkpoints, legacy_model_name=None, schema_override=None):
+    """Validate one V2 policy for each requested runtime before writing artifacts."""
+    from sim.env.policy_contract import TARGET_MODELS, validate_model_identity, validate_observation_schema
+    prepared = {}
+    for target, path in checkpoints.items():
+        checkpoint = torch.load(str(path), map_location="cpu", weights_only=False)
+        if not isinstance(checkpoint, dict):
+            raise ValueError("Export checkpoint requires model identity metadata")
+        checkpoint = dict(checkpoint)
+        if legacy_model_name is not None:
+            if checkpoint.get("model_name") or checkpoint.get("model_path"):
+                raise ValueError("Legacy model identity override only applies to missing metadata")
+            checkpoint["model_name"] = legacy_model_name
+        validate_model_identity(checkpoint, TARGET_MODELS[target])
+        if schema_override is not None:
+            if "observation_schema" in checkpoint:
+                raise ValueError("observation_schema override only applies to legacy checkpoints")
+            checkpoint["observation_schema"] = validate_observation_schema(schema_override)
+        actor = load_actor_from_checkpoint(checkpoint)
+        if actor[0].in_features != 42 or actor[4].out_features != 8:
+            raise ValueError(f"{target} export requires 42 observations and 8 actions")
+        if target == "esp32":
+            _validate_esp32_actor_arch(actor)
+            _resolve_esp32_schema(actor, None)
+        prepared[target] = actor
+    return prepared
+
+
+def _resolve_esp32_schema(actor: nn.Module, legacy_observation_schema: Optional[dict] = None) -> dict:
+    from sim.env.policy_contract import validate_observation_schema
+
+    raw_schema = getattr(actor, "_model_metadata", {}).get("observation_schema")
+    if raw_schema is not None and legacy_observation_schema is not None:
+        raise ValueError("legacy_observation_schema override only applies to legacy policies without observation_schema")
+    if raw_schema is not None:
+        try:
+            schema = validate_observation_schema(json.loads(raw_schema) if isinstance(raw_schema, str) else raw_schema)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("Invalid policy observation_schema") from exc
+    elif legacy_observation_schema is not None:
+        schema = validate_observation_schema(legacy_observation_schema)
+    else:
+        raise ValueError("Legacy policy has no observation_schema; provide an explicit verified legacy schema")
+    if schema["obs_dim"] != 42:
+        raise ValueError("ESP32 observation_schema requires 42 observations")
+    if not math.isclose(schema["control_dt"], 0.02, rel_tol=1e-7, abs_tol=1e-10):
+        raise ValueError("Unsupported ESP32 observation_schema control_dt; firmware requires 50 Hz (0.02s)")
+    return schema
+
+
+class PolicyOnnxWrapper(nn.Module):
+    """Wrapper exposing only deterministic actor output for ONNX runtime."""
+
+    def __init__(self, actor: nn.Module):
+        super().__init__()
+        self.actor = actor
+
+    def forward(self, obs: torch.Tensor) -> torch.Tensor:
+        """Forward pass taking observation [batch, 42] -> action [batch, 8]."""
+        return policy_actor_forward(self.actor, obs)
+
+
+def policy_actor_forward(actor: nn.Module, obs: torch.Tensor) -> torch.Tensor:
+    """Apply the checkpoint's raw-input bounds and output transform once."""
+    if hasattr(actor, "_obs_clip_lower"):
+        obs = torch.maximum(torch.minimum(obs, actor._obs_clip_upper), actor._obs_clip_lower)
+    output = actor(obs)
+    return torch.tanh(output) if getattr(actor, "_squash_actions", False) else output
+
+
+def apply_obs_norm_to_actor(actor: nn.Module, ckpt: Any, min_std: float = 0.10) -> nn.Module:
+    """Validate and fold affine RMS; retain raw-input bounds for clipping."""
+    if not isinstance(ckpt, dict) or "obs_rms" not in ckpt:
+        return actor
+    linear = next((m for m in actor.modules() if isinstance(m, nn.Linear)), None)
+    if linear is None:
+        raise ValueError("Invalid obs_rms: actor has no linear input layer")
+    rms = ckpt["obs_rms"]
+    if rms is None:
+        raise ValueError("Invalid obs_rms: statistics are None")
+    get = rms.get if isinstance(rms, dict) else lambda key, default=None: getattr(rms, key, default)
+    try:
+        def numeric(value, scalar=False):
+            array = np.asarray(value)
+            if array.dtype.kind not in "iuf" or (scalar and array.ndim != 0):
+                raise ValueError("statistics must be numeric arrays or numeric scalars")
+            return float(array) if scalar else array.astype(np.float32)
+
+        mean = numeric(get("mean"))
+        var = numeric(get("var"))
+        eps = numeric(get("epsilon", 1e-4), scalar=True)
+        minimum = numeric(get("min_std", min_std), scalar=True)
+        clip = numeric(get("clip", 10.0), scalar=True)
+        count = numeric(get("count", 0.0), scalar=True)
+        if mean.shape != (linear.in_features,) or var.shape != mean.shape:
+            raise ValueError("shape must match actor input width")
+        if not (np.isfinite(mean).all() and np.isfinite(var).all() and (var >= 0).all()
+                and np.isfinite([eps, minimum, clip, count]).all() and eps > 0 and minimum > 0 and clip >= 0 and count >= 0):
+            raise ValueError("non-finite or invalid statistics")
+        std = np.maximum(np.sqrt(var + eps), minimum)
+        if not np.isfinite(std).all() or (std <= 0).any():
+            raise ValueError("invalid standard deviation")
+        lower, upper = mean - clip * std, mean + clip * std
+        if clip > 0 and not (np.isfinite(lower).all() and np.isfinite(upper).all()):
+            raise ValueError("invalid clipping bounds")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"Invalid obs_rms: {exc}") from exc
+    identity = hashlib.sha256(mean.tobytes() + var.tobytes()
+                              + np.asarray([eps, minimum, clip], dtype=np.float64).tobytes()).hexdigest()
+    if getattr(actor, "_obs_norm_applied", False):
+        if getattr(actor, "_obs_norm_identity", None) != identity:
+            raise ValueError("Invalid obs_rms: cannot fold different statistics twice")
+        return actor
+    device, dtype = linear.weight.device, linear.weight.dtype
+    mean_t = torch.as_tensor(mean, device=device, dtype=dtype)
+    std_t = torch.as_tensor(std, device=device, dtype=dtype)
+    weight = linear.weight.detach() / std_t
+    bias = (linear.bias.detach() if linear.bias is not None else weight.new_zeros(linear.out_features)) - weight @ mean_t
+    if not torch.isfinite(weight).all() or not torch.isfinite(bias).all():
+        raise ValueError("Invalid obs_rms: folded weights are not finite")
+    with torch.no_grad():
+        linear.weight.copy_(weight)
+        if linear.bias is None:
+            linear.bias = nn.Parameter(bias)
+        else:
+            linear.bias.copy_(bias)
+    if clip > 0:
+        actor.register_buffer("_obs_clip_lower", torch.as_tensor(lower, device=device, dtype=dtype), persistent=False)
+        actor.register_buffer("_obs_clip_upper", torch.as_tensor(upper, device=device, dtype=dtype), persistent=False)
+    actor._obs_norm_identity = identity
+    actor._obs_norm_applied = True
+    return actor
+
+
+def _build_sac_sequential(state: dict, ckpt: Optional[dict] = None) -> nn.Sequential:
+    """Adapt SAC SquashedGaussianActor (ReLU + mean_head) weights to nn.Sequential."""
+    required = ("net.0.weight", "net.0.bias", "net.2.weight", "net.2.bias", "mean_head.weight", "mean_head.bias")
+    if not isinstance(state, dict) or any(k not in state or not isinstance(state[k], torch.Tensor) for k in required):
+        raise ValueError("Invalid SAC actor_state_dict; missing expected ReLU/mean_head tensors")
+    w0, w2, wm = state["net.0.weight"], state["net.2.weight"], state["mean_head.weight"]
+    if w0.ndim != 2 or w2.ndim != 2 or wm.ndim != 2:
+        raise ValueError("Invalid SAC weight tensor rank")
+    hid_d, obs_d = int(w0.shape[0]), int(w0.shape[1])
+    act_d = int(wm.shape[0])
+    if (tuple(w2.shape) != (hid_d, hid_d) or tuple(wm.shape) != (act_d, hid_d)
+            or tuple(state["net.0.bias"].shape) != (hid_d,) or tuple(state["net.2.bias"].shape) != (hid_d,)
+            or tuple(state["mean_head.bias"].shape) != (act_d,)):
+        raise ValueError("SAC actor_state_dict layer dimensions are inconsistent")
+    if "log_std_head.weight" in state and tuple(state["log_std_head.weight"].shape) != (act_d, hid_d):
+        raise ValueError("SAC log_std_head.weight shape disagrees with actor dimensions")
+    if isinstance(ckpt, dict):
+        _validate_ckpt_dims(ckpt, (("obs_dim", obs_d), ("hidden_dim", hid_d), ("action_dim", act_d)))
+        if "squash_actions" in ckpt and ckpt["squash_actions"] is not True:
+            raise ValueError("SAC checkpoint requires squash_actions=True")
+    actor = nn.Sequential(
+        nn.Linear(obs_d, hid_d), nn.ReLU(),
+        nn.Linear(hid_d, hid_d), nn.ReLU(),
+        nn.Linear(hid_d, act_d),
+    )
+    with torch.no_grad():
+        actor[0].weight.copy_(w0)
+        actor[0].bias.copy_(state["net.0.bias"])
+        actor[2].weight.copy_(w2)
+        actor[2].bias.copy_(state["net.2.bias"])
+        actor[4].weight.copy_(wm)
+        actor[4].bias.copy_(state["mean_head.bias"])
+    actor._squash_actions = True
+    actor._policy_arch = "sac_squashed_gaussian"
+    return actor
+
+
+def load_actor_from_checkpoint(
+    checkpoint_or_model: Union[str, Path, nn.Module, dict],
+    obs_dim: int = 42,
+    action_dim: int = 8,
+    hidden_dim: int = 256,
+) -> nn.Module:
+    """Load Actor network from checkpoint file or dict, folding obs_rms if present."""
+    if isinstance(checkpoint_or_model, nn.Module):
+        if hasattr(checkpoint_or_model, "net") and hasattr(checkpoint_or_model, "mean_head"):
+            actor = _build_sac_sequential(checkpoint_or_model.state_dict())
+        else:
+            actor = copy.deepcopy(getattr(checkpoint_or_model, "actor", checkpoint_or_model))
+            if hasattr(checkpoint_or_model, "squash_actions"):
+                actor._squash_actions = checkpoint_or_model.squash_actions
+        if hasattr(checkpoint_or_model, "obs_rms"):
+            apply_obs_norm_to_actor(actor, {"obs_rms": checkpoint_or_model.obs_rms})
+        metadata = dict(getattr(actor, "_model_metadata", {}))
+        for key in ("model_path", "model_name"):
+            value = getattr(checkpoint_or_model, key, None)
+            if value:
+                metadata[key] = str(value)
+        schema = getattr(checkpoint_or_model, "observation_schema", None)
+        if hasattr(checkpoint_or_model, "observation_schema"):
+            from sim.env.policy_contract import validate_observation_schema
+            schema = validate_observation_schema(schema)
+            if schema["obs_dim"] != next(m.in_features for m in actor.modules() if isinstance(m, nn.Linear)):
+                raise ValueError("observation_schema dimension disagrees with actor weights")
+            metadata["observation_schema"] = json.dumps(schema, sort_keys=True)
+        actor._model_metadata = metadata
+        if not all(torch.isfinite(parameter).all() for parameter in actor.parameters()):
+            raise ValueError("Policy actor weights must be finite")
+        return actor
+
+    if isinstance(checkpoint_or_model, dict):
+        ckpt = checkpoint_or_model
+    else:
+        ckpt_path = Path(checkpoint_or_model).resolve()
+        if not ckpt_path.exists():
+            raise FileNotFoundError(f"Checkpoint file not found at {ckpt_path}")
+        ckpt = torch.load(str(ckpt_path), map_location="cpu", weights_only=False)
+
+    state = ckpt.get("actor_state_dict", ckpt.get("model_state_dict", ckpt)) if isinstance(ckpt, dict) else ckpt
+    is_sac = isinstance(ckpt, dict) and (
+        ckpt.get("policy_arch") == "sac_squashed_gaussian"
+        or ckpt.get("algorithm") == "sac"
+        or (isinstance(state, dict) and "net.0.weight" in state and "mean_head.weight" in state)
+    )
+    if is_sac:
+        actor = _build_sac_sequential(state, ckpt=ckpt)
+        obs_d = int(actor[0].in_features)
+    else:
+        obs_d = ckpt.get("obs_dim", obs_dim) if isinstance(ckpt, dict) else obs_dim
+        # Infer observation dimension directly from state_dict weights to be fully resilient
+        if isinstance(ckpt, dict):
+            if "model_state_dict" in ckpt and "actor.0.weight" in ckpt["model_state_dict"]:
+                obs_d = int(ckpt["model_state_dict"]["actor.0.weight"].shape[1])
+            elif "actor_state_dict" in ckpt and "0.weight" in ckpt["actor_state_dict"]:
+                obs_d = int(ckpt["actor_state_dict"]["0.weight"].shape[1])
+            elif "0.weight" in ckpt:
+                obs_d = int(ckpt["0.weight"].shape[1])
+
+        critic_obs_d = None
+        if isinstance(ckpt, dict):
+            if "critic_obs_dim" in ckpt:
+                critic_obs_d = int(ckpt["critic_obs_dim"])
+            elif "model_state_dict" in ckpt and "critic.0.weight" in ckpt["model_state_dict"]:
+                critic_obs_d = int(ckpt["model_state_dict"]["critic.0.weight"].shape[1])
+            elif "critic.0.weight" in ckpt:
+                critic_obs_d = int(ckpt["critic.0.weight"].shape[1])
+
+        act_d = ckpt.get("action_dim", action_dim) if isinstance(ckpt, dict) else action_dim
+        hid_d = ckpt.get("hidden_dim", hidden_dim) if isinstance(ckpt, dict) else hidden_dim
+        prefix = "actor." if "actor.0.weight" in state else ""
+        if prefix + "0.weight" in state:
+            hid_d = int(state[prefix + "0.weight"].shape[0])
+            act_d = int(state[prefix + "4.weight"].shape[0])
+            _validate_ckpt_dims(ckpt, (("obs_dim", obs_d), ("hidden_dim", hid_d), ("action_dim", act_d)))
+
+        model = ActorCritic(obs_dim=obs_d, action_dim=act_d, hidden_dim=hid_d, critic_obs_dim=critic_obs_d)
+
+        if isinstance(ckpt, dict):
+            if "model_state_dict" in ckpt:
+                model.load_state_dict(ckpt["model_state_dict"])
+            elif "actor_state_dict" in ckpt:
+                model.actor.load_state_dict(ckpt["actor_state_dict"])
+            elif "0.weight" in ckpt:
+                model.actor.load_state_dict(ckpt)
+            else:
+                model.load_state_dict(ckpt)
+        else:
+            model.load_state_dict(ckpt)
+
+        actor = model.actor
+        if isinstance(ckpt, dict) and "squash_actions" in ckpt and type(ckpt["squash_actions"]) is not bool:
+            raise ValueError("Checkpoint action transform must be boolean")
+        actor._squash_actions = bool(ckpt.get("squash_actions", False))
+    if not all(torch.isfinite(parameter).all() for parameter in actor.parameters()):
+        raise ValueError("Policy actor weights must be finite")
+    actor._model_metadata = {k: str(ckpt[k]) for k in ("model_path", "model_name") if ckpt.get(k)}
+    if "observation_schema" in ckpt:
+        from sim.env.policy_contract import validate_observation_schema
+        schema = validate_observation_schema(ckpt["observation_schema"])
+        if schema["obs_dim"] != obs_d:
+            raise ValueError("observation_schema dimension disagrees with actor weights")
+        actor._model_metadata["observation_schema"] = json.dumps(schema, sort_keys=True)
+    apply_obs_norm_to_actor(actor, ckpt)
+    return actor
+
+
+def export_onnx(
+    model: Union[nn.Module, str, Path, dict],
+    output_path: Union[str, Path] = DEFAULT_ONNX_PATH,
+    opset: int = 13,
+) -> Path:
+    """Export Actor policy to Float32 ONNX format for Raspberry Pi 5.
+
+    Input tensor name: 'obs' of shape [1, 42] (dynamic batch supported)
+    Output tensor name: 'actions' of shape [1, 8]
+    """
+    import onnx
+
+    actor = load_actor_from_checkpoint(model)
+    _validate_v2_actor_identity(actor)
+    actor.eval()
+
+    output_path = Path(output_path).resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    wrapper = PolicyOnnxWrapper(actor)
+    wrapper.eval()
+
+    # Determine input observation dimension dynamically from actor's first linear layer
+    obs_dim = 42
+    for m in actor.modules():
+        if hasattr(m, "in_features"):
+            obs_dim = int(m.in_features)
+            break
+
+    dummy_input = torch.zeros((1, obs_dim), dtype=torch.float32)
+
+    export_kwargs = {
+        "export_params": True,
+        "opset_version": int(opset),
+        "do_constant_folding": True,
+        "input_names": ["obs"],
+        "output_names": ["actions"],
+        "dynamic_axes": {
+            "obs": {0: "batch_size"},
+            "actions": {0: "batch_size"},
+        },
+    }
+
+    try:
+        # PyTorch 2.9+ requires dynamo=False if onnxscript is not installed
+        torch.onnx.export(wrapper, dummy_input, str(output_path), dynamo=False, **export_kwargs)
+    except TypeError:
+        # Older PyTorch versions don't take the dynamo argument
+        torch.onnx.export(wrapper, dummy_input, str(output_path), **export_kwargs)
+
+    # Validate exported ONNX model
+    onnx_model = onnx.load(str(output_path))
+    metadata = getattr(actor, "_model_metadata", {})
+    onnx.helper.set_model_props(onnx_model, metadata)
+    onnx.checker.check_model(onnx_model)
+    onnx.save(onnx_model, str(output_path))
+
+    return output_path
+
+
+def _format_array_c(arr: np.ndarray, per_line: int = 12) -> str:
+    """Format 1D numpy array into a formatted C string."""
+    flat = arr.flatten()
+    lines = []
+    for i in range(0, len(flat), per_line):
+        chunk = flat[i : i + per_line]
+        lines.append("    " + ", ".join(str(int(x)) for x in chunk))
+    return ",\n".join(lines)
+
+
+def export_esp32_headers(
+    model: Union[nn.Module, str, Path, dict],
+    weights_output_path: Union[str, Path] = DEFAULT_ESP32_WEIGHTS_PATH,
+    config_output_path: Union[str, Path] = DEFAULT_ESP32_CONFIG_PATH,
+    scale_obs: float = 127.0,
+    scale_act: float = 127.0,
+    legacy_observation_schema: Optional[dict] = None,
+) -> Tuple[Path, Path]:
+    """Export INT8 quantized weights & INT32 biases header and config header for ESP32-S3."""
+    if not all(np.isfinite(scale) and scale > 0 for scale in (scale_obs, scale_act)):
+        raise ValueError("Quantization scales must be finite and positive")
+    actor = load_actor_from_checkpoint(model)
+    _validate_v2_actor_identity(actor)
+    actor.eval()
+    _validate_esp32_actor_arch(actor)
+
+    # 1. Extract weights and biases
+    # actor[0]: Linear(obs_dim, 256)
+    # actor[2]: Linear(256, 256)
+    # actor[4]: Linear(256, 8)
+    w1 = actor[0].weight.detach().cpu().numpy().astype(np.float32)  # [256, obs_dim]
+    obs_dim = int(w1.shape[1])
+    b1 = actor[0].bias.detach().cpu().numpy().astype(np.float32)    # [256]
+
+    w2 = actor[2].weight.detach().cpu().numpy().astype(np.float32)  # [256, 256]
+    b2 = actor[2].bias.detach().cpu().numpy().astype(np.float32)    # [256]
+
+    w3 = actor[4].weight.detach().cpu().numpy().astype(np.float32)  # [8, 256]
+    b3 = actor[4].bias.detach().cpu().numpy().astype(np.float32)    # [8]
+    if obs_dim != 42 or w3.shape[0] != 8:
+        raise ValueError("Unsupported ESP32 policy dimensions; expected 42 observations and 8 actions")
+    schema = _resolve_esp32_schema(actor, legacy_observation_schema=legacy_observation_schema)
+    _validate_v2_actor_identity(actor, required=True)
+
+    weights_output_path = Path(weights_output_path).resolve()
+    weights_output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    config_output_path = Path(config_output_path).resolve()
+    config_output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 2. Generate esp32_quant_config.h with dynamically adapted obs_dim
+    generate_esp32_quant_header(
+        scale_obs=scale_obs,
+        scale_act=scale_act,
+        output_path=config_output_path,
+        obs_dim=obs_dim,
+    )
+    config_code = config_output_path.read_text(encoding="utf-8")
+    config_code = config_code.replace(
+        "#define ESP32_QUANT_CONFIG_H",
+        '#define ESP32_QUANT_CONFIG_H\n\n#define CYBERDUCK_V2_QUANT_CONFIG 1\n'
+        f'#define QUANT_MODEL_NAME "{MODEL_NAME}"',
+        1,
+    )
+    config_output_path.write_text(config_code, encoding="utf-8")
+
+    # Quantize Layer 1 with per-channel observation scales matching mcu2_main.ino OBS_CHANNEL_SCALES
+    obs_channel_scales = (float(scale_obs) / DEFAULT_OBS_BOUNDS[:obs_dim]).astype(np.float32)
+    w1_effective = w1 / obs_channel_scales  # broadcast shape (256, obs_dim) / (obs_dim,)
+    max_w1 = float(np.max(np.abs(w1_effective)))
+    # Leave INT32 headroom for bias rounding even for constant-output networks.
+    scale_w1 = min(127.0 / max(max_w1, 1e-7),
+                   (2**30) / max(float(np.max(np.abs(b1))), 1e-7))
+    w1_int8 = np.clip(np.round(w1_effective * scale_w1), -128, 127).astype(np.int8)
+    scale_b1 = scale_w1
+    b1_int32 = np.round(b1 * scale_b1).astype(np.int32)
+
+    # Quantize Layer 2
+    max_w2 = float(np.max(np.abs(w2)))
+    scale_w2 = 127.0 / max(max_w2, 1e-7)
+    w2_int8 = np.clip(np.round(w2 * scale_w2), -128, 127).astype(np.int8)
+    scale_b2 = min(scale_w2 * 127.0, (2**30) / max(float(np.max(np.abs(b2))), 1e-7))
+    b2_int32 = np.round(b2 * scale_b2).astype(np.int32)
+
+    # Quantize Layer 3
+    max_w3 = float(np.max(np.abs(w3)))
+    scale_w3 = 127.0 / max(max_w3, 1e-7)
+    w3_int8 = np.clip(np.round(w3 * scale_w3), -128, 127).astype(np.int8)
+    scale_b3 = min(scale_w3 * 127.0, (2**30) / max(float(np.max(np.abs(b3))), 1e-7))
+    b3_int32 = np.round(b3 * scale_b3).astype(np.int32)
+
+    # Clip quantized raw observations in code units before the folded first layer.
+    # Fractional code bounds preserve RMS clipping at the quantized input's resolution.
+    if hasattr(actor, "_obs_clip_lower"):
+        lower = actor._obs_clip_lower.detach().cpu().numpy() * obs_channel_scales
+        upper = actor._obs_clip_upper.detach().cpu().numpy() * obs_channel_scales
+    else:
+        lower, upper = np.full(obs_dim, -128.0), np.full(obs_dim, 127.0)
+    lower_code = ", ".join(f"{float(v):.9e}f" for v in lower)
+    upper_code = ", ".join(f"{float(v):.9e}f" for v in upper)
+    squash = int(bool(getattr(actor, "_squash_actions", False)))
+
+    weights_header_code = f"""#ifndef ESP32_POLICY_WEIGHTS_H
+#define ESP32_POLICY_WEIGHTS_H
+
+/**
+ * CyberDuck V2 8-DOF (Dual ESP32-S3 Stack) - Quantized Policy Weights & Biases
+ * Model: Actor MLP [{obs_dim} -> {w1.shape[0]} (ELU) -> {w2.shape[0]} (ELU) -> {w3.shape[0]}]
+ * Quantization: Symmetric INT8 weights, INT32 biases
+ * Platform: Xtensa LX7 Dual-Core with PIE Vector Accelerator
+ */
+
+#include <stdint.h>
+#include <stddef.h>
+#include <math.h>
+
+#define CYBERDUCK_V2_POLICY 1
+#define POLICY_MODEL_NAME "{MODEL_NAME}"
+#define POLICY_LAYER1_IN  {obs_dim}
+#define POLICY_LAYER1_OUT {w1.shape[0]}
+#define POLICY_LAYER2_IN  {w2.shape[1]}
+#define POLICY_LAYER2_OUT {w2.shape[0]}
+#define POLICY_LAYER3_IN  {w3.shape[1]}
+#define POLICY_LAYER3_OUT {w3.shape[0]}
+#define POLICY_SQUASH_ACTIONS {squash}
+#define POLICY_OBS_SCHEMA_VERSION {int(schema["version"])}
+#define POLICY_EMBED_PHASE_CLOCK {1 if schema["embed_phase_clock"] else 0}
+#define POLICY_CONTROL_DT {float(schema["control_dt"]):.9g}f
+#define POLICY_GAIT_PERIOD {float(schema["period"]):.9g}f
+#define POLICY_CLOCK_ADVANCE_AFTER_ACTION 1
+#define POLICY_CLOCK_ZERO_CMD_ADVANCE 1
+static const float POLICY_OBS_LOWER[POLICY_LAYER1_IN] = {{{lower_code}}};
+static const float POLICY_OBS_UPPER[POLICY_LAYER1_IN] = {{{upper_code}}};
+
+// Quantization Scales
+static const float POLICY_W1_SCALE = {scale_w1:.6f}f;
+static const float POLICY_W1_INV_SCALE = (1.0f / {scale_w1:.6f}f);
+static const float POLICY_B1_SCALE = {scale_b1:.6f}f;
+static const float POLICY_B1_INV_SCALE = (1.0f / {scale_b1:.6f}f);
+
+static const float POLICY_W2_SCALE = {scale_w2:.6f}f;
+static const float POLICY_W2_INV_SCALE = (1.0f / {scale_w2:.6f}f);
+static const float POLICY_B2_SCALE = {scale_b2:.6f}f;
+static const float POLICY_B2_INV_SCALE = (1.0f / {scale_b2:.6f}f);
+
+static const float POLICY_W3_SCALE = {scale_w3:.6f}f;
+static const float POLICY_W3_INV_SCALE = (1.0f / {scale_w3:.6f}f);
+static const float POLICY_B3_SCALE = {scale_b3:.6f}f;
+static const float POLICY_B3_INV_SCALE = (1.0f / {scale_b3:.6f}f);
+
+// Layer 1 Weights [256 * {obs_dim}]
+static const int8_t POLICY_W1[POLICY_LAYER1_OUT * POLICY_LAYER1_IN] = {{
+{_format_array_c(w1_int8)}
+}};
+
+// Layer 1 Biases [256]
+static const int32_t POLICY_B1[POLICY_LAYER1_OUT] = {{
+{_format_array_c(b1_int32)}
+}};
+
+// Layer 2 Weights [256 * 256]
+static const int8_t POLICY_W2[POLICY_LAYER2_OUT * POLICY_LAYER2_IN] = {{
+{_format_array_c(w2_int8)}
+}};
+
+// Layer 2 Biases [256]
+static const int32_t POLICY_B2[POLICY_LAYER2_OUT] = {{
+{_format_array_c(b2_int32)}
+}};
+
+// Layer 3 Weights [8 * 256]
+static const int8_t POLICY_W3[POLICY_LAYER3_OUT * POLICY_LAYER3_IN] = {{
+{_format_array_c(w3_int8)}
+}};
+
+// Layer 3 Biases [8]
+static const int32_t POLICY_B3[POLICY_LAYER3_OUT] = {{
+{_format_array_c(b3_int32)}
+}};
+
+#ifdef __cplusplus
+extern "C" {{
+#endif
+
+/**
+ * Fast forward inference evaluating the 8-DOF policy directly in INT8 arithmetic.
+ *
+ * @param obs_int8    Input observation vector [{obs_dim}], quantized with OBS_CHANNEL_SCALES.
+ * @param actions_out Output action vector [8], quantized with scale ACT_SCALE (127.0f).
+ */
+static inline void evaluate_policy_int8(const int8_t* obs_int8, int8_t* actions_out) {{
+    // Layer 1: [{obs_dim}] -> [256] ELU
+    float l1_out[POLICY_LAYER1_OUT];
+    for (int i = 0; i < POLICY_LAYER1_OUT; ++i) {{
+        float acc = (float)POLICY_B1[i];
+        const int8_t* w_row = &POLICY_W1[i * POLICY_LAYER1_IN];
+        for (int j = 0; j < POLICY_LAYER1_IN; ++j) {{
+            float input = fmaxf(POLICY_OBS_LOWER[j], fminf(POLICY_OBS_UPPER[j], (float)obs_int8[j]));
+            acc += ((float)w_row[j]) * input;
+        }}
+        float val = (float)acc * POLICY_B1_INV_SCALE;
+        l1_out[i] = (val >= 0.0f) ? val : (expf(val) - 1.0f);
+    }}
+
+    // Layer 2: [256] -> [256] ELU
+    float l2_out[POLICY_LAYER2_OUT];
+    for (int i = 0; i < POLICY_LAYER2_OUT; ++i) {{
+        float acc = (float)POLICY_B2[i] * POLICY_B2_INV_SCALE;
+        const int8_t* w_row = &POLICY_W2[i * POLICY_LAYER2_IN];
+        for (int j = 0; j < POLICY_LAYER2_IN; ++j) {{
+            acc += ((float)w_row[j] * POLICY_W2_INV_SCALE) * l1_out[j];
+        }}
+        l2_out[i] = (acc >= 0.0f) ? acc : (expf(acc) - 1.0f);
+    }}
+
+    // Layer 3: [256] -> [8] Linear Output
+    for (int i = 0; i < POLICY_LAYER3_OUT; ++i) {{
+        float acc = (float)POLICY_B3[i] * POLICY_B3_INV_SCALE;
+        const int8_t* w_row = &POLICY_W3[i * POLICY_LAYER3_IN];
+        for (int j = 0; j < POLICY_LAYER3_IN; ++j) {{
+            acc += ((float)w_row[j] * POLICY_W3_INV_SCALE) * l2_out[j];
+        }}
+        if (POLICY_SQUASH_ACTIONS) acc = tanhf(acc);
+        float scaled = roundf(acc * {float(scale_act):.9e}f);
+        if (scaled > 127.0f) scaled = 127.0f;
+        if (scaled < -128.0f) scaled = -128.0f;
+        actions_out[i] = (int8_t)scaled;
+    }}
+}}
+
+#ifdef __cplusplus
+}}
+#endif
+
+#endif // ESP32_POLICY_WEIGHTS_H
+"""
+    weights_output_path.write_text(weights_header_code, encoding="utf-8")
+    return weights_output_path, config_output_path
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Export CyberDuck V2 Policy Checkpoint to ONNX and ESP32 Headers")
+    parser.add_argument("--checkpoint", type=str, default=None, help="Path to .pt checkpoint")
+    parser.add_argument("--target", choices=["all", "rpi5", "pizero2w", "esp32"], default="all")
+    parser.add_argument("--legacy-model-name", default=None, help="Verified MJCF basename for legacy checkpoint without identity")
+    parser.add_argument("--observation-schema", type=Path, default=None, help="Verified JSON observation schema for legacy checkpoint")
+    parser.add_argument("--onnx-output", type=str, default=str(DEFAULT_ONNX_PATH), help="Shared V2 ONNX path for both Pi runtimes")
+    parser.add_argument("--pizero-onnx-output", type=str, default=None, help="Optional additional path for the same V2 Pi policy")
+    parser.add_argument("--esp32-weights-output", type=str, default=str(DEFAULT_ESP32_WEIGHTS_PATH), help="Path for esp32_policy_weights.h")
+    parser.add_argument("--esp32-config-output", type=str, default=str(DEFAULT_ESP32_CONFIG_PATH), help="Path for esp32_quant_config.h")
+    parser.add_argument("--opset", type=int, default=13, help="ONNX opset version (default: 13)")
+    parser.add_argument("--scale-obs", type=float, default=127.0, help="Observation quantization scale (default: 127.0)")
+    parser.add_argument("--scale-act", type=float, default=127.0, help="Action quantization scale (default: 127.0)")
+
+    args = parser.parse_args()
+
+    from sim.env.policy_contract import resolve_target_checkpoints
+    targets = ("rpi5", "pizero2w", "esp32") if args.target == "all" else (args.target,)
+    try:
+        checkpoints = resolve_target_checkpoints(REPO_ROOT, targets, args.checkpoint)
+    except FileNotFoundError as exc:
+        parser.error(str(exc))
+    schema_override = json.loads(args.observation_schema.read_text(encoding="utf-8")) if args.observation_schema else None
+    prepared = prepare_target_exports(checkpoints, args.legacy_model_name, schema_override)
+    written_onnx = set()
+    for target, checkpoint in checkpoints.items():
+        print(f"[Export] {target}: {checkpoint}")
+        if target == "esp32":
+            weights, config = export_esp32_headers(prepared[target],
+                weights_output_path=args.esp32_weights_output, config_output_path=args.esp32_config_output,
+                scale_obs=args.scale_obs, scale_act=args.scale_act)
+            print(f"[Export] {weights}, {config}")
+        else:
+            output = args.pizero_onnx_output if target == "pizero2w" and args.pizero_onnx_output else args.onnx_output
+            output_key = Path(output).resolve()
+            if output_key not in written_onnx:
+                print(f"[Export] {export_onnx(prepared[target], output_path=output, opset=args.opset)}")
+                written_onnx.add(output_key)
+    print("[Export] All requested deployment artifacts successfully exported.")
+
+
+if __name__ == "__main__":
+    main()

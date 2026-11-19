@@ -16,7 +16,7 @@ from tools.train.train_ppo import train_ppo
 
 def test_stair_geoms_exist_in_mjcf():
     """Verify that stair geoms are present in the MuJoCo model."""
-    model_path = REPO_ROOT / "robot" / "cyberduck_v2.xml"
+    model_path = REPO_ROOT / "src" / "robot" / "cyberduck_v2.xml"
     m = mujoco.MjModel.from_xml_path(str(model_path))
     expected_geoms = [
         "stair_step_1",
@@ -31,7 +31,7 @@ def test_stair_geoms_exist_in_mjcf():
 
 def test_apply_stair_stage_scaling():
     """Verify apply_stair_stage sets stair coordinates properly."""
-    m = mujoco.MjModel.from_xml_path(str(REPO_ROOT / "robot" / "cyberduck_v2.xml"))
+    m = mujoco.MjModel.from_xml_path(str(REPO_ROOT / "src" / "robot" / "cyberduck_v2.xml"))
     apply_stair_stage(m, stage=0)
     top_gid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, "stair_platform")
     assert top_gid != -1
@@ -61,7 +61,7 @@ def test_next_stair_stage_progression():
 def test_edge_fall_detection_and_penalty():
     """Verify that drifting laterally off stair deck triggers termination and fall penalty."""
     runner = ParallelSimRunner(
-        model_path=REPO_ROOT / "robot" / "cyberduck_v2.xml",
+        model_path=REPO_ROOT / "src" / "robot" / "cyberduck_v2.xml",
         num_envs=2,
         terrain_mode="stairs",
         stage=0,
@@ -82,7 +82,7 @@ def test_edge_fall_detection_and_penalty():
 def test_train_ppo_stairs_dry_run(tmp_path):
     """Verify train_ppo runs with terrain_mode='stairs'."""
     res = train_ppo(
-        model_path=str(REPO_ROOT / "robot" / "cyberduck_v2.xml"),
+        model_path=str(REPO_ROOT / "src" / "robot" / "cyberduck_v2.xml"),
         save_path=str(tmp_path / "stairs_dry_run.pt"),
         num_envs=2,
         rollout_steps=4,

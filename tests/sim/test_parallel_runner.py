@@ -66,7 +66,7 @@ def test_parallel_sim_benchmark_cli():
     res = subprocess.run(
         [
             sys.executable,
-            "sim/env/run_parallel_sim.py",
+            "src/sim/env/run_parallel_sim.py",
             "--num_envs",
             "16",
             "--steps",
@@ -87,7 +87,7 @@ def test_parallel_sim_runner_api():
     """Verify Python API of ParallelSimRunner directly."""
     cfg = MicroDuck8DoFConfig()
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=8,
         cfg=cfg,
         decimation=5,
@@ -124,7 +124,7 @@ def test_parallel_sim_runner_api():
 def test_parallel_sim_stair_ascent_info():
     """Verify ParallelSimRunner includes stair_ascent in step infos when on stairs."""
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
     )
     try:
@@ -146,7 +146,7 @@ def test_parallel_sim_stair_ascent_info():
 def test_parallel_sim_runner_action_shape_check():
     """Verify action shape defensive check."""
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=4,
     )
     try:
@@ -165,7 +165,7 @@ def test_parallel_sim_runner_invalid_model_path():
 def test_parallel_sim_benchmark_threading():
     """Verify benchmark runs with multiple worker threads."""
     metrics = run_benchmark(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=16,
         steps=20,
         num_threads=2,
@@ -184,7 +184,7 @@ def test_parallel_sim_cli_invalid_path():
     res = subprocess.run(
         [
             sys.executable,
-            "sim/env/run_parallel_sim.py",
+            "src/sim/env/run_parallel_sim.py",
             "--model_path",
             "non_existent.xml",
         ],
@@ -198,7 +198,7 @@ def test_parallel_sim_cli_invalid_path():
 def test_parallel_sim_body_frame_velocity_tracking():
     """Verify linear velocity is projected to body frame so yaw rotation tracks correctly."""
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
     )
     try:
@@ -235,7 +235,7 @@ def test_parallel_sim_body_frame_velocity_tracking():
 def test_parallel_sim_foot_contact_binarization():
     """Verify foot contact in observations is binarized to 0.0/1.0 matching hardware."""
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
     )
     try:
@@ -252,7 +252,7 @@ def test_parallel_sim_foot_contact_binarization():
 def test_parallel_sim_domain_randomization_and_velocity_commands():
     """Verify reset_env applies domain randomization on joint angles and commands."""
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=4,
     )
     try:
@@ -291,7 +291,7 @@ def test_parallel_sim_domain_randomization_and_velocity_commands():
 def test_parallel_sim_episode_steps_and_truncation():
     """Verify episode_steps increments each step and triggers done when reaching max_episode_steps."""
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
     )
     try:
@@ -322,7 +322,7 @@ def test_parallel_sim_episode_steps_and_truncation():
 def test_parallel_sim_aligned_next_obs_on_done():
     """Verify next_obs returned by step() is aligned with the reset observation for done envs."""
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
     )
     try:
@@ -346,7 +346,7 @@ def test_parallel_sim_aligned_next_obs_on_done():
 def test_parallel_sim_fall_penalty_applied():
     """Verify that fall_penalty is applied to environments where the robot falls."""
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=1,
     )
     try:
@@ -365,7 +365,7 @@ def test_parallel_sim_fall_penalty_applied():
 def test_parallel_sim_reset_nominal_stance():
     """Verify reset_env initializes qpos around NOMINAL_JOINT_POS with knee bent and within limits."""
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=1,
     )
     try:
@@ -383,7 +383,7 @@ def test_parallel_sim_reset_nominal_stance():
 def test_parallel_sim_stand_still_mode():
     """Verify that when stand_still=True, all velocity commands remain zero across resets."""
     runner = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=4,
         stand_still=True,
     )

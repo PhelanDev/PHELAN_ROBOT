@@ -5,15 +5,13 @@ __pycache__/
 .pytest_v2_*/
 .pytest_v2_*.log
 .superpowers/
-plans/
+docs/plans/
 artifacts/
 docs/tailieubandau.txt
-his.md
+docs/his.md
 CLAUDE.md
 GEMINI.md
-viewer_3d.html
 t_m_t_t_chi_ti_t_d_n_robot_hai_ch_n_microduck.txt
-docs/superpowers/
 .env
 .env.*
 *.local

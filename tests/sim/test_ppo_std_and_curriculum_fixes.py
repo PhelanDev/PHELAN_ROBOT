@@ -20,7 +20,7 @@ def test_train_ppo_signature_and_caps_action_std(tmp_path: Path):
     assert ActorCritic(obs_dim=42, action_dim=8).max_log_std == pytest.approx(0.0)
 
     res = train_ppo(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=2,
         rollout_steps=8,
         mini_batch_size=8,
@@ -40,7 +40,7 @@ from sim.env.run_parallel_sim import ParallelSimRunner
 
 def test_hurdles_command_sampling_aligns_with_corridor_and_stages():
     runner0 = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=32,
         num_threads=1,
         stage=0,
@@ -55,7 +55,7 @@ def test_hurdles_command_sampling_aligns_with_corridor_and_stages():
         runner0.close()
 
     runner1 = ParallelSimRunner(
-        model_path="robot/cyberduck_v2.xml",
+        model_path="src/robot/cyberduck_v2.xml",
         num_envs=32,
         num_threads=1,
         stage=1,

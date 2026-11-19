@@ -7,7 +7,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-V2_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "robot")
+V2_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src", "robot")
 MESH_DIR = os.path.join(V2_DIR, "meshes")
 CAD_DIR = os.path.join(V2_DIR, "cad")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -225,7 +225,7 @@ def test_cyberduck_v2_foot_dynamics_and_heading_turn_gate():
     from sim.env.run_parallel_sim import ParallelSimRunner
     from sim.env.env_config import compute_rewards
 
-    runner = ParallelSimRunner(model_path="robot/cyberduck_v2.xml", num_envs=1)
+    runner = ParallelSimRunner(model_path="src/robot/cyberduck_v2.xml", num_envs=1)
     try:
         assert runner.left_foot_gid != -1 and runner.right_foot_gid != -1
         assert runner.left_foot_bid != -1 and runner.right_foot_bid != -1

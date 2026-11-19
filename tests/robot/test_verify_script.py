@@ -10,7 +10,7 @@ from robot.robot_spec import MODEL_PATH, TOTAL_MASS_KG, URDF_PATH
 
 def test_verify_script_execution():
     """Verify that verify_model.py runs successfully and reports success."""
-    script_path = os.path.join(os.path.dirname(__file__), "..", "..", "tools", "robot", "verify_model.py")
+    script_path = os.path.join(os.path.dirname(__file__), "..", "..", "src", "tools", "robot", "verify_model.py")
     res = subprocess.run([sys.executable, script_path], capture_output=True, text=True)
     assert res.returncode == 0, f"Script failed with code {res.returncode}:\n{res.stderr}"
     assert "Verification SUCCESS" in res.stdout
@@ -19,7 +19,7 @@ def test_verify_script_execution():
 
 def test_verify_script_cli_custom_paths():
     """Verify that CLI flags for --mjcf and --urdf work."""
-    script_path = os.path.join(os.path.dirname(__file__), "..", "..", "tools", "robot", "verify_model.py")
+    script_path = os.path.join(os.path.dirname(__file__), "..", "..", "src", "tools", "robot", "verify_model.py")
     mjcf_path = str(MODEL_PATH)
     urdf_path = str(URDF_PATH)
 
@@ -34,7 +34,7 @@ def test_verify_script_cli_custom_paths():
 
 def test_verify_script_cli_invalid_path():
     """Verify that providing an invalid path causes the script to fail with non-zero exit code."""
-    script_path = os.path.join(os.path.dirname(__file__), "..", "..", "tools", "robot", "verify_model.py")
+    script_path = os.path.join(os.path.dirname(__file__), "..", "..", "src", "tools", "robot", "verify_model.py")
     res = subprocess.run(
         [sys.executable, script_path, "--mjcf", "nonexistent_model.xml"],
         capture_output=True,
