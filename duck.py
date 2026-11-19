@@ -149,11 +149,11 @@ def cmd_verify(args: argparse.Namespace) -> int:
         pytest_args = [sys.executable, "-m", "pytest"]
         if args.fast:
             pytest_args.extend([
-                "tests/test_eplen_suicide_fix.py",
-                "tests/test_interactive_viewer.py",
-                "tests/test_cyberduck.py",
-                "tests/test_advanced_gaits.py",
-                "tests/test_vision_tracker.py",
+                "tests/sim/test_eplen_suicide_fix.py",
+                "tests/robot/test_interactive_viewer.py",
+                "tests/robot/test_cyberduck.py",
+                "tests/sim/test_advanced_gaits.py",
+                "tests/sim/test_vision_tracker.py",
                 "-q"
             ])
         else:
