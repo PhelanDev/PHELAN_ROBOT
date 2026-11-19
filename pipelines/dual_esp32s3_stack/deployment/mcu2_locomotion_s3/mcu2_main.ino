@@ -16,6 +16,7 @@
 #include "../uart_packet_protocol.h"
 #include "../esp32_quant_config.h"
 #include "../esp32_policy_weights.h"
+#include "../v2_policy_contract.h"
 
 // ============================================================================
 // Pin Definitions & Hardware Configuration

@@ -1,4 +1,4 @@
-"""Shared Raspberry Pi Inference Core and Actuation Runtime for MicroDuck 8-DOF.
+"""Shared Raspberry Pi Inference Core and Actuation Runtime for CyberDuck V2.
 
 Deduplicated common logic between Raspberry Pi 5 and Raspberry Pi Zero 2 W:
 - Float32 ONNX Runtime inference engine for 42-dimensional observation vector
@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
-# Ensure duckV1 root is in sys.path
+# Ensure project root is in sys.path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -27,6 +27,7 @@ from training.env_config import (
     scale_actions,
     clip_action_rates,
 )
+from duck_v2.robot_spec import DEFAULT_ONNX_PATH, MODEL_NAME
 
 # Optional hardware libraries
 try:
@@ -410,8 +411,10 @@ class BaseRPiInferenceEngine:
         )
 
         # ONNX Model setup
-        self.model_path = model_path
+        self.model_path = str(model_path) if model_path is not None else (None if self.mock else str(DEFAULT_ONNX_PATH))
         self.ort_session = None
+        if self.model_path is not None and not Path(self.model_path).is_file():
+            raise FileNotFoundError(f"CyberDuck V2 ONNX policy not found: {self.model_path}; export a verified V2 checkpoint first")
         if self.model_path and Path(self.model_path).exists():
             if ort is None:
                 raise RuntimeError("onnxruntime is required to load ONNX model.")
@@ -419,8 +422,13 @@ class BaseRPiInferenceEngine:
             opts.intra_op_num_threads = 4  # Utilize all 4 CPU cores
             self.ort_session = ort.InferenceSession(self.model_path, opts)
             self.input_name = self.ort_session.get_inputs()[0].name
-            from training.policy_contract import validate_observation_schema
-            raw_schema = self.ort_session.get_modelmeta().custom_metadata_map.get("observation_schema")
+            from training.policy_contract import validate_model_identity, validate_observation_schema
+            metadata = self.ort_session.get_modelmeta().custom_metadata_map
+            if metadata.get("model_name") or metadata.get("model_path"):
+                validate_model_identity(metadata, MODEL_NAME)
+            elif not self.mock:
+                raise ValueError("Hardware runtime requires CyberDuck V2 model identity in ONNX metadata")
+            raw_schema = metadata.get("observation_schema")
             if raw_schema is None and legacy_observation_schema is None:
                 raise ValueError("Legacy policy has no observation_schema; provide an explicit verified legacy schema")
             try:
@@ -434,7 +442,7 @@ class BaseRPiInferenceEngine:
             self.observation_schema = schema
             print(f"[{self.engine_name}] Loaded ONNX policy model from {self.model_path}")
         else:
-            print(f"[{self.engine_name}] No ONNX model provided or file not found. Running in heuristic/zero-action mode.")
+            print(f"[{self.engine_name}] No ONNX model provided. Running mock zero-action mode.")
 
         # State tracking for rate limiting (initialized to nominal stand posture)
         self.last_targets = self.cfg.nominal_qpos.copy()

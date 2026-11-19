@@ -56,6 +56,8 @@ from pipelines.dual_esp32s3_stack.training.run_parallel_sim import (
     run_benchmark as esp32_run_benchmark,
 )
 
+from duck_v2.robot_spec import MODEL_PATH
+
 
 def test_rpi5_env_config_dimensions():
     """Verify RPi5 configuration dataclass dimensions and constraints."""
@@ -263,7 +265,7 @@ def test_esp32_int8_quantization_helpers():
 
 def test_rpi5_parallel_sim_runner():
     """Verify ParallelSimRunner with RPi5 MJCF model and 42-dim observation space."""
-    rpi5_model_path = REPO_ROOT / "pipelines" / "rpi5_stack" / "models" / "mjcf" / "microduck_rpi5_8dof.xml"
+    rpi5_model_path = MODEL_PATH
     runner = RPi5ParallelSimRunner(
         model_path=rpi5_model_path,
         num_envs=4,
@@ -278,8 +280,8 @@ def test_rpi5_parallel_sim_runner():
         assert obs.shape == (4, 42)
         assert np.all(np.isfinite(obs))
         # Ensure foot contacts are binarized (0.0 / 1.0) and padded indices are 0.0
-        assert np.all((obs[:, 33:37] == 0.0) | (obs[:, 33:37] == 1.0))
-        assert np.all(obs[:, 35:37] == 0.0)
+        assert np.all((obs[:, 33:35] == 0.0) | (obs[:, 33:35] == 1.0))
+        np.testing.assert_allclose(obs[:, 35:37], np.tile([0.0, 1.0], (4, 1)))
         # Ensure LiDAR readings are positive distances (cutoff=2.0)
         assert np.all(obs[:, 37:42] >= 0.0)
 
@@ -299,7 +301,7 @@ def test_rpi5_parallel_sim_runner():
 
 def test_esp32_parallel_sim_runner():
     """Verify ParallelSimRunner with Dual ESP32-S3 MJCF model and 42-dim observation space."""
-    esp32_model_path = REPO_ROOT / "pipelines" / "dual_esp32s3_stack" / "models" / "mjcf" / "microduck_esp32_8dof.xml"
+    esp32_model_path = MODEL_PATH
     runner = ESP32ParallelSimRunner(
         model_path=esp32_model_path,
         num_envs=4,
@@ -313,8 +315,8 @@ def test_esp32_parallel_sim_runner():
         obs = runner.reset()
         assert obs.shape == (4, 42)
         assert np.all(np.isfinite(obs))
-        assert np.all((obs[:, 33:37] == 0.0) | (obs[:, 33:37] == 1.0))
-        assert np.all(obs[:, 35:37] == 0.0)
+        assert np.all((obs[:, 33:35] == 0.0) | (obs[:, 33:35] == 1.0))
+        np.testing.assert_allclose(obs[:, 35:37], np.tile([0.0, 1.0], (4, 1)))
         assert np.all(obs[:, 37:42] >= 0.0)
 
         actions = np.random.uniform(-0.5, 0.5, size=(4, 8)).astype(np.float32)
@@ -371,7 +373,7 @@ def test_cli_benchmark_both_stacks():
 
 def test_rpi5_truncation_randomization_aligned_obs():
     """Verify RPi5 runner supports episode truncation, domain randomization, and aligned auto-reset."""
-    rpi5_model_path = REPO_ROOT / "pipelines" / "rpi5_stack" / "models" / "mjcf" / "microduck_rpi5_8dof.xml"
+    rpi5_model_path = MODEL_PATH
     runner = RPi5ParallelSimRunner(
         model_path=rpi5_model_path,
         num_envs=4,
@@ -414,7 +416,7 @@ def test_rpi5_truncation_randomization_aligned_obs():
 
 def test_esp32_truncation_randomization_aligned_obs():
     """Verify ESP32 runner supports episode truncation, domain randomization, and aligned auto-reset."""
-    esp32_model_path = REPO_ROOT / "pipelines" / "dual_esp32s3_stack" / "models" / "mjcf" / "microduck_esp32_8dof.xml"
+    esp32_model_path = MODEL_PATH
     runner = ESP32ParallelSimRunner(
         model_path=esp32_model_path,
         num_envs=4,
@@ -478,14 +480,13 @@ def test_evaluate_models_sim_checkpoint_loading_and_architecture_inference(tmp_p
         "action_dim": 8,
         "hidden_dim": 128,
         "stage": 1,
+        "model_name": "cyberduck_v2.xml",
     }
     p37 = tmp_path / "dummy_37.pt"
     torch.save(ckpt_37, p37)
 
-    loaded_37 = load_actor(p37)
-    assert hasattr(loaded_37, "obs_dim") and loaded_37.obs_dim == 37
-    out_37 = loaded_37(torch.zeros(2, 37))
-    assert out_37.shape == (2, 8)
+    with pytest.raises(ValueError, match="42 observations"):
+        load_actor(p37)
 
     # 2. Create a 42-dim custom actor checkpoint
     dummy_actor_42 = nn.Sequential(
@@ -501,6 +502,7 @@ def test_evaluate_models_sim_checkpoint_loading_and_architecture_inference(tmp_p
         "action_dim": 8,
         "hidden_dim": 256,
         "stage": 0,
+        "model_name": "cyberduck_v2.xml",
     }
     p42 = tmp_path / "dummy_42.pt"
     torch.save(ckpt_42, p42)

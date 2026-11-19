@@ -2,18 +2,19 @@
 import math
 from pathlib import Path
 
+from duck_v2.robot_spec import CHECKPOINT_PREFIX, MODEL_NAME
 
-TARGET_MODELS = {
-    "rpi5": "microduck_rpi5_8dof.xml", "pizero2w": "microduck_pizero2w_8dof.xml",
-    "esp32": "microduck_esp32_8dof.xml", "v2": "cyberduck_v2.xml",
-}
-CHECKPOINT_PREFIXES = {"rpi5": "microduck_rpi5", "pizero2w": "microduck_pizero2w",
-                       "esp32": "microduck_esp32", "v2": "cyberduck_v2"}
+
+RUNTIME_TARGETS = ("rpi5", "pizero2w", "esp32", "v2")
+TARGET_MODELS = {target: MODEL_NAME for target in RUNTIME_TARGETS}
+CHECKPOINT_PREFIXES = {target: CHECKPOINT_PREFIX for target in RUNTIME_TARGETS}
 
 
 def resolve_target_checkpoints(root, targets, explicit_checkpoint=None):
     resolved = {}
     for target in targets:
+        if target not in CHECKPOINT_PREFIXES:
+            raise ValueError(f"Unknown runtime target: {target}")
         prefix = CHECKPOINT_PREFIXES[target]
         candidates = [Path(root) / "models/checkpoints" / f"{prefix}_{kind}.pt"
                       for kind in ("best", "ppo", "latest")]

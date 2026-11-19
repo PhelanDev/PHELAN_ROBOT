@@ -129,7 +129,7 @@ def test_bc_pretrain_decreases_loss_and_loads_into_ppo(tmp_path: Path):
     assert np.isfinite(result["metrics"]["policy_loss"])
 
 
-def test_collect_teacher_demonstrations_supports_v1_dim_slicing():
+def test_collect_teacher_demonstrations_rejects_retired_v1_dim_slicing():
     import torch
     import torch.nn as nn
     from training.run_parallel_sim import ParallelSimRunner
@@ -138,14 +138,10 @@ def test_collect_teacher_demonstrations_supports_v1_dim_slicing():
     runner = ParallelSimRunner(model_path="duck_v2/cyberduck_v2.xml", num_envs=2, num_threads=1, stage=0)
     try:
         teacher = nn.Linear(37, 8)
-        obs_arr, act_arr, ret_arr = collect_teacher_demonstrations(runner, teacher, num_steps=15)
+        with pytest.raises(ValueError, match="42-observation"):
+            collect_teacher_demonstrations(runner, teacher, num_steps=15)
     finally:
         runner.close()
-
-    assert obs_arr.shape[1] == 42
-    assert act_arr.shape == (len(obs_arr), 8)
-    assert ret_arr.shape == (len(obs_arr),)
-    assert np.all((act_arr >= -1.0) & (act_arr <= 1.0))
 
 
 def test_pretrain_bc_cli_runs_directly_from_repo_root():

@@ -10,7 +10,16 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 V2_DIR = os.path.join(os.path.dirname(__file__), "..", "duck_v2")
 MESH_DIR = os.path.join(V2_DIR, "meshes")
 CAD_DIR = os.path.join(V2_DIR, "cad")
-MJCF_PATH = os.path.join(V2_DIR, "cyberduck_v2.xml")
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from duck_v2.robot_spec import (  # noqa: E402
+    MODEL_PATH as CANONICAL_V2_MJCF,
+    NUM_ACTIONS,
+    NUM_OBSERVATIONS,
+    SOLE_HALF_SIZE_M,
+    TOTAL_MASS_KG,
+)
+
+MJCF_PATH = str(CANONICAL_V2_MJCF)
 
 REQUIRED_MESHES = [
     "cyber_helm.stl",
@@ -58,6 +67,8 @@ def test_cyberduck_v2_mjcf_validity_and_kinematics():
     # Must have exactly 8 actuated joints
     actuator_names = [mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i) for i in range(model.nu)]
     assert len(actuator_names) == 8, f"Expected 8 actuators, got {len(actuator_names)}"
+    assert model.nu == NUM_ACTIONS
+    assert np.isclose(model.body_subtreemass[model.body("trunk_base").id], TOTAL_MASS_KG, atol=1e-6)
 
     # Must have low, balanced center of mass
     com = data.subtree_com[model.body("trunk_base").id]
@@ -129,11 +140,11 @@ def test_cyberduck_v2_parallel_sim_integration():
     from training.run_parallel_sim import ParallelSimRunner
     sim = ParallelSimRunner(num_envs=2, model_path=MJCF_PATH, decimation=1)
     obs = sim.get_observations()
-    assert obs.shape == (2, 42), f"Expected obs shape (2, 42), got {obs.shape}"
+    assert obs.shape == (2, NUM_OBSERVATIONS), f"Expected obs shape (2, 42), got {obs.shape}"
 
     actions = np.zeros((2, 8), dtype=np.float32)
     next_obs, rewards, dones, infos = sim.step(actions)
-    assert next_obs.shape == (2, 42)
+    assert next_obs.shape == (2, NUM_OBSERVATIONS)
     assert len(rewards) == 2
     assert len(dones) == 2
 
@@ -323,7 +334,7 @@ def test_cyberduck_v2_joint_frictionloss_damping_and_sole_calibration():
     )
 
     # Sole and touch_site dimensions
-    expected_sole_size = np.array([0.025, 0.018, 0.004])
+    expected_sole_size = np.array(SOLE_HALF_SIZE_M)
     expected_site_size = np.array([0.027, 0.019, 0.005])
 
     for sname in ("left_sole_geom", "right_sole_geom"):
@@ -348,6 +359,45 @@ def test_cyberduck_v2_joint_frictionloss_damping_and_sole_calibration():
 
     # Touch site must strictly enclose sole in all 3 half-dimensions
     assert np.all(expected_site_size > expected_sole_size), "Touch site must strictly surround sole geometry"
+
+
+def test_v2_robot_only_mjcf_is_derived_and_has_no_scene_geometry():
+    from duck_v2.scripts.build_robot_only_mjcf import build_robot_only_mjcf
+    from duck_v2.robot_spec import ROBOT_ONLY_MJCF_PATH
+
+    output = build_robot_only_mjcf()
+    assert output == ROBOT_ONLY_MJCF_PATH
+    model = mujoco.MjModel.from_xml_path(str(output))
+    assert model.nu == NUM_ACTIONS
+    assert model.nsensor == 26
+    assert model.body_subtreemass[1] == pytest.approx(TOTAL_MASS_KG, abs=1e-6)
+    assert all(model.geom_bodyid[i] != 0 for i in range(model.ngeom))
+    assert not any(
+        mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, i) in {
+            "floor", "pillar_l1_left", "stair_step_1", "floor_exit"
+        }
+        for i in range(model.ngeom)
+    )
+
+
+def test_v2_urdf_is_derived_from_canonical_mjcf_and_has_same_mass():
+    from duck_v2.robot_spec import URDF_PATH
+    from duck_v2.scripts.export_v2_urdf import export_v2_urdf
+    import xml.etree.ElementTree as ET
+
+    urdf_path = export_v2_urdf()
+    root = ET.parse(urdf_path).getroot()
+    assert root.get("name") == "cyberduck_v2"
+    assert root.find("joint[@name='trunk_freejoint']").get("type") == "floating"
+    links = root.findall("link")
+    total_mass = sum(float(link.find("inertial/mass").get("value"))
+                     for link in links if link.find("inertial/mass") is not None)
+    assert total_mass == pytest.approx(TOTAL_MASS_KG, abs=1e-6)
+    assert len([joint for joint in root.findall("joint") if joint.get("type") == "revolute"]) == NUM_ACTIONS
+    assert str(URDF_PATH) == str(urdf_path)
+    urdf_model = mujoco.MjModel.from_xml_path(str(urdf_path))
+    assert urdf_model.nq == 15 and urdf_model.nv == 14
+    assert float(urdf_model.body_subtreemass[1]) == pytest.approx(TOTAL_MASS_KG, abs=1e-6)
 
 
 def test_cyberduck_v2_static_stand_zero_self_collisions_and_roll_stability():

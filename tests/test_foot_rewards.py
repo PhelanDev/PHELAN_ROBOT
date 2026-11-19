@@ -113,7 +113,7 @@ def test_vectorized_shapes():
 def test_parallel_sim_extracts_foot_dynamics():
     """Verify DuckParallelSim extracts foot z, vel, and forces, providing rew_foot_clearance and pen_stumble in infos."""
     sim = DuckParallelSim(
-        model_path="models/mjcf/microduck_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2,
         decimation=1,
     )

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MicroDuck 8-DOF Bipedal Robot - Unified Operations CLI (duck.py).
+"""CyberDuck V2 8-DOF Bipedal Robot - Unified Operations CLI (duck.py).
 
 Provides a single standardized entry point for:
 - `status`: Inspect model checkpoint metrics, stage, and hardware readiness
@@ -17,7 +17,8 @@ import webbrowser
 from pathlib import Path
 from typing import Optional
 
-REPO_ROOT = Path(__file__).resolve().parent
+from duck_v2.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME, MODEL_PATH, REPO_ROOT
+
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 from training.policy_contract import CHECKPOINT_PREFIXES, resolve_target_checkpoints
@@ -33,9 +34,9 @@ if sys.platform == "win32":
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    """Display comprehensive status of MicroDuck 8-DOF robot and training metrics."""
+    """Display CyberDuck V2 status and shared deployment formats."""
     print("=" * 72)
-    print("🦆 MicroDuck 8-DOF Bipedal Robot - System & Training Status")
+    print("🦆 CyberDuck V2 8-DOF Bipedal Robot - System & Training Status")
     print("=" * 72)
 
     # 1. Model Architecture
@@ -48,16 +49,20 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     # 2. Checkpoints Status
     ckpt_dir = REPO_ROOT / "models" / "checkpoints"
-    best_ckpt = ckpt_dir / "microduck_rpi5_best.pt"
-    latest_ckpt = ckpt_dir / "microduck_rpi5_latest.pt"
-    for target, prefix in CHECKPOINT_PREFIXES.items():
-        print(f"  • {target}: {prefix}_ppo.pt / {prefix}_latest.pt / {prefix}_best.pt")
+    best_ckpt = ckpt_dir / f"{CHECKPOINT_PREFIX}_best.pt"
+    checkpoint_status = "[CHƯA CÓ]"
 
     print("\n[2] TIẾN TRÌNH HUẤN LUYỆN (CHECKPOINTS & CURRICULUM)")
     if best_ckpt.exists():
         try:
             import torch
+            from training.policy_contract import validate_model_identity, validate_observation_schema
             data = torch.load(best_ckpt, map_location="cpu", weights_only=False)
+            validate_model_identity(data, MODEL_NAME)
+            schema = validate_observation_schema(data.get("observation_schema"))
+            if schema["obs_dim"] != 42 or data.get("obs_dim") != 42 or data.get("action_dim") != 8:
+                raise ValueError("Checkpoint V2 phải có 42 quan sát và 8 hành động")
+            checkpoint_status = "[ĐÃ XÁC MINH METADATA V2]"
             stage = data.get("stage", 0)
             iters = data.get("iterations", 0)
             steps = data.get("total_timesteps", 0)
@@ -69,7 +74,9 @@ def cmd_status(args: argparse.Namespace) -> int:
             print(f"    - Điểm thưởng kỷ lục : {best_r:+.4f}")
             print(f"    - Quãng đường tiến X : {dist_x * 100:.2f} cm")
         except Exception as e:
-            print(f"  • Không thể đọc {best_ckpt.name}: {e}")
+            checkpoint_status = "[CẦN HUẤN LUYỆN LẠI / XUẤT LẠI V2]"
+            print(f"  • {best_ckpt.name}: {checkpoint_status} (Stage chưa xác định)")
+            print(f"    - Chưa xác minh được identity/schema V2: {e}")
     else:
         print(f"  • Chưa có checkpoint {best_ckpt.name} (Stage chưa xác định)")
 
@@ -83,22 +90,37 @@ def cmd_status(args: argparse.Namespace) -> int:
         print("  • Git: Không thể lấy thông tin commit")
 
     # 4. Hardware Deployment Targets
-    onnx_file = REPO_ROOT / "models" / "microduck_rpi5_policy.onnx"
-    pizero_onnx_file = REPO_ROOT / "models" / "microduck_pizero2w_policy.onnx"
+    onnx_file = DEFAULT_ONNX_PATH
     esp32_h = REPO_ROOT / "pipelines" / "dual_esp32s3_stack" / "deployment" / "esp32_policy_weights.h"
+    esp32_config = esp32_h.with_name("esp32_quant_config.h")
+    import re
+    esp32_ready = True
+    for header, marker, identity in (
+        (esp32_h, "CYBERDUCK_V2_POLICY", "POLICY_MODEL_NAME"),
+        (esp32_config, "CYBERDUCK_V2_QUANT_CONFIG", "QUANT_MODEL_NAME"),
+    ):
+        try:
+            contents = header.read_text(encoding="utf-8")
+            esp32_ready &= bool(
+                re.search(rf'^\s*#define\s+{marker}\s+1\s*$', contents, re.MULTILINE)
+                and re.search(rf'^\s*#define\s+{identity}\s+"{re.escape(MODEL_NAME)}"\s*$', contents, re.MULTILINE)
+            )
+        except (OSError, UnicodeError):
+            esp32_ready = False
+    esp32_status = "[ĐỦ MARKER V2]" if esp32_ready else (
+        "[CẦN XUẤT LẠI V2]" if esp32_h.exists() or esp32_config.exists() else "[CHƯA XUẤT]"
+    )
     print("\n[4] TỆP TRIỂN KHAI PHẦN CỨNG (DEPLOYMENT ARTIFACTS)")
-    print(f"  • RPi 5 Float32 ONNX    : {'[CÓ SẴN]' if onnx_file.exists() else '[CHƯA XUẤT]'} ({onnx_file.name})")
-    print(f"  • Pi Zero 2 W ONNX      : {'[CÓ SẴN]' if pizero_onnx_file.exists() else '[CHƯA XUẤT]'} ({pizero_onnx_file.name})")
-    print(f"  • ESP32-S3 INT8 C-Header: {'[CÓ SẴN]' if esp32_h.exists() else '[CHƯA XUẤT]'} ({esp32_h.name})")
+    print("  • Robot model identity : CyberDuck V2 dùng chung cho RPi 5, Pi Zero 2 W và ESP32-S3")
+    print(f"  • Pi ONNX V2 Float32    : {'[TỆP TỒN TẠI; CHƯA XÁC MINH RUNTIME]' if onnx_file.is_file() else '[CHƯA XUẤT]'} ({onnx_file.name})")
+    print(f"  • ESP32-S3 INT8 C-Header: {esp32_status} ({esp32_h.name} + {esp32_config.name})")
 
-    # 5. CyberDuck V2 Pro Status
-    v2_xml = REPO_ROOT / "duck_v2" / "cyberduck_v2.xml"
+    # 5. Canonical V2 asset and status
     v2_cad = REPO_ROOT / "duck_v2" / "cad" / "cyberduck_v2_assembly.obj"
     v2_zip = REPO_ROOT / "duck_v2" / "cad" / "cyberduck_v2_stl_parts.zip"
-    v2_best_ckpt = REPO_ROOT / "models" / "checkpoints" / "cyberduck_v2_best.pt"
-    print("\n[5] MÔ HÌNH THỂ THAO CYBERDUCK V2 PRO (ATHLETIC BIONIC DROID / MECHA AVIAN EDITION)")
-    print(f"  • Mô hình vật lý MuJoCo : {'[SẴN SÀNG]' if v2_xml.exists() else '[CHƯA TẠO]'} ({v2_xml.name})")
-    print(f"  • Checkpoint tốt nhất   : {'[CÓ SẴN]' if v2_best_ckpt.exists() else '[CHƯA CÓ]'} ({v2_best_ckpt.name})")
+    print("\n[5] ROBOT CANONICAL CYBERDUCK V2 PRO")
+    print(f"  • Mô hình vật lý MuJoCo : {'[SẴN SÀNG]' if MODEL_PATH.exists() else '[CHƯA TẠO]'} ({MODEL_NAME})")
+    print(f"  • Checkpoint tốt nhất   : {checkpoint_status} ({best_ckpt.name})")
     print(f"  • Bản vẽ lắp ráp 3D CAD : {'[SẴN SÀNG]' if v2_cad.exists() else '[CHƯA XUẤT]'} ({v2_cad.name})")
     print(f"  • Gói 17 File STL In 3D : {'[SẴN SÀNG]' if v2_zip.exists() else '[CHƯA NÉN]'} ({v2_zip.name})")
     print("  • Tiếp xúc sàn          : Phẳng tuyệt đối tại Z = 0.000m (Khớp cổ các-đăng & bàn chân 50mm)")
@@ -158,14 +180,14 @@ def cmd_view(args: argparse.Namespace) -> int:
     ]
 
     # Model resolution (supports baseline MicroDuck and CyberDuck V2)
-    model_path = None
-    if getattr(args, "v2", False) or getattr(args, "model", None) in ("v2", "cyberduck_v2"):
-        model_path = REPO_ROOT / "duck_v2" / "cyberduck_v2.xml"
-    elif getattr(args, "model", None):
-        model_path = Path(args.model)
-
-    if model_path:
-        cmd.extend(["--model", str(model_path)])
+    requested_model = getattr(args, "model", None)
+    if requested_model and requested_model not in ("v2", "cyberduck_v2", MODEL_NAME):
+        model_path = Path(requested_model)
+        if model_path.name != MODEL_NAME:
+            raise ValueError(f"Only {MODEL_NAME} is supported; legacy robot models are archived")
+    else:
+        model_path = MODEL_PATH
+    cmd.extend(["--model", str(model_path)])
 
     if getattr(args, "gait", None):
         cmd.extend(["--gait", str(args.gait)])
@@ -180,8 +202,7 @@ def cmd_view(args: argparse.Namespace) -> int:
     if args.headless:
         cmd.append("--headless")
 
-    target_desc = "CyberDuck V2 Pro" if getattr(args, "v2", False) or getattr(args, "model", None) in ("v2", "cyberduck_v2") else "MicroDuck 8-DOF"
-    print(f">>> Khởi chạy Interactive 3D Viewer ({target_desc}, Stage {args.stage})...")
+    print(f">>> Khởi chạy Interactive 3D Viewer (CyberDuck V2 Pro, Stage {args.stage})...")
     return subprocess.run(cmd).returncode
 
 
@@ -199,16 +220,12 @@ def cmd_train(args: argparse.Namespace) -> int:
         str(iters),
     ]
 
-    target_models = {
-        "rpi5": REPO_ROOT / "pipelines" / "rpi5_stack" / "models" / "mjcf" / "microduck_rpi5_8dof.xml",
-        "pizero2w": REPO_ROOT / "pipelines" / "pizero2w_stack" / "models" / "mjcf" / "microduck_pizero2w_8dof.xml",
-        "esp32": REPO_ROOT / "pipelines" / "dual_esp32s3_stack" / "models" / "mjcf" / "microduck_esp32_8dof.xml",
-        "v2": REPO_ROOT / "duck_v2" / "cyberduck_v2.xml",
-    }
-    if getattr(args, "target", None) and args.target in target_models:
-        cmd.extend(["--model-path", str(target_models[args.target])])
+    target = getattr(args, "target", "v2")
+    if target not in CHECKPOINT_PREFIXES:
+        raise ValueError(f"Unknown runtime target: {target}")
+    cmd.extend(["--model-path", str(MODEL_PATH)])
 
-    prefix = CHECKPOINT_PREFIXES[getattr(args, "target", "rpi5")]
+    prefix = CHECKPOINT_PREFIX
     save_path = Path(getattr(args, "save_path", None) or REPO_ROOT / "models/checkpoints" / f"{prefix}_ppo.pt")
     save_prefix = save_path.stem[:-4] if save_path.stem.endswith("_ppo") else save_path.stem
     best_path = Path(getattr(args, "best_save_path", None) or save_path.with_name(f"{save_prefix}_best.pt"))
@@ -243,7 +260,7 @@ def cmd_train(args: argparse.Namespace) -> int:
         cmd.append("--dry-run")
 
     mode_str = "DRY-RUN" if getattr(args, "dry_run", False) else f"{args.envs} envs, tối đa {iters} iters"
-    print(f">>> Khởi động huấn luyện PPO ({mode_str}, target: {getattr(args, 'target', 'rpi5')})...", flush=True)
+    print(f">>> Khởi động huấn luyện CyberDuck V2 PPO ({mode_str}, runtime: {target})...", flush=True)
 
     return subprocess.run(cmd).returncode
 
@@ -255,15 +272,14 @@ def cmd_export(args: argparse.Namespace) -> int:
     targets = ("rpi5", "pizero2w", "esp32") if target == "all" else (target,)
     try:
         checkpoints = resolve_target_checkpoints(REPO_ROOT, targets, explicit_checkpoint)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         print(f"[Export] {exc}")
         return 1
 
     from scripts.export_policy import (
         export_onnx,
         export_esp32_headers,
-        DEFAULT_ONNX_PATH,
-        DEFAULT_PIZERO2W_ONNX_PATH,
+        DEFAULT_ONNX_PATH as EXPORT_ONNX_PATH,
         DEFAULT_ESP32_WEIGHTS_PATH,
         DEFAULT_ESP32_CONFIG_PATH,
         prepare_target_exports,
@@ -279,15 +295,14 @@ def cmd_export(args: argparse.Namespace) -> int:
 
     print(f">>> Đang xuất mô hình (target: {target}) từ {checkpoints}...")
 
-    if target in ("rpi5", "all"):
-        out_rpi5 = custom_out or getattr(args, "onnx_output", None) or DEFAULT_ONNX_PATH
-        onnx_file = export_onnx(prepared["rpi5"], output_path=out_rpi5, opset=opset)
-        print(f"[Export] Exported Float32 ONNX model (RPi 5): {onnx_file}")
-
-    if target in ("pizero2w", "all"):
-        out_pi0 = (custom_out if target == "pizero2w" else None) or getattr(args, "pizero_onnx_output", None) or DEFAULT_PIZERO2W_ONNX_PATH
-        pizero_onnx = export_onnx(prepared["pizero2w"], output_path=out_pi0, opset=opset)
-        print(f"[Export] Exported Float32 ONNX model (Pi Zero 2 W): {pizero_onnx}")
+    if target in ("rpi5", "pizero2w", "all"):
+        pi_zero_out = getattr(args, "pizero_onnx_output", None)
+        out_pi = custom_out or (pi_zero_out if target == "pizero2w" else None) or getattr(args, "onnx_output", None) or EXPORT_ONNX_PATH
+        pi_policy = prepared["rpi5"] if "rpi5" in prepared else prepared["pizero2w"]
+        onnx_file = export_onnx(pi_policy, output_path=out_pi, opset=opset)
+        print(f"[Export] Exported shared CyberDuck V2 Float32 ONNX policy for Pi runtimes: {onnx_file}")
+        if target == "all" and pi_zero_out and Path(pi_zero_out).resolve() != Path(out_pi).resolve():
+            print(f"[Export] Additional Pi Zero 2 W copy: {export_onnx(pi_policy, output_path=pi_zero_out, opset=opset)}")
 
     if target in ("esp32", "all"):
         out_w = (custom_out if target == "esp32" else None) or getattr(args, "esp32_weights_output", None) or DEFAULT_ESP32_WEIGHTS_PATH
@@ -306,7 +321,7 @@ def cmd_export(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="🦆 MicroDuck 8-DOF Bipedal Robot - Unified Operations CLI",
+        description="🦆 CyberDuck V2 8-DOF Bipedal Robot - Unified Operations CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command", help="Available operations")
@@ -325,15 +340,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_view.add_argument("--stage", type=int, default=0, choices=[0, 1, 2, 3], help="Giai đoạn địa hình (0-3)")
     p_view.add_argument("--policy", type=str, default=None, help="Đường dẫn file checkpoint policy (.pt)")
     p_view.add_argument("--headless", action="store_true", help="Chạy chế độ giả lập không cửa sổ")
-    p_view.add_argument("--model", type=str, default=None, help="Đường dẫn file mô hình XML hoặc alias ('v2')")
-    p_view.add_argument("--v2", action="store_true", help="Xem trực tiếp mô hình CyberDuck V2 Pro")
+    p_view.add_argument("--model", type=str, default=None, help="Đường dẫn CyberDuck V2 MJCF (mặc định: mô hình V2 canonical)")
+    p_view.add_argument("--v2", action="store_true", help="Bí danh tương thích, V2 luôn là mô hình mặc định")
     p_view.add_argument("--gait", choices=["waddle", "walk", "spot_turn", "head_dance"], default=None, help="Trình diễn dáng đi mới (waddle, walk, spot_turn, head_dance)")
     p_view.add_argument("--track", action="store_true", help="Kích hoạt Visual Servoing theo dõi mục tiêu qua camera đầu")
     p_view.add_argument("--target-color", choices=["yellow", "red", "green", "blue"], default="yellow", help="Màu sắc mục tiêu theo dõi (mặc định: yellow)")
 
     # train
     p_train = subparsers.add_parser("train", help="Huấn luyện mô hình bước đi bằng PPO đa môi trường")
-    p_train.add_argument("--target", choices=["rpi5", "pizero2w", "esp32", "v2"], default="rpi5", help="Nhánh phần cứng/mô hình mục tiêu (rpi5, pizero2w, esp32, v2 - mặc định: rpi5)")
+    p_train.add_argument("--target", choices=["rpi5", "pizero2w", "esp32", "v2"], default="v2", help="Mô hình luôn là CyberDuck V2; alias chọn profile triển khai (mặc định: v2)")
     p_train.add_argument("--envs", type=int, default=256, help="Số lượng môi trường song song (mặc định: 256)")
     p_train.add_argument("--iterations", "--iters", type=int, default=None, help="Số vòng lặp huấn luyện (mặc định: 500 khi train, 1 khi dry-run)")
     p_train.add_argument("--transfer-checkpoint", type=str, default=None, help="Transfer explicit sang target/output mới, reset optimizer và selection")
@@ -350,7 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # export
     p_export = subparsers.add_parser("export", help="Xuất policy sang ONNX (RPi 5 & Pi Zero 2 W) và INT8 C Header (ESP32-S3)")
-    p_export.add_argument("--target", choices=["rpi5", "pizero2w", "esp32", "all"], default="all", help="Phần cứng mục tiêu cần xuất (rpi5, pizero2w, esp32, all - mặc định: all)")
+    p_export.add_argument("--target", choices=["rpi5", "pizero2w", "esp32", "all"], default="all", help="Định dạng runtime cho cùng một policy V2 (rpi5, pizero2w, esp32, all)")
     p_export.add_argument("--checkpoint", type=str, default=None, help="Đường dẫn checkpoint cần xuất")
     p_export.add_argument("--legacy-model-name", default=None, help="Tên MJCF đã xác minh cho checkpoint legacy thiếu identity")
     p_export.add_argument("--observation-schema", type=Path, default=None, help="JSON observation schema đã xác minh cho checkpoint legacy")

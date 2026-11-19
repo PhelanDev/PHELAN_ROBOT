@@ -4,6 +4,8 @@ import mujoco
 import numpy as np
 import pytest
 import torch.nn as nn
+import xml.etree.ElementTree as ET
+from duck_v2.robot_spec import MODEL_PATH
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -118,7 +120,7 @@ def test_has_obstacle_contact_detects_collision_and_ignores_non_obstacles():
         runner.close()
 
 
-def test_run_benchmark_scenario_returns_obstacle_metrics():
+def test_run_benchmark_scenario_returns_obstacle_metrics(tmp_path):
     # 1. CyberDuck V2 Stage 1
     runner_v2 = ParallelSimRunner(
         model_path="duck_v2/cyberduck_v2.xml",
@@ -138,47 +140,55 @@ def test_run_benchmark_scenario_returns_obstacle_metrics():
     finally:
         runner_v2.close()
 
-    # 2. MicroDuck V1 Stage 0
-    v1_path = Path("pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml")
-    if not v1_path.exists():
-        v1_path = Path("models/mjcf/microduck_8dof.xml")
-    runner_v1 = ParallelSimRunner(
-        model_path=v1_path,
+    # 2. The same V2 model at Stage 0
+    flat_path = MODEL_PATH
+    runner_flat = ParallelSimRunner(
+        model_path=flat_path,
         num_envs=2,
         num_threads=1,
         max_episode_steps=10,
         stage=0,
     )
     try:
-        zero_actor = nn.Linear(runner_v1.obs_dim, runner_v1.action_dim)
-        res_v1 = run_benchmark_scenario(
-            runner_v1, zero_actor, cmd_vx=0.2, max_steps=10, scenario_name="Test V1 Stage 0"
+        zero_actor = nn.Linear(runner_flat.obs_dim, runner_flat.action_dim)
+        res_flat = run_benchmark_scenario(
+            runner_flat, zero_actor, cmd_vx=0.2, max_steps=10, scenario_name="Test V2 Stage 0"
         )
-        assert "yaw_unstability" in res_v1 and res_v1["yaw_unstability"] >= 0.0
-        assert "collision_rate_per_100" in res_v1 and 0.0 <= res_v1["collision_rate_per_100"] <= 100.0
-        assert "min_clearance_m" in res_v1 and res_v1["min_clearance_m"] >= 0.0
+        assert "yaw_unstability" in res_flat and res_flat["yaw_unstability"] >= 0.0
+        assert "collision_rate_per_100" in res_flat and 0.0 <= res_flat["collision_rate_per_100"] <= 100.0
+        assert "min_clearance_m" in res_flat and res_flat["min_clearance_m"] >= 0.0
     finally:
-        runner_v1.close()
+        runner_flat.close()
 
-    # 3. Obstacle-free environment (no LiDAR, no obstacles) verifies min_clearance_m defaults to 2.0
-    free_path = Path("models/mjcf/microduck_8dof.xml")
-    if free_path.exists():
-        runner_free = ParallelSimRunner(
-            model_path=free_path,
-            num_envs=2,
-            num_threads=1,
-            max_episode_steps=5,
-            stage=0,
+    # 3. Remove actual scene obstacles as well as their tracking IDs: clearing
+    # an ID list alone does not stop the V2 rangefinder from seeing geometry.
+    tree = ET.parse(MODEL_PATH)
+    root = tree.getroot()
+    root.find("compiler").set("meshdir", str(MODEL_PATH.parent / "meshes"))
+    world = root.find("worldbody")
+    for geom in list(world.findall("geom")):
+        if geom.get("name") != "floor":
+            world.remove(geom)
+    free_path = tmp_path / "v2_empty_scene.xml"
+    tree.write(free_path, encoding="utf-8")
+    runner_free = ParallelSimRunner(
+        model_path=free_path,
+        num_envs=2,
+        num_threads=1,
+        max_episode_steps=5,
+        stage=0,
+    )
+    try:
+        assert runner_free.obstacle_geom_ids == []
+        zero_actor = nn.Linear(runner_free.obs_dim, runner_free.action_dim)
+        nn.init.zeros_(zero_actor.weight)
+        nn.init.zeros_(zero_actor.bias)
+        res_free = run_benchmark_scenario(
+            runner_free, zero_actor, cmd_vx=0.0, max_steps=5, scenario_name="Test Obstacle Free"
         )
-        try:
-            runner_free.obstacle_geom_ids = []  # Simulate env without obstacles
-            zero_actor = nn.Linear(runner_free.obs_dim, runner_free.action_dim)
-            res_free = run_benchmark_scenario(
-                runner_free, zero_actor, cmd_vx=0.0, max_steps=5, scenario_name="Test Obstacle Free"
-            )
-            assert res_free["min_clearance_m"] == pytest.approx(2.0, abs=1e-3)
-        finally:
-            runner_free.close()
+        assert res_free["min_clearance_m"] == pytest.approx(2.0, abs=1e-3)
+    finally:
+        runner_free.close()
 
 
 def test_run_benchmark_scenario_with_nav_planner():

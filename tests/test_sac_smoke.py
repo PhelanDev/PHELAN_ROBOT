@@ -240,9 +240,11 @@ def test_sac_checkpoint_roundtrip_consumers_and_esp32_reject(tmp_path: Path, hid
     assert not esp_dir.exists()
     from scripts.export_policy import prepare_target_exports
     esp_sac_ckpt = tmp_path / f"sac_esp_{hidden_dim}.pt"
-    ckpt["model_path"] = "pipelines/dual_esp32s3_stack/models/mjcf/microduck_esp32_8dof.xml"
+    ckpt["model_path"] = "duck_v2/cyberduck_v2.xml"
     ckpt["model_name"] = "microduck_esp32_8dof.xml"
     torch.save(ckpt, esp_sac_ckpt)
-    with pytest.raises(ValueError, match="SAC|architecture|ELU|unsupported"):
+    with pytest.raises(ValueError, match="identity"):
         prepare_target_exports({"esp32": esp_sac_ckpt})
+    with pytest.raises(ValueError, match="SAC|architecture|ELU|unsupported"):
+        prepare_target_exports({"esp32": ckpt_path})
 

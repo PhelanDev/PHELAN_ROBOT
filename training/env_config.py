@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
+from duck_v2.robot_spec import JOINT_ORDER, NUM_ACTIONS, NUM_OBSERVATIONS, TOTAL_MASS_KG
+
 
 class EmotionState(IntEnum):
     """10-state emotion model for MicroDuck 8-DOF head expressions."""
@@ -88,26 +90,20 @@ def get_emotion_one_hot(state: Union[EmotionState, int]) -> np.ndarray:
 class MicroDuck8DoFConfig:
     """Configuration dataclass for MicroDuck 8-DOF robot."""
 
-    STACK_NAME: str = "microduck_8dof"
-    TARGET_MASS: float = 0.694
+    STACK_NAME: str = "cyberduck_v2"
+    TARGET_MASS: float = TOTAL_MASS_KG
     POLICY_DTYPE: str = "float32"
+    RANDOMIZE_HARDWARE_VARIANTS: bool = False
+    TORSO_MASS_RANDOMIZATION_KG: float = 0.08
+    TORSO_COM_RANDOMIZATION_M: float = 0.006
 
-    OBS_DIM: int = 37
-    ACTION_DIM: int = 8
+    OBS_DIM: int = NUM_OBSERVATIONS
+    ACTION_DIM: int = NUM_ACTIONS
     LIDAR_RAYS: int = 5
     LIDAR_MIN_RANGE: float = 0.05
 
     JOINT_NAMES: List[str] = field(
-        default_factory=lambda: [
-            "head_yaw",
-            "head_pitch",
-            "left_hip_roll",
-            "left_hip_pitch",
-            "left_knee_pitch",
-            "right_hip_roll",
-            "right_hip_pitch",
-            "right_knee_pitch",
-        ]
+        default_factory=lambda: list(JOINT_ORDER)
     )
 
     # Physical limits for MG996R servo joints (radians)

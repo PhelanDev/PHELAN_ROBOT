@@ -94,13 +94,11 @@ def assert_mjcf_perception_suite(xml_path: str) -> None:
     assert "head_camera" in cameras, "Missing head_camera"
     head_cam = cameras["head_camera"]
     cam_pos = [float(x) for x in head_cam.attrib["pos"].split()]
-    assert pytest.approx(cam_pos, abs=0.005) == [0.045, 0.0, 0.030]
+    assert pytest.approx(cam_pos, abs=1e-6) == [0.040, 0.0, 0.022]
     assert float(head_cam.attrib["fovy"]) == 60.0
 
-    geoms = {g.attrib["name"]: g for g in root.iter("geom") if "name" in g.attrib}
-    assert "cam_lens" in geoms, "Missing cam_lens visual geom"
-    assert "mic_site" in sites, "Missing mic_site"
-    assert "mic_geom" in geoms, "Missing mic_geom visual geom"
+    assert "camera_site" in sites, "Missing V2 camera mount site"
+    assert root.find(".//body[@name='head']/geom[@mesh='cyber_visor']") is not None
 
 
 def assert_mujoco_compilation_and_mass(
@@ -119,7 +117,7 @@ def assert_mujoco_compilation_and_mass(
     except ImportError:
         pytest.skip("MuJoCo python package not available")
 
-    model = mujoco.MjModel.from_xml_path(xml_path)
+    model = mujoco.MjModel.from_xml_path(str(xml_path))
     data = mujoco.MjData(model)
     mujoco.mj_step(model, data)
 
@@ -127,8 +125,8 @@ def assert_mujoco_compilation_and_mass(
     assert min_mass <= total_mass <= max_mass, f"Expected total mass in [{min_mass}, {max_mass}], got {total_mass:.3f}kg"
 
     if base_mass_min is not None or base_mass_max is not None or base_ipos_z_min is not None or base_ipos_z_max is not None:
-        base_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "base_link")
-        assert base_body_id >= 0, "base_link not found"
+        base_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trunk_base")
+        assert base_body_id >= 0, "trunk_base not found"
         base_mass = model.body_mass[base_body_id]
         if base_mass_min is not None and base_mass_max is not None:
             assert base_mass_min <= base_mass <= base_mass_max, (
@@ -159,9 +157,9 @@ def assert_urdf_structure_and_joint_limits(
     base_inertial_z_max: Optional[float] = None,
 ) -> None:
     if knee_origin is None:
-        knee_origin = [0.0, 0.0, -0.032]
+        knee_origin = [0.0, 0.0, -0.044]
     if foot_origin is None:
-        foot_origin = [0.0, 0.0, -0.032]
+        foot_origin = [0.004, 0.0, -0.036]
 
     assert os.path.exists(urdf_path), f"URDF model not found: {urdf_path}"
     tree = ET.parse(urdf_path)
@@ -185,24 +183,15 @@ def assert_urdf_structure_and_joint_limits(
 
         dynamics = j.find("dynamics")
         assert dynamics is not None
-        assert pytest.approx(float(dynamics.attrib.get("damping", 0.0)), abs=0.01) == 0.15
+        assert pytest.approx(float(dynamics.attrib.get("damping", 0.0)), abs=1e-6) == 0.25
+        assert pytest.approx(float(dynamics.attrib.get("friction", 0.0)), abs=1e-6) == 0.008
 
     links_by_name = {l.attrib["name"]: l for l in root.iter("link")}
     expected_links = [
-        "base_link",
-        "neck_link",
-        "head_link",
-        "left_hip_roll_link",
-        "left_thigh_link",
-        "left_shin_link",
-        "left_foot_link",
-        "right_hip_roll_link",
-        "right_thigh_link",
-        "right_shin_link",
-        "right_foot_link",
-        "head_camera_link",
-        "mic_link",
-    ] + [f"{ray}_link" for ray in EXPECTED_LIDAR_RAYS]
+        "world", "trunk_base", "neck", "head",
+        "left_hip", "left_thigh", "left_shin", "left_foot",
+        "right_hip", "right_thigh", "right_shin", "right_foot",
+    ]
 
     for link_name in expected_links:
         assert link_name in links_by_name, f"Missing URDF link {link_name}"
@@ -229,17 +218,17 @@ def assert_urdf_structure_and_joint_limits(
             assert iyy + izz >= ixx - 1e-9, f"Link {name} violates triangle inequality (iyy+izz < ixx)"
 
     assert min_total_mass <= total_mass <= max_total_mass, f"Expected total URDF mass in [{min_total_mass}, {max_total_mass}], got {total_mass:.3f}kg"
-    base_mass = float(links_by_name["base_link"].find("inertial").find("mass").attrib["value"])
+    base_mass = float(links_by_name["trunk_base"].find("inertial").find("mass").attrib["value"])
     assert min_base_mass <= base_mass <= max_base_mass, f"Expected URDF base_link mass in [{min_base_mass}, {max_base_mass}], got {base_mass:.3f}kg"
 
     all_joints = {j.attrib["name"]: j for j in root.findall("joint")}
     act_knee_origin = [float(x) for x in all_joints["left_knee_pitch"].find("origin").attrib["xyz"].split()]
     assert act_knee_origin == knee_origin, f"Expected knee origin {knee_origin}, got {act_knee_origin}"
-    act_foot_origin = [float(x) for x in all_joints["left_foot_joint"].find("origin").attrib["xyz"].split()]
+    act_foot_origin = [float(x) for x in all_joints["left_foot_fixed"].find("origin").attrib["xyz"].split()]
     assert act_foot_origin == foot_origin, f"Expected foot origin {foot_origin}, got {act_foot_origin}"
 
     if base_inertial_z_max is not None:
-        base_inertial_z = float(links_by_name["base_link"].find("inertial").find("origin").attrib["xyz"].split()[2])
+        base_inertial_z = float(links_by_name["trunk_base"].find("inertial").find("origin").attrib["xyz"].split()[2])
         assert base_inertial_z <= base_inertial_z_max, f"Expected low CoM origin z <= {base_inertial_z_max}, got {base_inertial_z}"
 
 
@@ -250,7 +239,7 @@ def assert_urdf_mujoco_compilation(urdf_path: str) -> None:
     except ImportError:
         pytest.skip("MuJoCo python package not available")
 
-    model = mujoco.MjModel.from_xml_path(urdf_path)
+    model = mujoco.MjModel.from_xml_path(str(urdf_path))
     data = mujoco.MjData(model)
     mujoco.mj_step(model, data)
     assert model.nu == 8 or model.njnt >= 8
@@ -285,10 +274,10 @@ def assert_sole_clearance(xml_path: str) -> None:
     except ImportError:
         pytest.skip("MuJoCo python package not available")
 
-    m = mujoco.MjModel.from_xml_path(xml_path)
+    m = mujoco.MjModel.from_xml_path(str(xml_path))
     d = mujoco.MjData(m)
     mujoco.mj_forward(m, d)
-    for sole_name in ("left_foot_geom", "right_foot_geom"):
+    for sole_name in ("left_sole_geom", "right_sole_geom"):
         gid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, sole_name)
         assert gid != -1, f"Missing {sole_name} in {xml_path}"
         sole_bottom = float(d.geom_xpos[gid][2] - m.geom_size[gid][2])
@@ -300,7 +289,7 @@ def assert_sole_clearance(xml_path: str) -> None:
 def assert_sole_clearance_and_target_mass(xml_path: str, expected_target_mass: float) -> None:
     import mujoco
     assert_sole_clearance(xml_path)
-    m = mujoco.MjModel.from_xml_path(xml_path)
+    m = mujoco.MjModel.from_xml_path(str(xml_path))
     total_mass = float(mujoco.mj_getTotalmass(m))
     assert expected_target_mass == pytest.approx(total_mass, abs=1e-3), (
         f"{xml_path} TARGET_MASS {expected_target_mass} != MuJoCo mass {total_mass}"

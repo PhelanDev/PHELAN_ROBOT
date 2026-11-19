@@ -2,15 +2,16 @@ import os
 import xml.etree.ElementTree as ET
 import numpy as np
 import pytest
+from duck_v2.robot_spec import MODEL_PATH, URDF_PATH, TOTAL_MASS_KG
 
 def test_urdf_structure_and_actuators():
-    urdf_path = os.path.join(os.path.dirname(__file__), "..", "models", "urdf", "microduck_8dof.urdf")
+    urdf_path = str(URDF_PATH)
     assert os.path.exists(urdf_path), f"File {urdf_path} does not exist"
 
     tree = ET.parse(urdf_path)
     root = tree.getroot()
     assert root.tag == "robot"
-    assert root.attrib.get("name") == "microduck_8dof"
+    assert root.attrib.get("name") == "cyberduck_v2"
 
     expected_joints = {
         "head_yaw": {"axis": [0, 0, 1], "lower": -1.57, "upper": 1.57},
@@ -40,7 +41,8 @@ def test_urdf_structure_and_actuators():
 
         dynamics = j.find("dynamics")
         assert dynamics is not None, f"Joint {name} missing <dynamics>"
-        assert pytest.approx(float(dynamics.attrib.get("damping", 0.0)), abs=0.01) == 0.15
+        assert pytest.approx(float(dynamics.attrib.get("damping", 0.0)), abs=1e-6) == 0.25
+        assert pytest.approx(float(dynamics.attrib.get("friction", 0.0)), abs=1e-6) == 0.008
 
         axis = j.find("axis")
         assert axis is not None, f"Joint {name} missing <axis>"
@@ -48,24 +50,16 @@ def test_urdf_structure_and_actuators():
         assert axis_xyz == exp["axis"]
 
 def test_urdf_links_and_inertials():
-    urdf_path = os.path.join(os.path.dirname(__file__), "..", "models", "urdf", "microduck_8dof.urdf")
+    urdf_path = str(URDF_PATH)
     assert os.path.exists(urdf_path), f"File {urdf_path} does not exist"
 
     tree = ET.parse(urdf_path)
     root = tree.getroot()
 
     expected_links = [
-        "base_link",
-        "neck_link",
-        "head_link",
-        "left_hip_roll_link",
-        "left_thigh_link",
-        "left_shin_link",
-        "left_foot_link",
-        "right_hip_roll_link",
-        "right_thigh_link",
-        "right_shin_link",
-        "right_foot_link",
+        "world", "trunk_base", "neck", "head",
+        "left_hip", "left_thigh", "left_shin", "left_foot",
+        "right_hip", "right_thigh", "right_shin", "right_foot",
     ]
 
     links_by_name = {l.attrib["name"]: l for l in root.iter("link")}
@@ -74,6 +68,9 @@ def test_urdf_links_and_inertials():
 
     total_mass = 0.0
     for name, link in links_by_name.items():
+        if name == "world":
+            assert link.find("inertial") is None
+            continue
         inertial = link.find("inertial")
         assert inertial is not None, f"Link {name} missing <inertial>"
         mass_elem = inertial.find("mass")
@@ -99,17 +96,18 @@ def test_urdf_links_and_inertials():
         assert visual is not None, f"Link {name} missing <visual>"
         assert collision is not None, f"Link {name} missing <collision>"
 
-    assert 0.620 <= total_mass <= 0.740, f"Expected total mass ~0.684kg, got {total_mass:.3f}kg"
+    assert total_mass == pytest.approx(TOTAL_MASS_KG, abs=1e-6)
 
-    # Verify chibi squat leg lengths: thigh L1 = 32mm, shin L2 = 32mm
+    # Verify the canonical V2 hip-knee and knee-foot link frames.
     joints_by_name = {j.attrib["name"]: j for j in root.findall("joint")}
     knee_origin = [float(x) for x in joints_by_name["left_knee_pitch"].find("origin").attrib["xyz"].split()]
-    assert knee_origin == [0.0, 0.0, -0.032], f"Expected knee origin [0, 0, -0.032], got {knee_origin}"
-    foot_origin = [float(x) for x in joints_by_name["left_foot_joint"].find("origin").attrib["xyz"].split()]
-    assert foot_origin == [0.0, 0.0, -0.032], f"Expected foot origin [0, 0, -0.032], got {foot_origin}"
+    assert knee_origin == [0.0, 0.0, -0.044]
+    foot_origin = [float(x) for x in joints_by_name["left_foot_fixed"].find("origin").attrib["xyz"].split()]
+    assert foot_origin == [0.004, 0.0, -0.036]
+    assert joints_by_name["trunk_freejoint"].get("type") == "floating"
 
 def test_urdf_mujoco_compilation():
-    urdf_path = os.path.join(os.path.dirname(__file__), "..", "models", "urdf", "microduck_8dof.urdf")
+    urdf_path = str(URDF_PATH)
     assert os.path.exists(urdf_path), f"File {urdf_path} does not exist"
 
     try:
@@ -121,27 +119,15 @@ def test_urdf_mujoco_compilation():
     data = mujoco.MjData(model)
     mujoco.mj_step(model, data)
 
-    # 8 revolute joints
-    assert model.nu == 8 or model.njnt >= 8
+    assert model.njnt == 9
+    assert model.nq == 15 and model.nv == 14
 
 
 def test_urdf_head_link_com_synchronization():
-    """Verify head_link CoM matches between all URDF models and MJCF box definitions."""
-    urdf_paths = [
-        os.path.join(os.path.dirname(__file__), "..", "models", "urdf", "microduck_8dof.urdf"),
-        os.path.join(os.path.dirname(__file__), "..", "pipelines", "rpi5_stack", "models", "urdf", "microduck_rpi5_8dof.urdf"),
-        os.path.join(os.path.dirname(__file__), "..", "pipelines", "dual_esp32s3_stack", "models", "urdf", "microduck_esp32_8dof.urdf"),
-    ]
-
-    for p in urdf_paths:
-        tree = ET.parse(p)
-        root = tree.getroot()
-        head_link = [l for l in root.iter("link") if l.attrib.get("name") == "head_link"][0]
-        origin = head_link.find("inertial").find("origin")
-        xyz = [float(x) for x in origin.attrib["xyz"].split()]
-        np.testing.assert_allclose(
-            xyz,
-            [0.010, 0.0, 0.0225],
-            atol=1e-5,
-            err_msg=f"head_link CoM in {p} must be [0.010, 0, 0.0225]",
-        )
+    """Verify V2 head CoM and all body tensors match the canonical MJCF."""
+    from scripts.verify_model import verify_urdf_physics
+    root = ET.parse(URDF_PATH).getroot()
+    head = root.find("link[@name='head']")
+    xyz = [float(value) for value in head.find("inertial/origin").get("xyz").split()]
+    np.testing.assert_allclose(xyz, [0.015, 0.0, 0.018], atol=1e-9)
+    assert verify_urdf_physics(str(MODEL_PATH), str(URDF_PATH))["valid"]

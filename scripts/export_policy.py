@@ -1,4 +1,4 @@
-"""Policy Export Tool for MicroDuck 8-DOF Bipedal Robot.
+"""Policy Export Tool for CyberDuck V2 8-DOF Bipedal Robot.
 
 Exports trained Actor policy checkpoints to deployment targets:
 1. Float32 ONNX model for Raspberry Pi 5 (Cortex-A76 ONNX Runtime)
@@ -28,10 +28,10 @@ from pipelines.dual_esp32s3_stack.training.env_config import (
     generate_esp32_quant_header,
 )
 from scripts.train_ppo import ActorCritic
+from duck_v2.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME
 
-DEFAULT_CHECKPOINT_PATH = REPO_ROOT / "models" / "checkpoints" / "microduck_rpi5_ppo.pt"
-DEFAULT_ONNX_PATH = REPO_ROOT / "models" / "microduck_rpi5_policy.onnx"
-DEFAULT_PIZERO2W_ONNX_PATH = REPO_ROOT / "models" / "microduck_pizero2w_policy.onnx"
+DEFAULT_CHECKPOINT_PATH = REPO_ROOT / "models" / "checkpoints" / f"{CHECKPOINT_PREFIX}_ppo.pt"
+DEFAULT_PIZERO2W_ONNX_PATH = DEFAULT_ONNX_PATH
 DEFAULT_ESP32_WEIGHTS_PATH = (
     REPO_ROOT / "pipelines" / "dual_esp32s3_stack" / "deployment" / "esp32_policy_weights.h"
 )
@@ -53,8 +53,15 @@ def _validate_ckpt_dims(ckpt: dict, expected: Tuple[Tuple[str, int], ...]) -> No
                 raise ValueError(f"Checkpoint {key} disagrees with actor weights")
 
 
+def _validate_v2_actor_identity(actor: nn.Module, required: bool = False) -> None:
+    metadata = getattr(actor, "_model_metadata", {})
+    if required or metadata.get("model_name") or metadata.get("model_path"):
+        from training.policy_contract import validate_model_identity
+        validate_model_identity(metadata, MODEL_NAME)
+
+
 def prepare_target_exports(checkpoints, legacy_model_name=None, schema_override=None):
-    """Validate every CLI target before writing any deployment artifact."""
+    """Validate one V2 policy for each requested runtime before writing artifacts."""
     from training.policy_contract import TARGET_MODELS, validate_model_identity, validate_observation_schema
     prepared = {}
     for target, path in checkpoints.items():
@@ -346,6 +353,7 @@ def export_onnx(
     import onnx
 
     actor = load_actor_from_checkpoint(model)
+    _validate_v2_actor_identity(actor)
     actor.eval()
 
     output_path = Path(output_path).resolve()
@@ -414,6 +422,7 @@ def export_esp32_headers(
     if not all(np.isfinite(scale) and scale > 0 for scale in (scale_obs, scale_act)):
         raise ValueError("Quantization scales must be finite and positive")
     actor = load_actor_from_checkpoint(model)
+    _validate_v2_actor_identity(actor)
     actor.eval()
     _validate_esp32_actor_arch(actor)
 
@@ -433,6 +442,7 @@ def export_esp32_headers(
     if obs_dim != 42 or w3.shape[0] != 8:
         raise ValueError("Unsupported ESP32 policy dimensions; expected 42 observations and 8 actions")
     schema = _resolve_esp32_schema(actor, legacy_observation_schema=legacy_observation_schema)
+    _validate_v2_actor_identity(actor, required=True)
 
     weights_output_path = Path(weights_output_path).resolve()
     weights_output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -447,6 +457,14 @@ def export_esp32_headers(
         output_path=config_output_path,
         obs_dim=obs_dim,
     )
+    config_code = config_output_path.read_text(encoding="utf-8")
+    config_code = config_code.replace(
+        "#define ESP32_QUANT_CONFIG_H",
+        '#define ESP32_QUANT_CONFIG_H\n\n#define CYBERDUCK_V2_QUANT_CONFIG 1\n'
+        f'#define QUANT_MODEL_NAME "{MODEL_NAME}"',
+        1,
+    )
+    config_output_path.write_text(config_code, encoding="utf-8")
 
     # Quantize Layer 1 with per-channel observation scales matching mcu2_main.ino OBS_CHANNEL_SCALES
     obs_channel_scales = (float(scale_obs) / DEFAULT_OBS_BOUNDS[:obs_dim]).astype(np.float32)
@@ -488,7 +506,7 @@ def export_esp32_headers(
 #define ESP32_POLICY_WEIGHTS_H
 
 /**
- * MicroDuck 8-DOF (Dual ESP32-S3 Stack) - Quantized Policy Weights & Biases
+ * CyberDuck V2 8-DOF (Dual ESP32-S3 Stack) - Quantized Policy Weights & Biases
  * Model: Actor MLP [{obs_dim} -> {w1.shape[0]} (ELU) -> {w2.shape[0]} (ELU) -> {w3.shape[0]}]
  * Quantization: Symmetric INT8 weights, INT32 biases
  * Platform: Xtensa LX7 Dual-Core with PIE Vector Accelerator
@@ -498,6 +516,8 @@ def export_esp32_headers(
 #include <stddef.h>
 #include <math.h>
 
+#define CYBERDUCK_V2_POLICY 1
+#define POLICY_MODEL_NAME "{MODEL_NAME}"
 #define POLICY_LAYER1_IN  {obs_dim}
 #define POLICY_LAYER1_OUT {w1.shape[0]}
 #define POLICY_LAYER2_IN  {w2.shape[1]}
@@ -621,13 +641,13 @@ static inline void evaluate_policy_int8(const int8_t* obs_int8, int8_t* actions_
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Export MicroDuck Policy Checkpoint to ONNX and ESP32 Headers")
+    parser = argparse.ArgumentParser(description="Export CyberDuck V2 Policy Checkpoint to ONNX and ESP32 Headers")
     parser.add_argument("--checkpoint", type=str, default=None, help="Path to .pt checkpoint")
     parser.add_argument("--target", choices=["all", "rpi5", "pizero2w", "esp32"], default="all")
     parser.add_argument("--legacy-model-name", default=None, help="Verified MJCF basename for legacy checkpoint without identity")
     parser.add_argument("--observation-schema", type=Path, default=None, help="Verified JSON observation schema for legacy checkpoint")
-    parser.add_argument("--onnx-output", type=str, default=str(DEFAULT_ONNX_PATH), help="Path for ONNX export (RPi 5)")
-    parser.add_argument("--pizero-onnx-output", type=str, default=str(DEFAULT_PIZERO2W_ONNX_PATH), help="Path for ONNX export (Pi Zero 2 W)")
+    parser.add_argument("--onnx-output", type=str, default=str(DEFAULT_ONNX_PATH), help="Shared V2 ONNX path for both Pi runtimes")
+    parser.add_argument("--pizero-onnx-output", type=str, default=None, help="Optional additional path for the same V2 Pi policy")
     parser.add_argument("--esp32-weights-output", type=str, default=str(DEFAULT_ESP32_WEIGHTS_PATH), help="Path for esp32_policy_weights.h")
     parser.add_argument("--esp32-config-output", type=str, default=str(DEFAULT_ESP32_CONFIG_PATH), help="Path for esp32_quant_config.h")
     parser.add_argument("--opset", type=int, default=13, help="ONNX opset version (default: 13)")
@@ -644,6 +664,7 @@ def main():
         parser.error(str(exc))
     schema_override = json.loads(args.observation_schema.read_text(encoding="utf-8")) if args.observation_schema else None
     prepared = prepare_target_exports(checkpoints, args.legacy_model_name, schema_override)
+    written_onnx = set()
     for target, checkpoint in checkpoints.items():
         print(f"[Export] {target}: {checkpoint}")
         if target == "esp32":
@@ -652,8 +673,11 @@ def main():
                 scale_obs=args.scale_obs, scale_act=args.scale_act)
             print(f"[Export] {weights}, {config}")
         else:
-            output = args.onnx_output if target == "rpi5" else args.pizero_onnx_output
-            print(f"[Export] {export_onnx(prepared[target], output_path=output, opset=args.opset)}")
+            output = args.pizero_onnx_output if target == "pizero2w" and args.pizero_onnx_output else args.onnx_output
+            output_key = Path(output).resolve()
+            if output_key not in written_onnx:
+                print(f"[Export] {export_onnx(prepared[target], output_path=output, opset=args.opset)}")
+                written_onnx.add(output_key)
     print("[Export] All requested deployment artifacts successfully exported.")
 
 

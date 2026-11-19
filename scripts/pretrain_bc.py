@@ -16,8 +16,10 @@ if _ROOT not in sys.path:
 
 from scripts.export_policy import load_actor_from_checkpoint, policy_actor_forward
 from scripts.train_ppo import ActorCritic, RunningMeanStd
+from duck_v2.robot_spec import CHECKPOINT_PREFIX, CONTROL_DT_S, MODEL_NAME, MODEL_PATH, NUM_ACTIONS, NUM_OBSERVATIONS
 from training.advanced_gaits import BipedalGaitGenerator
 from training.env_config import unscale_actions
+from training.policy_contract import observation_schema, validate_model_identity
 from training.run_parallel_sim import ParallelSimRunner
 
 
@@ -74,6 +76,8 @@ def collect_gait_demonstrations(
     runner: ParallelSimRunner, num_steps: int = 200, freq: float = 1.25, gamma: float = 0.99
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Collect closed-loop demonstrations using BipedalGaitGenerator."""
+    if runner.obs_dim != NUM_OBSERVATIONS or runner.action_dim != NUM_ACTIONS:
+        raise ValueError("V2 BC demonstrations require 42 observations and 8 actions")
     gait, dt = BipedalGaitGenerator(default_freq=freq), float(runner.control_dt)
 
     def policy_fn(_obs: np.ndarray, step: int) -> np.ndarray:
@@ -90,15 +94,20 @@ def collect_teacher_demonstrations(
     """Collect closed-loop demonstrations from a pretrained teacher policy."""
     teacher_actor.eval()
     in_dim = _get_actor_in_dim(teacher_actor)
+    if runner.obs_dim != NUM_OBSERVATIONS or runner.action_dim != NUM_ACTIONS or in_dim != NUM_OBSERVATIONS:
+        raise ValueError("V2 teacher demonstrations require a 42-observation, 8-action policy")
 
     def policy_fn(obs: np.ndarray, _step: int) -> np.ndarray:
-        feed = obs[:, :in_dim] if obs.shape[1] >= in_dim else np.pad(obs, ((0, 0), (0, in_dim - obs.shape[1])))
+        if obs.shape[1] != NUM_OBSERVATIONS:
+            raise ValueError(f"V2 teacher observation mismatch: {obs.shape[1]} != {NUM_OBSERVATIONS}")
         with torch.no_grad():
-            t_obs = torch.as_tensor(feed, dtype=torch.float32)
+            t_obs = torch.as_tensor(obs, dtype=torch.float32)
             out = teacher_actor.forward_actor(t_obs) if hasattr(teacher_actor, "forward_actor") else policy_actor_forward(teacher_actor, t_obs)
             if isinstance(out, tuple):
                 out = out[0]
             act = out.detach().cpu().numpy()
+        if act.shape[-1] != NUM_ACTIONS:
+            raise ValueError(f"V2 teacher action mismatch: {act.shape[-1]} != {NUM_ACTIONS}")
         return np.clip(act, -1.0, 1.0).astype(np.float32)
 
     return _collect_rollouts(runner, policy_fn, num_steps, gamma)
@@ -111,6 +120,12 @@ def train_behavior_cloning(
     obs_rms: Optional[RunningMeanStd] = None,
 ) -> Tuple[ActorCritic, List[float]]:
     """Train Actor (MSE) and Critic (SmoothL1) to avoid cold critic shock at PPO iteration 1."""
+    if obs_dim != NUM_OBSERVATIONS or action_dim != NUM_ACTIONS:
+        raise ValueError("V2 behavior cloning requires 42 observations and 8 actions")
+    if np.asarray(obs).ndim != 2 or np.asarray(obs).shape[1] != NUM_OBSERVATIONS:
+        raise ValueError("V2 behavior cloning input must have shape [samples, 42]")
+    if np.asarray(actions).ndim != 2 or np.asarray(actions).shape[1] != NUM_ACTIONS:
+        raise ValueError("V2 behavior cloning actions must have shape [samples, 8]")
     model = ActorCritic(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
@@ -151,6 +166,8 @@ def save_bc_checkpoint(
     obs_rms: Optional[RunningMeanStd] = None,
 ) -> Path:
     """Save ActorCritic weights into a PPO-compatible warm start checkpoint."""
+    if obs_dim != NUM_OBSERVATIONS or action_dim != NUM_ACTIONS:
+        raise ValueError("V2 BC checkpoints require 42 observations and 8 actions")
     out_path = Path(path).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     eff_rms = obs_rms if obs_rms is not None else getattr(model, "_bc_obs_rms", None)
@@ -163,6 +180,9 @@ def save_bc_checkpoint(
         "squash_actions": bool(model.squash_actions),
         "stage": 0,
         "iterations": 0,
+        "model_path": str(MODEL_PATH),
+        "model_name": MODEL_NAME,
+        "observation_schema": observation_schema(NUM_OBSERVATIONS, True, CONTROL_DT_S),
     }
     if eff_rms is not None:
         payload["obs_rms"] = eff_rms.state_dict()
@@ -173,14 +193,14 @@ def save_bc_checkpoint(
 def main():
     parser = argparse.ArgumentParser(description="Closed-Loop BC Pretraining & Critic Warmup")
     parser.add_argument("--mode", choices=["gait", "teacher"], default="gait")
-    parser.add_argument("--model-path", default="duck_v2/cyberduck_v2.xml")
+    parser.add_argument("--model-path", default=str(MODEL_PATH))
     parser.add_argument("--teacher-checkpoint", default=None)
     parser.add_argument("--steps", type=int, default=200)
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--num-envs", type=int, default=8)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--output", default="models/checkpoints/cyberduck_v2_bc_init.pt")
+    parser.add_argument("--output", default=str(Path(_ROOT) / "models" / "checkpoints" / f"{CHECKPOINT_PREFIX}_bc_init.pt"))
     args = parser.parse_args()
 
     runner = ParallelSimRunner(model_path=args.model_path, num_envs=args.num_envs, num_threads=1, stage=0)
@@ -190,6 +210,10 @@ def main():
         else:
             if not args.teacher_checkpoint:
                 raise ValueError("--teacher-checkpoint is required when --mode=teacher")
+            teacher_checkpoint = torch.load(args.teacher_checkpoint, map_location="cpu", weights_only=False)
+            if not isinstance(teacher_checkpoint, dict):
+                raise ValueError("V2 teacher checkpoint identity metadata is required")
+            validate_model_identity(teacher_checkpoint, MODEL_NAME)
             teacher = load_actor_from_checkpoint(args.teacher_checkpoint)
             obs, acts, rets = collect_teacher_demonstrations(runner, teacher, num_steps=args.steps)
     finally:

@@ -150,7 +150,7 @@
               <site name="left_foot_touch_site" pos="0.005 0 -0.004" size="0.027 0.019 0.005" type="box" rgba="0.0 0.9 1.0 0.45" group="2" />
               <!-- 3-Claw Tactical Gold Foot & Rubber Tread Sole -->
               <geom type="mesh" mesh="cyber_foot_left" material="mecha_gold" class="visual" />
-              <geom name="left_sole_geom" type="box" size="0.025 0.018 0.004" pos="0.005 0 -0.004" friction="1.5 0.01 0.0005" solref="0.005 1" solimp="0.9 0.95 0.001 0.5 2" class="collision" />
+              <geom name="left_sole_geom" type="box" size="0.025 0.013 0.004" pos="0.005 0 -0.004" friction="1.5 0.01 0.0005" solref="0.005 1" solimp="0.9 0.95 0.001 0.5 2" class="collision" />
               <geom type="mesh" mesh="cyber_sole_left" material="mecha_sole_rubber" class="visual" />
             </body>
           </body>
@@ -181,7 +181,7 @@
               <site name="right_foot_touch_site" pos="0.005 0 -0.004" size="0.027 0.019 0.005" type="box" rgba="0.0 0.9 1.0 0.45" group="2" />
               <!-- 3-Claw Tactical Gold Foot & Rubber Tread Sole -->
               <geom type="mesh" mesh="cyber_foot_right" material="mecha_gold" class="visual" />
-              <geom name="right_sole_geom" type="box" size="0.025 0.018 0.004" pos="0.005 0 -0.004" friction="1.5 0.01 0.0005" solref="0.005 1" solimp="0.9 0.95 0.001 0.5 2" class="collision" />
+              <geom name="right_sole_geom" type="box" size="0.025 0.013 0.004" pos="0.005 0 -0.004" friction="1.5 0.01 0.0005" solref="0.005 1" solimp="0.9 0.95 0.001 0.5 2" class="collision" />
               <geom type="mesh" mesh="cyber_sole_right" material="mecha_sole_rubber" class="visual" />
             </body>
           </body>

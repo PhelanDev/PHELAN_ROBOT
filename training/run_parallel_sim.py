@@ -1,4 +1,4 @@
-"""Batched Parallel Simulation Runner and FPS Benchmark for MicroDuck 8-DOF.
+"""Batched Parallel Simulation Runner and FPS Benchmark for CyberDuck V2.
 
 Executes vectorized MuJoCo simulation instances sharing a single mjModel across
 multiple environments using multi-threaded stepping or batched loops.
@@ -13,6 +13,7 @@ import argparse
 import os
 import sys
 import time
+import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import mujoco
@@ -44,6 +45,22 @@ from training.env_config import (
 from training.terrain_curriculum import apply_stage, apply_stair_stage, STAIR_STAGES, randomize_pillars
 from training.self_righting import FallClassifier, SelfRightingController
 from training.nav_planner import LidarWaypointPlanner, NavPlannerConfig
+from duck_v2.robot_spec import MODEL_PATH, MJCF_MODEL_NAME, REPO_ROOT
+
+
+def resolve_v2_model_path(model_path: Union[str, Path] = MODEL_PATH) -> Path:
+    """Resolve a V2 MJCF, rejecting retired robot identities before simulation."""
+    path = Path(str(model_path).replace("\\", "/")).expanduser()
+    if path.name.startswith("microduck"):
+        raise ValueError("Retired V1 model is unsupported; use duck_v2/cyberduck_v2.xml")
+    if not path.is_absolute():
+        path = path if path.is_file() else REPO_ROOT / path
+    path = path.resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"V2 MuJoCo model not found at {path}")
+    if ET.parse(path).getroot().get("model") != MJCF_MODEL_NAME:
+        raise ValueError(f"Only CyberDuck V2 model identity {MJCF_MODEL_NAME!r} is supported: {path}")
+    return path
 
 
 def has_obstacle_contact(data: Any, obstacle_gid_set: set) -> bool:
@@ -55,15 +72,6 @@ def has_obstacle_contact(data: Any, obstacle_gid_set: set) -> bool:
         if c.geom1 in obstacle_gid_set or c.geom2 in obstacle_gid_set:
             return True
     return False
-
-
-def _find_first_id(model: mujoco.MjModel, obj_type: mujoco.mjtObj, candidates: Tuple[str, ...]) -> int:
-    """Find ID of first existing named object from candidate names."""
-    for name in candidates:
-        obj_id = mujoco.mj_name2id(model, obj_type, name)
-        if obj_id != -1:
-            return obj_id
-    return -1
 
 
 LIDAR_SITE_NAMES: Tuple[str, ...] = (
@@ -206,11 +214,11 @@ def update_gait_hysteresis_state(
 
 
 class ParallelSimRunner:
-    """Vectorized / batched simulation runner for MicroDuck 8-DOF."""
+    """Vectorized / batched simulation runner for CyberDuck V2."""
 
     def __init__(
         self,
-        model_path: Union[str, Path] = "models/mjcf/microduck_8dof.xml",
+        model_path: Union[str, Path] = MODEL_PATH,
         num_envs: int = 16,
         cfg: Optional[MicroDuck8DoFConfig] = None,
         decimation: int = 10,
@@ -234,9 +242,7 @@ class ParallelSimRunner:
         nav_goal_xy: Tuple[float, float] = (2.0, 0.0),
         nav_planner_cfg: Optional[NavPlannerConfig] = None,
     ):
-        self.model_path = Path(model_path).resolve()
-        if not self.model_path.exists():
-            raise FileNotFoundError(f"MuJoCo model not found at {self.model_path}")
+        self.model_path = resolve_v2_model_path(model_path)
 
         self.terrain_mode = str(terrain_mode)
         self.randomize_pillars_enabled = bool(randomize_pillars)
@@ -246,10 +252,14 @@ class ParallelSimRunner:
         self.walk_min_z = float(walk_min_z)
         self.friction_range = (float(friction_range[0]), float(friction_range[1]))
         self.cfg = cfg if cfg is not None else _DEFAULT_CFG
+        for field in ("TORSO_MASS_RANDOMIZATION_KG", "TORSO_COM_RANDOMIZATION_M"):
+            amplitude = float(getattr(self.cfg, field))
+            if not np.isfinite(amplitude) or amplitude < 0:
+                raise ValueError(f"Invalid dynamics randomization amplitude: {field}")
         if embed_phase_clock is not None:
             self.embed_phase_clock = bool(embed_phase_clock)
         else:
-            self.embed_phase_clock = (getattr(self.cfg, "STACK_NAME", "microduck_8dof") == "microduck_8dof")
+            self.embed_phase_clock = True
         self.num_envs = int(num_envs)
         self.decimation = max(1, int(decimation))
         self.kp = float(kp) if kp is not None else float(self.cfg.KP)
@@ -345,16 +355,26 @@ class ParallelSimRunner:
         self.d_min = np.zeros(self.num_envs, dtype=np.float32)
         self.d_min_dot = np.zeros(self.num_envs, dtype=np.float32)
 
-        # Foot bodies and geoms for clearance reward and stumble detection (supporting V1 & V2 MJCF)
-        self.left_foot_gid = _find_first_id(self.model, mujoco.mjtObj.mjOBJ_GEOM, ("left_foot_geom", "left_sole_geom"))
-        self.right_foot_gid = _find_first_id(self.model, mujoco.mjtObj.mjOBJ_GEOM, ("right_foot_geom", "right_sole_geom"))
-        self.left_foot_bid = _find_first_id(self.model, mujoco.mjtObj.mjOBJ_BODY, ("left_foot_link", "left_foot"))
-        self.right_foot_bid = _find_first_id(self.model, mujoco.mjtObj.mjOBJ_BODY, ("right_foot_link", "right_foot"))
+        # Canonical V2 foot bodies and sole colliders for clearance and stumble detection
+        self.left_foot_gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "left_sole_geom")
+        self.right_foot_gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "right_sole_geom")
+        self.left_foot_bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "left_foot")
+        self.right_foot_bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "right_foot")
 
         # Floor geom and base body for domain randomization (friction and torso mass)
         self.floor_gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "floor")
-        self.base_body_id = _find_first_id(self.model, mujoco.mjtObj.mjOBJ_BODY, ("base_link", "trunk_base"))
-        self.default_base_mass = float(self.model.body_mass[self.base_body_id]) if self.base_body_id != -1 else 0.32
+        self.base_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "trunk_base")
+        if min(self.left_foot_gid, self.right_foot_gid, self.left_foot_bid,
+               self.right_foot_bid, self.base_body_id) < 0:
+            raise ValueError("V2 model is missing canonical foot or trunk geometry")
+        self.default_base_mass = float(self.model.body_mass[self.base_body_id])
+        self.default_base_inertia = self.model.body_inertia[self.base_body_id].copy()
+        self.default_base_com = self.model.body_ipos[self.base_body_id].copy()
+        if (self.cfg.RANDOMIZE_HARDWARE_VARIANTS and
+                self.cfg.TORSO_MASS_RANDOMIZATION_KG >= self.default_base_mass):
+            self.close()
+            raise ValueError("Mass randomization must preserve positive torso mass")
+        self._dynamics_data = mujoco.MjData(self.model)
         self._randomize_model_dynamics()
 
         # Curriculum stage
@@ -604,15 +624,25 @@ class ParallelSimRunner:
         return []
 
     def _randomize_model_dynamics(self):
-        """Synchronously randomize floor friction and torso mass on shared model outside worker threads."""
+        """Randomize shared dynamics between worker batches and refresh MuJoCo constants."""
         if self.floor_gid != -1:
             self.model.geom_friction[self.floor_gid, 0] = float(
                 self.rng.uniform(self.friction_range[0], self.friction_range[1])
             )
         if self.base_body_id != -1:
-            self.model.body_mass[self.base_body_id] = float(
-                self.default_base_mass * self.rng.uniform(0.95, 1.05)
+            variant_dynamics = bool(self.cfg.RANDOMIZE_HARDWARE_VARIANTS)
+            mass_delta = (float(self.cfg.TORSO_MASS_RANDOMIZATION_KG) if variant_dynamics
+                          else self.default_base_mass * 0.05)
+            com_delta = float(self.cfg.TORSO_COM_RANDOMIZATION_M) if variant_dynamics else 0.0
+            mass = self.default_base_mass + self.rng.uniform(-mass_delta, mass_delta)
+            self.model.body_mass[self.base_body_id] = mass
+            self.model.body_inertia[self.base_body_id] = (
+                self.default_base_inertia * mass / self.default_base_mass
             )
+            self.model.body_ipos[self.base_body_id] = self.default_base_com
+            if com_delta:
+                self.model.body_ipos[self.base_body_id] += self.rng.uniform(-com_delta, com_delta, size=3)
+            mujoco.mj_setConst(self.model, self._dynamics_data)
 
     def reset_env(self, env_idx: int) -> np.ndarray:
         """Reset a single environment with random velocity commands."""
@@ -627,7 +657,7 @@ class ParallelSimRunner:
         if self.include_emotions:
             self.current_emotions[env_idx] = self.rng.integers(0, NUM_EMOTIONS)
 
-        d.qpos[0:3] = [0.0, 0.0, 0.128]
+        d.qpos[0:3] = self.model.qpos0[0:3]
         d.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
         # Khởi tạo góc khớp ban đầu quanh tư thế danh định đứng cân bằng (chùng gối nhẹ)
         nominal = getattr(self.cfg, "nominal_qpos", DEFAULT_NOMINAL_QPOS)
@@ -711,7 +741,7 @@ class ParallelSimRunner:
         return self.get_observations()
 
     def _extract_obs(self, env_idx: int) -> np.ndarray:
-        """Extract 37-dimensional observation vector from env data."""
+        """Extract the V2 observation vector from environment data."""
         d = self.datas[env_idx]
 
         # Base angular velocity from gyroscope sensor
@@ -774,7 +804,7 @@ class ParallelSimRunner:
         )
 
     def get_observations(self) -> np.ndarray:
-        """Extract all current observations as a (num_envs, 37) numpy array."""
+        """Extract all current observations as a (num_envs, obs_dim) numpy array."""
         obs = np.empty((self.num_envs, self.obs_dim), dtype=np.float32)
         for i in range(self.num_envs):
             obs[i] = self._extract_obs(i)
@@ -1011,7 +1041,7 @@ class ParallelSimRunner:
                         and ctrl.phase_steps >= 15
                     ):
                         d = self.datas[i]
-                        d.qpos[2] = max(float(d.qpos[2]), 0.128)
+                        d.qpos[2] = max(float(d.qpos[2]), float(self.model.qpos0[2]))
                         d.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
                         d.qvel[:] = 0.0
                         mujoco.mj_forward(self.model, d)
@@ -1434,7 +1464,7 @@ DuckParallelSim = ParallelSimRunner
 
 
 def run_benchmark(
-    model_path: Union[str, Path] = "models/mjcf/microduck_8dof.xml",
+    model_path: Union[str, Path] = MODEL_PATH,
     num_envs: int = 16,
     steps: int = 50,
     num_threads: Optional[int] = None,
@@ -1483,7 +1513,7 @@ def run_benchmark(
 
         if verbose:
             print("=" * 60)
-            print("Parallel Simulation Benchmark: MicroDuck 8-DOF")
+            print("Parallel Simulation Benchmark: CyberDuck V2")
             print("=" * 60)
             print(f"Model: {model_path}")
             print(f"Environments: {num_envs}")
@@ -1506,12 +1536,12 @@ def run_benchmark(
 def main():
     """Command-line interface for parallel simulation runner and benchmark."""
     parser = argparse.ArgumentParser(
-        description="Parallel Batched Simulation Runner & FPS Benchmark for MicroDuck 8-DOF"
+        description="Parallel Batched Simulation Runner & FPS Benchmark for CyberDuck V2"
     )
     parser.add_argument(
         "--model_path",
         type=str,
-        default="models/mjcf/microduck_8dof.xml",
+        default=str(MODEL_PATH),
         help="Path to robot MuJoCo MJCF XML model",
     )
     parser.add_argument(

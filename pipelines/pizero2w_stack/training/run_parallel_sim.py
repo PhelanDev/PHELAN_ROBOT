@@ -35,9 +35,9 @@ from training.run_parallel_sim import (
     run_benchmark as base_run_benchmark,
 )
 
-DEFAULT_MODEL_PATH = (
-    REPO_ROOT / "pipelines" / "pizero2w_stack" / "models" / "mjcf" / "microduck_pizero2w_8dof.xml"
-)
+from duck_v2.robot_spec import MODEL_PATH
+
+DEFAULT_MODEL_PATH = MODEL_PATH
 
 
 class ParallelSimRunner(BaseRunner):

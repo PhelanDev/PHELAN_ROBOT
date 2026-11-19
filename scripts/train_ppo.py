@@ -1,4 +1,4 @@
-"""Proximal Policy Optimization (PPO) Training Pipeline for MicroDuck 8-DOF.
+"""Proximal Policy Optimization (PPO) Training Pipeline for CyberDuck V2.
 
 Trains an Actor-Critic policy using batched MuJoCo simulations via ParallelSimRunner.
 Integrates 42-dimensional perception-action observation space (IMU, commands, kinematics,
@@ -26,7 +26,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from training.env_config import MicroDuck8DoFConfig, _DEFAULT_CFG
-from training.run_parallel_sim import ParallelSimRunner
+from training.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
+from duck_v2.robot_spec import MODEL_PATH, MODEL_NAME, CHECKPOINT_PREFIX
 from training.terrain_curriculum import (
     STAGES,
     STAIR_STAGES,
@@ -37,10 +38,8 @@ from training.terrain_curriculum import (
     next_stair_stage,
 )
 
-DEFAULT_MODEL_PATH = (
-    REPO_ROOT / "pipelines" / "rpi5_stack" / "models" / "mjcf" / "microduck_rpi5_8dof.xml"
-)
-DEFAULT_SAVE_PATH = REPO_ROOT / "models" / "checkpoints" / "microduck_rpi5_ppo.pt"
+DEFAULT_MODEL_PATH = MODEL_PATH
+DEFAULT_SAVE_PATH = REPO_ROOT / "models" / "checkpoints" / f"{CHECKPOINT_PREFIX}_ppo.pt"
 
 
 class RunningMeanStd:
@@ -149,7 +148,7 @@ class RunningMeanStd:
 
 
 class ActorCritic(nn.Module):
-    """Actor-Critic neural network for MicroDuck 8-DOF bipedal robot.
+    """Actor-Critic neural network for CyberDuck V2 bipedal robot.
 
     Architecture:
     - Input: Actor receives obs_dim (42), Critic receives critic_obs_dim (e.g. 53 or 42)
@@ -563,6 +562,7 @@ def train_ppo(
     squash_actions: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Execute PPO training pipeline using ParallelSimRunner."""
+    model_path = resolve_v2_model_path(model_path)
     if squash_actions is not None and type(squash_actions) is not bool:
         raise ValueError("squash_actions must be boolean")
     if device is None:
@@ -592,11 +592,7 @@ def train_ppo(
             print(f"[PPO] Dry-run mode enabled: {max_iterations} iteration(s), {num_envs} envs, {rollout_steps} rollout steps.")
 
     if save_path is None:
-        from training.policy_contract import TARGET_MODELS, CHECKPOINT_PREFIXES
-        target = next((target for target, name in TARGET_MODELS.items() if name == Path(model_path).name), None)
-        if target is None:
-            raise ValueError("Custom model requires an explicit save_path")
-        save_path = REPO_ROOT / "models/checkpoints" / f"{CHECKPOINT_PREFIXES[target]}_ppo.pt"
+        save_path = DEFAULT_SAVE_PATH
     save_path = Path(save_path).resolve()
     save_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -630,7 +626,7 @@ def train_ppo(
                 raise ValueError("Checkpoint model identity requires checkpoint metadata")
             if (existing.get("model_name") or existing.get("model_path") or output != best_save_path
                     or "model_state_dict" in existing or "actor_state_dict" in existing):
-                validate_model_identity(existing, model_path)
+                validate_model_identity(existing, MODEL_NAME)
 
     # The actual best file is the only authority for historical selection.
     best_record = None
@@ -724,6 +720,13 @@ def train_ppo(
     if ckpt_to_load is not None:
         if ckpt_to_load.exists():
             ckpt = torch.load(str(ckpt_to_load), map_location=dev, weights_only=False)
+            try:
+                if not isinstance(ckpt, dict):
+                    raise ValueError("V2 checkpoint model identity metadata is required")
+                validate_model_identity(ckpt, MODEL_NAME)
+            except Exception:
+                runner.close()
+                raise
             if "observation_schema" in ckpt:
                 try:
                     validate_observation_schema(ckpt["observation_schema"])
@@ -732,7 +735,7 @@ def train_ppo(
                     raise
             if resume:
                 try:
-                    validate_model_identity(ckpt, sim_model_path)
+                    validate_model_identity(ckpt, MODEL_NAME)
                     for field, expected in (("obs_dim", obs_dim), ("critic_obs_dim", critic_obs_dim), ("action_dim", action_dim), ("hidden_dim", hidden_dim)):
                         if field in ckpt and ckpt[field] != expected:
                             raise ValueError(f"Checkpoint {field} mismatch")
@@ -940,7 +943,7 @@ def train_ppo(
             "obs_dim": obs_dim, "critic_obs_dim": critic_obs_dim, "action_dim": action_dim,
             "hidden_dim": hidden_dim, "observation_schema": dict(schema), "obs_rms": obs_rms.state_dict(),
             "critic_obs_rms": critic_obs_rms.state_dict(), "squash_actions": model.squash_actions,
-            "model_path": eval_protocol["model_path"], "model_name": sim_model_path.name,
+            "model_path": str(MODEL_PATH), "model_name": MODEL_NAME,
             "iterations": iteration, "learning_rate": current_lr, "stage": stage,
             "terrain_mode": terrain_mode, "total_timesteps": total_timesteps,
             "elapsed_seconds": time.perf_counter() - start_time, "metrics": dict(metrics),
@@ -1381,14 +1384,14 @@ def train_ppo(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MicroDuck 8-DOF PPO Training Pipeline")
+    parser = argparse.ArgumentParser(description="CyberDuck V2 PPO Training Pipeline")
     parser.add_argument("--model-path", type=str, default=str(DEFAULT_MODEL_PATH), help="Path to MuJoCo MJCF model")
     parser.add_argument("--save-path", type=str, default=None, help="Path to save PyTorch checkpoint")
     parser.add_argument(
         "--best-save-path",
         type=str,
         default=None,
-        help="Path to save best PyTorch checkpoint (default: microduck_best.pt in same directory as save-path)",
+        help="Path to save best PyTorch checkpoint (default: cyberduck_v2_best.pt in same directory as save-path)",
     )
     parser.add_argument("--num-envs", type=int, default=64, help="Number of parallel MuJoCo environments (default: 64)")
     parser.add_argument("--rollout-steps", type=int, default=128, help="Rollout steps per iteration (default: 128)")

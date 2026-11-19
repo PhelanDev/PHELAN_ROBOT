@@ -303,7 +303,7 @@ def test_compute_rewards_emotion_tracking():
 def test_parallel_sim_runner_include_emotions():
     """Verify ParallelSimRunner with include_emotions=True produces 52-dim observations."""
     runner = ParallelSimRunner(
-        model_path="models/mjcf/microduck_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=4,
         decimation=5,
         include_emotions=True,
@@ -327,7 +327,7 @@ def test_parallel_sim_runner_include_emotions():
 
         # Verify default runner remains backward-compatible (obs_dim in (37, 42), include_emotions False)
         runner_default = ParallelSimRunner(
-            model_path="models/mjcf/microduck_8dof.xml",
+            model_path="duck_v2/cyberduck_v2.xml",
             num_envs=2,
             decimation=5,
         )
@@ -336,7 +336,7 @@ def test_parallel_sim_runner_include_emotions():
         obs_default = runner_default.reset()
         assert obs_default.shape == (2, runner_default.obs_dim)
         # Also test with LiDAR perception model (RPi5 model)
-        rpi5_model_path = Path("pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml")
+        rpi5_model_path = Path("duck_v2/cyberduck_v2.xml")
         if rpi5_model_path.exists():
             runner_rpi5 = ParallelSimRunner(
                 model_path=rpi5_model_path,

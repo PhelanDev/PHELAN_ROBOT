@@ -6,8 +6,11 @@ from torch.distributions import Normal
 _ROOT = str(Path(__file__).resolve().parent.parent)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
+from duck_v2.robot_spec import CHECKPOINT_PREFIX, MODEL_NAME, MODEL_PATH
 from training.policy_contract import observation_schema
-from training.run_parallel_sim import ParallelSimRunner
+from training.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
+
+DEFAULT_SAVE_PATH = Path(_ROOT) / "models" / "checkpoints" / f"{CHECKPOINT_PREFIX}_sac.pt"
 
 
 class SquashedGaussianActor(nn.Module):
@@ -128,8 +131,10 @@ def save_sac_checkpoint(
         "policy_arch": "sac_squashed_gaussian", "algorithm": "sac", "squash_actions": True,
     }
     if model_path is not None:
-        payload["model_path"] = str(model_path)
-        payload["model_name"] = Path(model_path).name
+        source_model_path = resolve_v2_model_path(model_path)
+        payload["model_path"] = str(MODEL_PATH)
+        payload["model_name"] = MODEL_NAME
+        payload["source_model_path"] = str(source_model_path)
     if observation_schema is not None:
         payload["observation_schema"] = dict(observation_schema)
     torch.save(payload, p)
@@ -137,14 +142,15 @@ def save_sac_checkpoint(
 
 
 def train_sac(
-    model_path: Union[str, Path] = "models/mjcf/microduck_8dof.xml",
+    model_path: Union[str, Path] = MODEL_PATH,
     num_envs: int = 16, total_steps: int = 100_000, warmup_steps: int = 1_000,
     batch_size: int = 256, hidden_dim: int = 256,
-    save_path: Union[str, Path] = "checkpoints/sac_checkpoint.pt",
+    save_path: Union[str, Path] = DEFAULT_SAVE_PATH,
     lr: float = 3e-4, gamma: float = 0.99, tau: float = 0.005,
     buffer_capacity: int = 100_000, device: str = "cpu",
     target_entropy: Optional[float] = None,
 ) -> Path:
+    model_path = resolve_v2_model_path(model_path)
     runner = ParallelSimRunner(model_path=model_path, num_envs=num_envs)
     try:
         obs_dim, act_dim = runner.obs_dim, runner.action_dim
@@ -187,14 +193,14 @@ def train_sac(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="SAC training for MicroDuck")
-    parser.add_argument("--model-path", default="models/mjcf/microduck_8dof.xml")
+    parser = argparse.ArgumentParser(description="SAC training for CyberDuck V2")
+    parser.add_argument("--model-path", default=str(MODEL_PATH))
     parser.add_argument("--num-envs", type=int, default=16)
     parser.add_argument("--total-steps", type=int, default=100000)
     parser.add_argument("--warmup-steps", type=int, default=1000)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--hidden-dim", type=int, default=256)
-    parser.add_argument("--save-path", default="checkpoints/sac_checkpoint.pt")
+    parser.add_argument("--save-path", default=str(DEFAULT_SAVE_PATH))
     parser.add_argument("--target-entropy", type=float, default=None)
     args = parser.parse_args()
     train_sac(

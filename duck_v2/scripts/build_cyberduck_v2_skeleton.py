@@ -1,6 +1,12 @@
 """
-CyberDuck V2 Pro - Internal Mechanical Skeleton & Servo Chassis Generator.
-Generates an industrial-grade internal mechanical skeleton frame designed for real-world 3D printing and hardware assembly:
+CyberDuck V2 Pro - Unverified mechanical concept visualization.
+
+The servo blocks below are 23x12x22 mm micro-servo placeholders. They are not
+MG996R models and the generated chassis must not be treated as a buildable
+MG996R mounting design. Redesign and validate clearances against the actual
+servo variant before using any skeleton parts for hardware assembly.
+
+Generates a conceptual internal frame for visualization:
 1. 8x Precision Servo Units (Actuator blocks with 25T output spline horn & mounting ears)
 2. Torso Central Spine Chassis (Dual hip roll servo bay, head yaw mount, battery pocket, PCB deck)
 3. Neck 2-DOF Gimbal Bracket (Interlocking Yaw horn to Pitch servo)
@@ -120,11 +126,11 @@ def make_cylinder(r, height, center=(0, 0, 0), axis='z', n=24):
     return np.array(tris, dtype=np.float32)
 
 # =========================================================================
-# 1. Servo Motor Model (Feetech / SG90 / MG90S Class 9g/12g micro servo)
+# 1. Generic 23x12x22 mm micro-servo placeholder, not MG996R geometry
 # =========================================================================
 def make_servo_model(center=(0, 0, 0), axis_dir='y', horn_side=+1):
     """
-    Standard micro servo: Body 23x12x22mm, Mounting ears 32x12x2.5mm, Output shaft & 25T round horn.
+    Concept placeholder: 23x12x22mm body, not a hardware-fit MG996R model.
     """
     body = make_box(0.023, 0.012, 0.022, center=center)
     # Flange / mounting ear tabs
@@ -291,7 +297,8 @@ def build_and_export_skeleton():
     cad_dir.mkdir(parents=True, exist_ok=True)
     stl_dir.mkdir(parents=True, exist_ok=True)
 
-    print(">>> Đang tạo mô hình khung cơ khí và 8 servo CyberDuck V2 Pro...")
+    print(">>> Đang tạo mô hình concept khung CyberDuck V2...")
+    print("[WARNING] Servo geometry is a micro-servo placeholder, not MG996R. This is not a buildable fit design.")
 
     components = {}
 
@@ -363,7 +370,7 @@ d 1.0
 
     print(f">>> Đang xuất file 3D hoàn chỉnh {obj_path}...")
     with open(obj_path, "w", encoding="utf-8") as f:
-        f.write("# CyberDuck V2 Mechanical Skeleton Assembly OBJ\n")
+        f.write("# CyberDuck V2 unverified mechanical concept; servo blocks are not MG996R geometry\n")
         f.write(f"mtllib cyberduck_v2_skeleton.mtl\n\n")
 
         vert_offset = 1

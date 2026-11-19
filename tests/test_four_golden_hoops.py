@@ -16,6 +16,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from training.env_config import compute_rewards, LocomotionMode, _DEFAULT_CFG
+from duck_v2.robot_spec import MODEL_PATH
 
 
 def test_hoop1_single_support_and_double_support_dwell():
@@ -270,7 +271,7 @@ def test_hoop4_floor_friction_and_foot_slip_penalty():
     assert _DEFAULT_CFG.REWARD_WEIGHTS.get("foot_slip_penalty") == -0.8, "foot_slip_penalty weight must be -0.8"
 
     # 2. Kiểm tra XML ma sát floor và foot
-    xml_path = os.path.join(PROJECT_ROOT, "models", "mjcf", "microduck_8dof.xml")
+    xml_path = MODEL_PATH
     with open(xml_path, "r", encoding="utf-8") as f:
         xml_content = f.read()
     assert 'name="floor"' in xml_content

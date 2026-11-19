@@ -74,11 +74,10 @@ def test_gait_hysteresis_rejects_chatter_and_tracks_same_foot(dt, steps):
     assert not any(np.any(v) for v in state.values())
 
 
-@pytest.mark.parametrize('model', ['models/mjcf/microduck_8dof.xml', 'duck_v2/cyberduck_v2.xml'])
-def test_sole_clearance_geometry_and_reset_isolation(model):
+def test_sole_clearance_geometry_and_reset_isolation():
     from training.run_parallel_sim import ParallelSimRunner
 
-    runner = ParallelSimRunner(model, num_envs=2, num_threads=1)
+    runner = ParallelSimRunner('duck_v2/cyberduck_v2.xml', num_envs=2, num_threads=1)
     try:
         d = runner.datas[0]
         gids = [runner.left_foot_gid, runner.right_foot_gid]
@@ -325,22 +324,26 @@ def test_viewer_model_resolution_explicitness_and_metadata(tmp_path):
     torch.save(ckpt, path)
     assert build_arg_parser().parse_args([]).model is None
     assert Path(resolve_viewer_model_path(None, path)).name == 'cyberduck_v2.xml'
+    assert Path(resolve_viewer_model_path('duck_v2/cyberduck_v2.xml', path)).name == 'cyberduck_v2.xml'
     with pytest.raises(ValueError, match='model'):
-        resolve_viewer_model_path('models/mjcf/microduck_8dof.xml', path)
-    ckpt.pop('model_path'); ckpt.pop('model_name')
-    torch.save(ckpt, path)
-    assert Path(resolve_viewer_model_path('models/mjcf/microduck_8dof.xml', path)).name == 'microduck_8dof.xml'
-    assert Path(resolve_viewer_model_path(None, path)).name == 'microduck_8dof.xml'
-    named = tmp_path/'cyberduck_v2_best.pt'
-    torch.save(ckpt, named)
-    assert Path(resolve_viewer_model_path(None, named)).name == 'cyberduck_v2.xml'
-    ambiguous = tmp_path/'experiment_v2.pt'
-    torch.save(ckpt, ambiguous)
-    assert Path(resolve_viewer_model_path(None, ambiguous)).name == 'microduck_8dof.xml'
-    ckpt['model_path'] = 'missing/model.xml'
-    torch.save(ckpt, named)
-    with pytest.raises((ValueError, FileNotFoundError), match='model'):
-        resolve_viewer_model_path(None, named)
+        resolve_viewer_model_path('models/microduck_8dof.xml', path)
+
+    unidentified = {k: v for k, v in ckpt.items() if k not in ('model_path', 'model_name')}
+    for filename in ('unrelated.pt', 'cyberduck_v2_best.pt', 'experiment_v2.pt'):
+        unknown_path = tmp_path / filename
+        torch.save(unidentified, unknown_path)
+        for explicit_model in (None, 'duck_v2/cyberduck_v2.xml'):
+            with pytest.raises(ValueError, match='identity'):
+                resolve_viewer_model_path(explicit_model, unknown_path)
+
+    for metadata in (
+        dict(model_path='missing/model.xml'),
+        dict(model_name='microduck_8dof.xml'),
+        dict(model_name='cyberduck_v2.xml', model_path='models/microduck_8dof.xml'),
+    ):
+        torch.save(dict(unidentified, **metadata), path)
+        with pytest.raises(ValueError, match='identity'):
+            resolve_viewer_model_path(None, path)
 
 
 @pytest.mark.parametrize('squash', [False, True])
@@ -350,6 +353,7 @@ def test_generated_c_applies_output_transform_before_quantization(tmp_path, squa
     from scripts.train_ppo import ActorCritic
     from training.policy_contract import observation_schema
     model = ActorCritic(hidden_dim=256, squash_actions=squash)
+    model.model_name = 'cyberduck_v2.xml'
     model.observation_schema = observation_schema(42, False, 0.02)
     with torch.no_grad():
         for p in model.actor.parameters():
@@ -423,7 +427,8 @@ def test_shared_checkpoint_consumers_keep_normalization_and_squash(tmp_path):
     def collect(runner, policy_fn, steps, gamma):
         return policy_fn(raw, 0)
     with patch.object(bc, '_collect_rollouts', collect):
-        teacher_actions = collect_teacher_demonstrations(None, load_actor_from_checkpoint(path), num_steps=1)
+        runner = SimpleNamespace(obs_dim=42, action_dim=8)
+        teacher_actions = collect_teacher_demonstrations(runner, load_actor_from_checkpoint(path), num_steps=1)
     np.testing.assert_allclose(teacher_actions, expected, atol=2e-6)
 
 

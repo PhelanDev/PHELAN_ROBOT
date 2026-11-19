@@ -20,7 +20,7 @@ def test_audit_schema_roundtrip_and_rpi_clock_parity(tmp_path, moving):
     model.observation_schema = observation_schema(42, True, 0.006)
     output = export_onnx(model, tmp_path / "clock.onnx")
     engine = BaseRPiInferenceEngine(str(output), mock=True, freq=1 / 0.006)
-    runner = ParallelSimRunner(model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+    runner = ParallelSimRunner(model_path="duck_v2/cyberduck_v2.xml",
         num_envs=1, decimation=3, terrain_mode="flat")
     try:
         runner.reset()
@@ -99,6 +99,7 @@ def test_audit_both_pi_wrappers_run_metadata_policy(tmp_path):
 
 def make_policy():
     model = ActorCritic(hidden_dim=16, squash_actions=True)
+    model.model_name = "cyberduck_v2.xml"
     rms = RunningMeanStd(42, clip=0.25)
     rms.mean[:] = 0.1
     rms.var[:] = 1.0
@@ -134,6 +135,7 @@ def test_generated_policy_preserves_clipped_rms_and_actual_hidden_width(tmp_path
         model.actor[2].weight[0, 0] = 1.0
         model.actor[4].weight[:, 0] = 2.0
     checkpoint = dict(model_state_dict=model.state_dict(), squash_actions=True, obs_rms=rms.state_dict(),
+                      model_name="cyberduck_v2.xml",
                       observation_schema=observation_schema(42, False, 0.02))
     weights, config = export_esp32_headers(checkpoint, tmp_path / "weights.h", tmp_path / "config.h")
     observation = np.zeros(42, dtype=np.int8)
@@ -188,7 +190,7 @@ def test_viewer_rejects_nonfinite_checkpoint_weights(tmp_path):
     with torch.no_grad():
         model.actor[0].weight[0, 0] = float("nan")
     checkpoint = tmp_path / "corrupt.pt"
-    torch.save({"model_state_dict": model.state_dict()}, checkpoint)
+    torch.save({"model_state_dict": model.state_dict(), "model_name": "cyberduck_v2.xml"}, checkpoint)
     with pytest.raises(ValueError, match="finite"):
         load_viewer_policy(checkpoint)
 
@@ -213,25 +215,25 @@ def test_esp32_rejects_invalid_quantization_before_writing(tmp_path, scale):
     assert not (tmp_path / "config.h").exists()
 
 
-@pytest.mark.parametrize("embed_clock,control_dt,obs_dim", [
-    (False, 0.02, 42),
-    (True, 0.006, 42),
-    (True, 0.02, 37),
+@pytest.mark.parametrize("embed_clock,control_dt", [
+    (False, 0.02),
+    (True, 0.006),
 ])
-def test_viewer_schema_clock_and_layout_parity_with_runner(tmp_path, embed_clock, control_dt, obs_dim):
-    """F4: Viewer headless loop & extract_viewer_observation must honor policy observation_schema (clock, dt, 37 vs 42)."""
+def test_viewer_schema_clock_and_layout_parity_with_runner(tmp_path, embed_clock, control_dt):
+    """Viewer extraction and headless loops honor the V2 clock schema and control interval."""
     from training.policy_contract import observation_schema
     from training.run_parallel_sim import ParallelSimRunner
     from scripts.export_policy import export_onnx
-    from scripts.interactive_viewer import extract_viewer_observation, load_viewer_policy, run_simulation_headless
+    from scripts.interactive_viewer import extract_viewer_observation, run_simulation_headless
 
+    obs_dim = 42
     decimation = max(1, int(round(control_dt / 0.002)))
     model = ActorCritic(obs_dim=obs_dim, hidden_dim=16, squash_actions=True)
     schema = observation_schema(obs_dim, embed_clock, control_dt, period=0.8)
     model.observation_schema = schema
 
     pt_path = tmp_path / f"policy_{obs_dim}_{embed_clock}.pt"
-    model_rel = "models/mjcf/microduck_8dof.xml" if obs_dim == 37 else "pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml"
+    model_rel = "duck_v2/cyberduck_v2.xml"
     torch.save({
         "model_state_dict": model.state_dict(),
         "obs_dim": obs_dim,
@@ -286,6 +288,31 @@ def test_viewer_schema_clock_and_layout_parity_with_runner(tmp_path, embed_clock
         assert metrics["completed_steps"] >= 3
 
 
+def test_viewer_rejects_retired_37_observation_layout(tmp_path):
+    from training.policy_contract import observation_schema
+    from training.run_parallel_sim import ParallelSimRunner
+    from scripts.export_policy import export_onnx
+    from scripts.interactive_viewer import extract_viewer_observation, load_viewer_policy
+
+    schema = observation_schema(37, True, 0.02)
+    model = ActorCritic(obs_dim=37, hidden_dim=16)
+    checkpoint = tmp_path / "retired_layout.pt"
+    torch.save(dict(model_state_dict=model.state_dict(), model_name="cyberduck_v2.xml",
+                    observation_schema=schema), checkpoint)
+    exported = export_onnx(checkpoint, tmp_path / "retired_layout.onnx")
+    for policy_path in (checkpoint, exported):
+        with pytest.raises(ValueError, match="dimensions|42 observations"):
+            load_viewer_policy(policy_path)
+
+    runner = ParallelSimRunner(model_path="duck_v2/cyberduck_v2.xml", num_envs=1)
+    try:
+        with pytest.raises(ValueError, match="42 observations, got 37"):
+            extract_viewer_observation(runner.model, runner.datas[0], obs_dim=37,
+                                      observation_schema=schema)
+    finally:
+        runner.close()
+
+
 def test_viewer_rejects_legacy_policy_without_explicit_schema(tmp_path):
     """F4: Viewer simulation loops must reject legacy policies lacking observation_schema unless explicit override is given."""
     from training.policy_contract import observation_schema
@@ -294,13 +321,14 @@ def test_viewer_rejects_legacy_policy_without_explicit_schema(tmp_path):
 
     model = ActorCritic(obs_dim=42, hidden_dim=16, squash_actions=True)
     legacy_pt = tmp_path / "legacy_no_schema.pt"
-    torch.save({"model_state_dict": model.state_dict(), "obs_dim": 42, "action_dim": 8, "hidden_dim": 16}, legacy_pt)
+    torch.save({"model_state_dict": model.state_dict(), "obs_dim": 42, "action_dim": 8,
+                "hidden_dim": 16, "model_name": "cyberduck_v2.xml"}, legacy_pt)
     legacy_onnx = export_onnx(legacy_pt, tmp_path / "legacy_no_schema.onnx")
 
     for legacy_file in (legacy_pt, legacy_onnx):
         with pytest.raises(ValueError, match="schema|legacy"):
             run_simulation_headless(
-                model_path="models/mjcf/microduck_8dof.xml",
+                model_path="duck_v2/cyberduck_v2.xml",
                 policy_path=legacy_file,
                 duration=0.02,
                 dt=0.002,
@@ -308,7 +336,7 @@ def test_viewer_rejects_legacy_policy_without_explicit_schema(tmp_path):
 
     # Explicit legacy_observation_schema succeeds
     metrics = run_simulation_headless(
-        model_path="models/mjcf/microduck_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         policy_path=legacy_onnx,
         duration=0.04,
         dt=0.002,

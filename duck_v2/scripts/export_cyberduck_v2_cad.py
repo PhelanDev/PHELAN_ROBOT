@@ -4,15 +4,17 @@ Export CyberDuck V2 CAD Assembly to standard OBJ, MTL, Exploded OBJ, and STL ZIP
 import os
 import shutil
 import zipfile
+from pathlib import Path
 import mujoco
 import numpy as np
 
 def export_v2_cad():
-    cad_dir = "duck_v2/cad"
+    v2_dir = Path(__file__).resolve().parents[1]
+    cad_dir = str(v2_dir / "cad")
     os.makedirs(cad_dir, exist_ok=True)
     brain_dir = os.environ.get("BRAIN_DIR", os.environ.get("GEMINI_BRAIN_DIR", ""))
     
-    xml_path = "duck_v2/cyberduck_v2.xml"
+    xml_path = str(v2_dir / "cyberduck_v2.xml")
     model = mujoco.MjModel.from_xml_path(xml_path)
     data = mujoco.MjData(model)
     mujoco.mj_forward(model, data)
@@ -150,7 +152,7 @@ def export_v2_cad():
     # 4. Package STL files
     zip_p = os.path.join(cad_dir, "cyberduck_v2_stl_parts.zip")
     with zipfile.ZipFile(zip_p, "w", zipfile.ZIP_DEFLATED) as zf:
-        for root, dirs, files in os.walk("duck_v2/meshes"):
+        for root, dirs, files in os.walk(v2_dir / "meshes"):
             for file in files:
                 if file.endswith(".stl"):
                     full_p = os.path.join(root, file)

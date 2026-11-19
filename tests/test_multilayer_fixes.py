@@ -120,7 +120,7 @@ def test_parallel_sim_gyro_invariance_under_tilt(monkeypatch):
     import training.run_parallel_sim as rps_mod
 
     runner = ParallelSimRunner(
-        model_path="models/mjcf/microduck_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=1,
         decimation=1,
     )

@@ -1,4 +1,4 @@
-"""Raspberry Pi 5 Real-Time Inference and Actuation Runtime for MicroDuck 8-DOF.
+"""Raspberry Pi 5 Real-Time Inference and Actuation Runtime for CyberDuck V2.
 
 Thin parameterized wrapper delegating shared inference and hardware control to pipelines.rpi_infer_core.
 """
@@ -6,7 +6,7 @@ Thin parameterized wrapper delegating shared inference and hardware control to p
 import sys
 from pathlib import Path
 
-# Ensure duckV1 root is on path for relative imports
+# Ensure project root is on path for relative imports
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -21,9 +21,7 @@ from pipelines.rpi_infer_core import (
     run_rpi_cli,
 )
 
-DEFAULT_MODEL_PATH = (
-    REPO_ROOT / "pipelines" / "rpi5_stack" / "deployment" / "microduck_rpi5_policy.onnx"
-)
+from duck_v2.robot_spec import DEFAULT_ONNX_PATH as DEFAULT_MODEL_PATH
 
 
 class RPi5InferenceEngine(BaseRPiInferenceEngine):
@@ -60,8 +58,8 @@ class RPi5InferenceEngine(BaseRPiInferenceEngine):
 def main():
     run_rpi_cli(
         RPi5InferenceEngine,
-        "Raspberry Pi 5 Locomotion Inference Engine for MicroDuck 8-DOF",
-        default_model=str(DEFAULT_MODEL_PATH) if DEFAULT_MODEL_PATH.exists() else None,
+        "Raspberry Pi 5 Locomotion Inference Engine for CyberDuck V2",
+        default_model=str(DEFAULT_MODEL_PATH),
     )
 
 

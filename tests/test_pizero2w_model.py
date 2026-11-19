@@ -20,16 +20,11 @@ from model_test_helpers import (
     assert_sole_clearance,
 )
 
-MJCF_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "pipelines", "pizero2w_stack", "models", "mjcf", "microduck_pizero2w_8dof.xml"
-)
-URDF_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "pipelines", "pizero2w_stack", "models", "urdf", "microduck_pizero2w_8dof.urdf"
-)
+from duck_v2.robot_spec import MODEL_PATH as MJCF_PATH, URDF_PATH, MJCF_MODEL_NAME, TOTAL_MASS_KG
 
 
 def test_pizero2w_mjcf_structure_and_joints():
-    assert_mjcf_structure_and_joints(MJCF_PATH, "microduck_pizero2w_8dof")
+    assert_mjcf_structure_and_joints(MJCF_PATH, MJCF_MODEL_NAME)
 
 
 def test_pizero2w_mjcf_perception_suite():
@@ -39,10 +34,10 @@ def test_pizero2w_mjcf_perception_suite():
 def test_pizero2w_mujoco_compilation_and_mass_budget():
     assert_mujoco_compilation_and_mass(
         MJCF_PATH,
-        min_mass=0.615,
-        max_mass=0.685,
-        base_mass_min=0.260,
-        base_mass_max=0.290,
+        min_mass=TOTAL_MASS_KG - 1e-6,
+        max_mass=TOTAL_MASS_KG + 1e-6,
+        base_mass_min=0.36 - 1e-6,
+        base_mass_max=0.36 + 1e-6,
         n_steps=50,
     )
 
@@ -50,11 +45,11 @@ def test_pizero2w_mujoco_compilation_and_mass_budget():
 def test_pizero2w_urdf_structure_and_inertials():
     assert_urdf_structure_and_joint_limits(
         URDF_PATH,
-        robot_name="microduck_pizero2w_8dof",
-        min_total_mass=0.615,
-        max_total_mass=0.685,
-        min_base_mass=0.260,
-        max_base_mass=0.290,
+        robot_name="cyberduck_v2",
+        min_total_mass=TOTAL_MASS_KG - 1e-6,
+        max_total_mass=TOTAL_MASS_KG + 1e-6,
+        min_base_mass=0.36 - 1e-6,
+        max_base_mass=0.36 + 1e-6,
     )
 
 
@@ -127,14 +122,14 @@ def test_pizero2w_infer_cli(tmp_path):
         assert res.returncode == 0, f"CLI with {mock_flag} failed with error: {res.stderr}\nOutput: {res.stdout}"
 
 
-def test_pizero2w_eyes_symmetric_and_all_mjcf_sole_clearance():
-    """Verify right_eye size/pos symmetry and sole clearance >= -0.001 across all 4 MJCF models."""
+def test_pizero2w_v2_feet_symmetric_and_all_profiles_use_v2():
+    """Verify V2 foot symmetry and one shared asset across deployment profiles."""
     import mujoco
     import numpy as np
 
-    m_pizero = mujoco.MjModel.from_xml_path("pipelines/pizero2w_stack/models/mjcf/microduck_pizero2w_8dof.xml")
-    re_id = mujoco.mj_name2id(m_pizero, mujoco.mjtObj.mjOBJ_GEOM, "right_eye")
-    le_id = mujoco.mj_name2id(m_pizero, mujoco.mjtObj.mjOBJ_GEOM, "left_eye")
+    m_pizero = mujoco.MjModel.from_xml_path(str(MJCF_PATH))
+    re_id = mujoco.mj_name2id(m_pizero, mujoco.mjtObj.mjOBJ_GEOM, "right_sole_geom")
+    le_id = mujoco.mj_name2id(m_pizero, mujoco.mjtObj.mjOBJ_GEOM, "left_sole_geom")
     assert re_id != -1 and le_id != -1
     assert np.allclose(m_pizero.geom_size[re_id], m_pizero.geom_size[le_id]), (
         f"Eye size mismatch: right={m_pizero.geom_size[re_id]}, left={m_pizero.geom_size[le_id]}"
@@ -143,20 +138,20 @@ def test_pizero2w_eyes_symmetric_and_all_mjcf_sole_clearance():
     assert m_pizero.geom_pos[re_id][0] == pytest.approx(m_pizero.geom_pos[le_id][0], abs=1e-4)
     assert m_pizero.geom_pos[re_id][2] == pytest.approx(m_pizero.geom_pos[le_id][2], abs=1e-4)
 
-    for path in [
-        "models/mjcf/microduck_8dof.xml",
-        "pipelines/dual_esp32s3_stack/models/mjcf/microduck_esp32_8dof.xml",
-        "pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
-        "pipelines/pizero2w_stack/models/mjcf/microduck_pizero2w_8dof.xml",
-    ]:
-        assert_sole_clearance(path)
+    from training.run_parallel_sim import MODEL_PATH as core_model
+    from pipelines.rpi5_stack.training.run_parallel_sim import DEFAULT_MODEL_PATH as rpi5_model
+    from pipelines.dual_esp32s3_stack.training.run_parallel_sim import DEFAULT_MODEL_PATH as esp32_model
+    from pipelines.pizero2w_stack.training.run_parallel_sim import DEFAULT_MODEL_PATH as pizero_model
+    for path in (core_model, rpi5_model, esp32_model, pizero_model):
+        assert Path(path).resolve() == MJCF_PATH.resolve()
+        assert_sole_clearance(str(path))
 
 
 def test_pizero2w_target_mass_sync():
     """Verify TARGET_MASS in pizero2w env_config matches MuJoCo total mass."""
     import mujoco
     from pipelines.pizero2w_stack.training.env_config import _DEFAULT_CFG
-    m = mujoco.MjModel.from_xml_path("pipelines/pizero2w_stack/models/mjcf/microduck_pizero2w_8dof.xml")
+    m = mujoco.MjModel.from_xml_path(str(MJCF_PATH))
     total_mass = float(mujoco.mj_getTotalmass(m))
     assert _DEFAULT_CFG.TARGET_MASS == pytest.approx(total_mass, abs=1e-3), (
         f"PiZero2W TARGET_MASS {_DEFAULT_CFG.TARGET_MASS} != MuJoCo mass {total_mass}"

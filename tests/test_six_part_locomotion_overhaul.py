@@ -28,8 +28,10 @@ from training.env_config import (
     MicroDuck8DoFConfig,
 )
 from training.run_parallel_sim import ParallelSimRunner
+from duck_v2.robot_spec import MODEL_PATH, NUM_OBSERVATIONS
 from training.terrain_curriculum import next_stage, next_stair_stage
 from scripts.interactive_viewer import (
+    _setup_viewer_scene,
     extract_viewer_observation,
     get_robot_state,
 )
@@ -673,9 +675,9 @@ class TestPart4TrainViewerSynchronization:
         runner = ParallelSimRunner(num_envs=1, decimation=10, terrain_mode="flat")
         try:
             runner.reset()
-            model_path = os.path.join(PROJECT_ROOT, "models", "mjcf", "microduck_8dof.xml")
-            model = mujoco.MjModel.from_xml_path(model_path)
-            data = mujoco.MjData(model)
+            model, data, _ = _setup_viewer_scene(
+                MODEL_PATH, dt=0.002, stage=runner.curriculum_stage, stairs=False, pose="stand"
+            )
 
             # Synchronize state
             data.qpos[:] = runner.datas[0].qpos[:]
@@ -691,15 +693,15 @@ class TestPart4TrainViewerSynchronization:
                 data,
                 cmd_vel=runner.commands[0],
                 last_actions=runner.last_actions[0],
-                obs_dim=37,
+                obs_dim=NUM_OBSERVATIONS,
                 episode_step=15,
                 control_dt=0.02,
             )
             runner_obs = runner._extract_obs(0)
 
-            # Check all 37 dimensions match to within 1e-5
-            assert viewer_obs.shape == (37,)
-            assert runner_obs.shape == (37,)
+            # Check the full V2 observation, including the five LiDAR channels.
+            assert viewer_obs.shape == (NUM_OBSERVATIONS,)
+            assert runner_obs.shape == (NUM_OBSERVATIONS,)
             assert np.allclose(viewer_obs, runner_obs, atol=1e-5)
 
             # Specifically check obs[35:37] phase clock at step 15
@@ -730,8 +732,7 @@ class TestPart4TrainViewerSynchronization:
 
     def test_viewer_fall_detection_and_auto_reset(self):
         """Test that base height drop to z=0.057m or pitch tilt > 35 deg marks is_stable=False."""
-        model_path = os.path.join(PROJECT_ROOT, "models", "mjcf", "microduck_8dof.xml")
-        model = mujoco.MjModel.from_xml_path(model_path)
+        model = mujoco.MjModel.from_xml_path(str(MODEL_PATH))
         data = mujoco.MjData(model)
         mujoco.mj_resetData(model, data)
 

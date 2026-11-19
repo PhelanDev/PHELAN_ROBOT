@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
+from duck_v2.robot_spec import TOTAL_MASS_KG
 
 from training.env_config import (
     MicroDuck8DoFConfig as BaseConfig,
@@ -29,7 +30,7 @@ class MicroDuck8DoFConfig(BaseConfig):
     """Configuration dataclass for MicroDuck 8-DOF on Dual ESP32-S3 Stack."""
 
     STACK_NAME: str = "dual_esp32s3_stack"
-    TARGET_MASS: float = 0.684  # kg (~684g total weight)
+    TARGET_MASS: float = TOTAL_MASS_KG  # Shared V2 model; runtime profile does not change physics.
     POLICY_DTYPE: str = "int8"  # Quantized for ESP32-S3 PIE vector instructions
 
     OBS_DIM: int = 42

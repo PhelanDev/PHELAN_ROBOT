@@ -1,4 +1,4 @@
-"""Advanced Gait & Behavior Engine for MicroDuck 8-DOF and CyberDuck V2 Pro.
+"""Advanced Gait & Behavior Engine for CyberDuck V2.
 
 Implements:
 - GaitPattern Enum:
@@ -82,11 +82,15 @@ class BipedalGaitGenerator:
         self,
         t: float,
         freq: Optional[float] = None,
-        roll_amp: float = 0.05,
-        pitch_amp: float = 0.06,
-        knee_amp: float = 0.08,
+        roll_amp: float = 0.06,
+        pitch_amp: float = 0.07,
+        knee_amp: float = 0.06,
     ) -> np.ndarray:
-        """Nominal forward stepping gait with subtle head counter-motion."""
+        """V2 preview gait with modest clearance and subtle head counter-motion.
+
+        The amplitudes target the 26 mm sole width. This open-loop preview
+        does not provide balance feedback for hardware or uneven terrain.
+        """
         f = freq if freq is not None else self.default_freq
         phase = 2.0 * math.pi * f * t
         sv = math.sin(phase)
@@ -122,9 +126,9 @@ class BipedalGaitGenerator:
         self,
         t: float,
         freq: Optional[float] = None,
-        sway_amp: float = 0.09,
-        pitch_amp: float = 0.06,
-        knee_amp: float = 0.10,
+        sway_amp: float = 0.08,
+        pitch_amp: float = 0.07,
+        knee_amp: float = 0.08,
     ) -> np.ndarray:
         """Iconic duck waddling gait: exaggerated hip roll sway and bionic duck head nodding.
 

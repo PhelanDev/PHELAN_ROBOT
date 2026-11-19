@@ -12,6 +12,7 @@ Implements:
 from enum import Enum, IntEnum
 from typing import Optional, Tuple, Union
 import numpy as np
+from duck_v2.robot_spec import BASE_HEIGHT_M
 
 from training.env_config import (
     LocomotionMode,
@@ -106,7 +107,7 @@ class SelfRightingController:
     PHASE3_PUSH_TO_STAND = RecoveryState.PHASE3_PUSH_TO_STAND
     DONE = RecoveryState.DONE
     FAILED_LOCKED = RecoveryState.FAILED_LOCKED
-    DEFAULT_STAND_MIN_Z = 0.1088  # 0.85 * 0.128m MJCF standing nominal CoM height (V1/V2)
+    DEFAULT_STAND_MIN_Z = 0.85 * BASE_HEIGHT_M
     DEFAULT_STAND_GRAV_Z = -0.85
 
     def __init__(
@@ -127,7 +128,7 @@ class SelfRightingController:
     @classmethod
     def from_model(cls, model, **kwargs) -> "SelfRightingController":
         """Build a controller calibrated to 85% of the MuJoCo model nominal standing height."""
-        nominal_z = float(model.qpos0[2]) if len(model.qpos0) > 2 else 0.128
+        nominal_z = float(model.qpos0[2]) if len(model.qpos0) > 2 else BASE_HEIGHT_M
         kwargs.setdefault("stand_min_z", 0.85 * nominal_z)
         return cls(**kwargs)
 

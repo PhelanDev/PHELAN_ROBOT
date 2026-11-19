@@ -31,6 +31,66 @@ def test_audit_esp32_rejects_37_before_creating_artifacts(tmp_path):
     assert not output.exists()
 
 
+@pytest.mark.parametrize("model_name", [None, "microduck_esp32_8dof.xml"])
+def test_esp32_export_requires_verified_v2_identity(tmp_path, model_name):
+    from scripts.export_policy import export_esp32_headers
+    from scripts.train_ppo import ActorCritic
+    from training.policy_contract import observation_schema
+
+    actor = ActorCritic(hidden_dim=16)
+    actor.observation_schema = observation_schema(42, True, 0.02)
+    if model_name is not None:
+        actor.model_name = model_name
+    output = tmp_path / "unverified_export"
+    with pytest.raises(ValueError, match="model identity"):
+        export_esp32_headers(actor, output / "weights.h", output / "config.h")
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("mutation", [None, "missing_policy_marker", "missing_config_marker", "wrong_policy_model", "wrong_config_model"])
+def test_esp32_firmware_v2_identity_contract(tmp_path, mutation):
+    """Compile the contract MCU2 actually includes against valid and legacy/mixed headers."""
+    if shutil.which("g++") is None:
+        pytest.skip("g++ compiler not available")
+    from scripts.export_policy import export_esp32_headers
+    from scripts.train_ppo import ActorCritic
+    from training.policy_contract import observation_schema
+
+    actor = ActorCritic(hidden_dim=16)
+    actor.model_name = "cyberduck_v2.xml"
+    actor.observation_schema = observation_schema(42, True, 0.02)
+    weights, config = export_esp32_headers(actor, tmp_path / "weights.h", tmp_path / "config.h")
+    assert '#define POLICY_MODEL_NAME "cyberduck_v2.xml"' in weights.read_text(encoding="utf-8")
+    assert '#define QUANT_MODEL_NAME "cyberduck_v2.xml"' in config.read_text(encoding="utf-8")
+    if mutation == "missing_policy_marker":
+        weights.write_text(weights.read_text(encoding="utf-8").replace("#define CYBERDUCK_V2_POLICY 1", ""), encoding="utf-8")
+    elif mutation == "missing_config_marker":
+        config.write_text(config.read_text(encoding="utf-8").replace("#define CYBERDUCK_V2_QUANT_CONFIG 1", ""), encoding="utf-8")
+    elif mutation == "wrong_policy_model":
+        weights.write_text(weights.read_text(encoding="utf-8").replace('POLICY_MODEL_NAME "cyberduck_v2.xml"', 'POLICY_MODEL_NAME "microduck_esp32_8dof.xml"'), encoding="utf-8")
+    elif mutation == "wrong_config_model":
+        config.write_text(config.read_text(encoding="utf-8").replace('QUANT_MODEL_NAME "cyberduck_v2.xml"', 'QUANT_MODEL_NAME "microduck_esp32_8dof.xml"'), encoding="utf-8")
+
+    contract = REPO_ROOT / "pipelines/dual_esp32s3_stack/deployment/v2_policy_contract.h"
+    firmware = (REPO_ROOT / "pipelines/dual_esp32s3_stack/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
+    assert '#include "../v2_policy_contract.h"' in firmware
+    source = tmp_path / "identity.cpp"
+    source.write_text(
+        '#include "config.h"\n#include "weights.h"\n'
+        + f'#include "{contract.as_posix()}"\n'
+        + 'int main(){int8_t obs[42]={}, actions[8]={}; evaluate_policy_int8(obs,actions); return 0;}\n',
+        encoding="utf-8",
+    )
+    executable = tmp_path / "identity.exe"
+    result = subprocess.run(["g++", "-std=c++17", str(source), "-o", str(executable)], capture_output=True, text=True)
+    if mutation is None:
+        assert result.returncode == 0, result.stderr
+        subprocess.run([str(executable)], check=True)
+    else:
+        assert result.returncode != 0
+        assert "CyberDuck V2" in result.stderr or "cyberduck_v2.xml" in result.stderr
+
+
 @pytest.mark.parametrize("obs_dim,layer_input,passes", [(42, 42, True), (37, 37, False), (42, 37, False)])
 def test_audit_firmware_guards_and_assembly_canary(tmp_path, obs_dim, layer_input, passes):
     import re
@@ -42,6 +102,7 @@ def test_audit_firmware_guards_and_assembly_canary(tmp_path, obs_dim, layer_inpu
     assert guards
     function = firmware[firmware.index("void assemble_observation("):firmware.index("void evaluate_locomotion_policy(")]
     policy = ActorCritic(hidden_dim=16)
+    policy.model_name = "cyberduck_v2.xml"
     policy.observation_schema = observation_schema(42, True, 0.02)
     weights, config = export_esp32_headers(policy, tmp_path / "weights.h", tmp_path / "config.h")
     source = '#include <cmath>\n#include <cstdint>\n#include <cassert>\n#include "config.h"\n#include "weights.h"\n'
@@ -1131,6 +1192,7 @@ def test_esp32_int8_export_matches_float32_inference(tmp_path):
     obs_dim = 42
     action_dim = 8
     model = ActorCritic(obs_dim=obs_dim, action_dim=action_dim)
+    model.model_name = "cyberduck_v2.xml"
     model.observation_schema = observation_schema(42, False, 0.02)
     torch.nn.init.orthogonal_(model.actor[-1].weight, gain=0.2)
     model.eval()
@@ -1495,6 +1557,7 @@ def test_export_policy_obs_norm_and_asymmetric_critic_parity(tmp_path):
 
     ckpt = {
         "model_state_dict": model.state_dict(),
+        "model_name": "cyberduck_v2.xml",
         "obs_dim": obs_dim,
         "critic_obs_dim": critic_obs_dim,
         "action_dim": action_dim,
@@ -1849,7 +1912,7 @@ def test_esp32_schema_clock_parity_and_rejection(tmp_path, embed_clock, moving):
     # 2. Export valid schema and verify C++ MCU2 assembly matches ParallelSimRunner across reset & steps
     cfg = MicroDuck8DoFConfig()
     runner = ParallelSimRunner(
-        model_path="pipelines/dual_esp32s3_stack/models/mjcf/microduck_esp32_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         cfg=cfg,
         num_envs=1,
         decimation=10,
@@ -1858,6 +1921,7 @@ def test_esp32_schema_clock_parity_and_rejection(tmp_path, embed_clock, moving):
     )
     try:
         model = ActorCritic(hidden_dim=16)
+        model.model_name = "cyberduck_v2.xml"
         schema = observation_schema(42, embed_clock, runner.control_dt, period=0.8)
         model.observation_schema = schema
         weights_h, config_h = export_esp32_headers(model, tmp_path / "weights.h", tmp_path / "config.h")

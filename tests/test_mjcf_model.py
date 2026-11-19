@@ -16,11 +16,11 @@ from model_test_helpers import (
     assert_sole_clearance,
 )
 
-XML_PATH = os.path.join(os.path.dirname(__file__), "..", "models", "mjcf", "microduck_8dof.xml")
+from duck_v2.robot_spec import MODEL_PATH as XML_PATH, MJCF_MODEL_NAME, TOTAL_MASS_KG
 
 
 def test_mjcf_xml_structure_and_joints():
-    assert_mjcf_structure_and_joints(XML_PATH, "microduck_8dof")
+    assert_mjcf_structure_and_joints(XML_PATH, MJCF_MODEL_NAME)
 
 
 def test_mjcf_sensors_and_defaults():
@@ -43,12 +43,12 @@ def test_mujoco_compilation():
     except ImportError:
         pytest.skip("MuJoCo python package not available")
 
-    model = mujoco.MjModel.from_xml_path(XML_PATH)
+    model = mujoco.MjModel.from_xml_path(str(XML_PATH))
     data = mujoco.MjData(model)
     mujoco.mj_step(model, data)
 
     total_mass = sum(model.body_mass)
-    assert 0.620 <= total_mass <= 0.740, f"Expected total mass ~0.684kg, got {total_mass:.3f}kg"
+    assert total_mass == pytest.approx(TOTAL_MASS_KG, abs=1e-6)
 
 
 def test_slalom_pillars():
@@ -89,7 +89,7 @@ def test_slalom_pillars_and_stairs_exist():
     assert_slalom_pillars_and_stairs(XML_PATH)
 
 
-def test_microduck_8dof_sole_clearance():
+def test_cyberduck_v2_sole_clearance():
     assert_sole_clearance(XML_PATH)
 
 

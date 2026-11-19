@@ -325,17 +325,24 @@ def test_mjcf_forward_axis_and_hip_pitch_kinematics():
     causes backward stepping."""
     import mujoco
 
-    xml_path = Path(__file__).resolve().parent.parent / "models" / "mjcf" / "microduck_8dof.xml"
+    xml_path = Path(__file__).resolve().parent.parent / "duck_v2" / "cyberduck_v2.xml"
     assert xml_path.exists(), f"MJCF model missing at {xml_path}"
 
     model = mujoco.MjModel.from_xml_path(str(xml_path))
     data = mujoco.MjData(model)
     mujoco.mj_forward(model, data)
 
-    base_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "base_link")
-    foot_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_foot_link")
-    beak_geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "beak_geom")
+    base_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trunk_base")
+    foot_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_foot")
+    # V2's beak visual geom is unnamed; resolve its unique named mesh explicitly.
+    beak_mesh_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_MESH, "cyber_beak")
+    assert beak_mesh_id >= 0
+    beak_geoms = np.flatnonzero((model.geom_type == mujoco.mjtGeom.mjGEOM_MESH)
+                               & (model.geom_dataid == beak_mesh_id))
+    assert len(beak_geoms) == 1
+    beak_geom_id = int(beak_geoms[0])
     pillar_geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "pillar_l1_left")
+    assert min(base_id, foot_id, beak_geom_id, pillar_geom_id) >= 0
 
     base_x = data.xpos[base_id][0]
     beak_x = data.geom_xpos[beak_geom_id][0]
@@ -347,6 +354,7 @@ def test_mjcf_forward_axis_and_hip_pitch_kinematics():
 
     hip_jnt_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "left_hip_pitch")
     knee_jnt_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "left_knee_pitch")
+    assert min(hip_jnt_id, knee_jnt_id) >= 0
     hip_qadr = model.jnt_qposadr[hip_jnt_id]
     knee_qadr = model.jnt_qposadr[knee_jnt_id]
 
@@ -355,14 +363,19 @@ def test_mjcf_forward_axis_and_hip_pitch_kinematics():
     data.qpos[knee_qadr] = 0.0
     mujoco.mj_forward(model, data)
     rel_x_hip = data.xpos[foot_id][0] - data.xpos[base_id][0]
-    assert rel_x_hip > 0.02, f"hip_pitch < 0 must move foot forward (+X), got {rel_x_hip:.4f}m"
+    # V2: hip origin x=5mm, foot offset x=4mm, thigh=44mm, shin=36mm.
+    expected_hip_x = 0.005 + 0.004 * np.cos(-0.35) - (0.044 + 0.036) * np.sin(-0.35)
+    assert rel_x_hip == pytest.approx(expected_hip_x, abs=1e-9)
+    assert rel_x_hip > 0.009, "hip_pitch < 0 must advance the foot from its neutral x=9mm"
 
     # 3. knee_pitch = +0.50 retracts foot backward (-X)
     data.qpos[hip_qadr] = 0.0
     data.qpos[knee_qadr] = 0.50
     mujoco.mj_forward(model, data)
     rel_x_knee = data.xpos[foot_id][0] - data.xpos[base_id][0]
-    assert rel_x_knee < -0.01, f"knee_pitch > 0 must retract foot backward (-X), got {rel_x_knee:.4f}m"
+    expected_knee_x = 0.005 + 0.004 * np.cos(0.50) - 0.036 * np.sin(0.50)
+    assert rel_x_knee == pytest.approx(expected_knee_x, abs=1e-9)
+    assert rel_x_knee < 0.0, "knee_pitch > 0 must fold the V2 foot behind the base (-X)"
 
 
 def test_standing_dwell_under_walk_command_yields_negative_reward():

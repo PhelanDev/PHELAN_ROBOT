@@ -6,6 +6,7 @@ Thin parameterized wrapper delegating common training environment logic to train
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
+from duck_v2.robot_spec import TOTAL_MASS_KG
 
 from training.env_config import (
     MicroDuck8DoFConfig as BaseConfig,
@@ -22,7 +23,7 @@ class MicroDuck8DoFConfig(BaseConfig):
     """Configuration dataclass for MicroDuck 8-DOF on Raspberry Pi Zero 2 W Stack."""
 
     STACK_NAME: str = "pizero2w_stack"
-    TARGET_MASS: float = 0.649  # kg (~649g total weight)
+    TARGET_MASS: float = TOTAL_MASS_KG  # Shared V2 model; runtime profile does not change physics.
     POLICY_DTYPE: str = "float32"
 
     OBS_DIM: int = 42

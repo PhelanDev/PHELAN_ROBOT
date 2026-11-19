@@ -33,11 +33,15 @@ def test_audit_cross_target_resume_and_overwrite_rejected(tmp_path):
     path = tmp_path / "policy_ppo.pt"
     kwargs = dict(num_envs=1, rollout_steps=2, max_iterations=1, num_epochs=1,
                   save_path=path, device="cpu", verbose=False, terrain_mode="flat")
-    train_ppo(model_path=REPO_ROOT / "pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml", **kwargs)
+    train_ppo(model_path=REPO_ROOT / "duck_v2/cyberduck_v2.xml", **kwargs)
+    retired = torch.load(path, map_location="cpu", weights_only=False)
+    retired["model_name"] = "microduck_rpi5_8dof.xml"
+    retired["model_path"] = "pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml"
+    torch.save(retired, path)
     before = {p.name: p.read_bytes() for p in tmp_path.glob("*.pt")}
     for resume in (True, False):
         with pytest.raises(ValueError, match="identity|model"):
-            train_ppo(model_path=REPO_ROOT / "pipelines/pizero2w_stack/models/mjcf/microduck_pizero2w_8dof.xml", resume=resume, **kwargs)
+            train_ppo(model_path=REPO_ROOT / "duck_v2/cyberduck_v2.xml", resume=resume, **kwargs)
         assert before == {p.name: p.read_bytes() for p in tmp_path.glob("*.pt")}
 
 
@@ -333,16 +337,19 @@ def test_ppo_training_cli_dry_run_iters_alias(tmp_path):
     assert ckpt_path.exists()
 
 
-def test_duck_cli_train_dry_run(isolated_cli_env):
+def test_duck_cli_train_dry_run(isolated_cli_env, tmp_path):
     """Test duck.py train CLI with --dry-run and --iters flags."""
     duck_script = REPO_ROOT / "duck.py"
-    cmd1 = [sys.executable, str(duck_script), "train", "--dry-run"]
+    output1 = tmp_path / "default_ppo.pt"
+    cmd1 = [sys.executable, str(duck_script), "train", "--dry-run", "--save-path", str(output1)]
     res1 = subprocess.run(cmd1, capture_output=True, text=True, env=isolated_cli_env)
     assert res1.returncode == 0, f"duck.py train --dry-run failed:\nSTDOUT: {res1.stdout}\nSTDERR: {res1.stderr}"
     assert "1 iteration(s)" in res1.stdout
     assert "DRY-RUN" in res1.stdout
+    assert torch.load(output1, map_location="cpu", weights_only=False)["model_name"] == "cyberduck_v2.xml"
 
-    cmd2 = [sys.executable, str(duck_script), "train", "--iters", "2", "--dry-run"]
+    cmd2 = [sys.executable, str(duck_script), "train", "--iters", "2", "--dry-run",
+            "--save-path", str(tmp_path / "two_iters_ppo.pt")]
     res2 = subprocess.run(cmd2, capture_output=True, text=True, env=isolated_cli_env)
     assert res2.returncode == 0, f"duck.py train --iters 2 --dry-run failed:\nSTDOUT: {res2.stdout}\nSTDERR: {res2.stderr}"
     assert "2 iteration(s)" in res2.stdout
@@ -407,6 +414,8 @@ def test_export_esp32_c_headers_syntax_and_compilation(tmp_path):
     torch.manual_seed(42)
     model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256)
     model.observation_schema = observation_schema(42, True, 0.02)
+    model.model_name = "cyberduck_v2.xml"
+    model.model_path = "duck_v2/cyberduck_v2.xml"
 
     weights_header_path = tmp_path / "esp32_policy_weights.h"
     config_header_path = tmp_path / "esp32_quant_config.h"
@@ -530,22 +539,14 @@ def test_cli_train_and_export_end_to_end(tmp_path):
     assert res_train.returncode == 0, f"train_ppo failed:\n{res_train.stderr}"
     assert ckpt_path.exists()
 
-    # Each target uses its own model checkpoint; transfer is explicit with new outputs.
-    for target, model_path, output_flag, output in (
-        ("rpi5", "pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml", "--onnx-output", onnx_path),
-        ("pizero2w", "pipelines/pizero2w_stack/models/mjcf/microduck_pizero2w_8dof.xml", "--pizero-onnx-output", pizero_onnx_path),
-        ("esp32", "pipelines/dual_esp32s3_stack/models/mjcf/microduck_esp32_8dof.xml", "--esp32-weights-output", weights_path),
+    # Runtime targets share the same V2 checkpoint identity.
+    for target, output_flag, output in (
+        ("rpi5", "--onnx-output", onnx_path),
+        ("pizero2w", "--pizero-onnx-output", pizero_onnx_path),
+        ("esp32", "--esp32-weights-output", weights_path),
     ):
-        selected_checkpoint = ckpt_path
-        if target != "rpi5":
-            selected_checkpoint = tmp_path / f"{target}_ppo.pt"
-            res_transfer = subprocess.run([sys.executable, str(train_script), "--dry-run",
-                "--model-path", str(REPO_ROOT / model_path), "--load-checkpoint", str(ckpt_path),
-                "--save-path", str(selected_checkpoint), "--num-envs", "1", "--rollout-steps", "2"],
-                capture_output=True, text=True)
-            assert res_transfer.returncode == 0, res_transfer.stderr
         export_cmd = [sys.executable, str(export_script), "--target", target,
-            "--checkpoint", str(selected_checkpoint), output_flag, str(output),
+            "--checkpoint", str(ckpt_path), output_flag, str(output),
             "--esp32-config-output", str(config_path)]
         res_export = subprocess.run(export_cmd, capture_output=True, text=True)
         assert res_export.returncode == 0, f"export_policy failed:\n{res_export.stderr}"
@@ -586,7 +587,7 @@ def test_train_ppo_resume_preserves_timesteps_iterations_and_target_latest(tmp_p
     save_p = tmp_path / "cyberduck_v2_ppo.pt"
     best_p = tmp_path / "cyberduck_v2_best.pt"
     res1 = train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2, max_iterations=1, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         save_path=str(save_p), best_save_path=str(best_p), device="cpu", log_interval=1, save_interval=1,
     )
@@ -595,7 +596,7 @@ def test_train_ppo_resume_preserves_timesteps_iterations_and_target_latest(tmp_p
     assert not (tmp_path / "microduck_latest.pt").exists()
 
     res2 = train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2, max_iterations=1, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         save_path=str(save_p), best_save_path=str(best_p), resume=True, device="cpu", log_interval=1, save_interval=1,
     )
@@ -639,7 +640,7 @@ def test_runner_mean_distance_y_and_fast_rollout_parity():
     """Verify runner.get_mean_distance_y() and fast rollout step parity against standard step."""
     from training.run_parallel_sim import ParallelSimRunner
     runner = ParallelSimRunner(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=4,
         decimation=2,
     )
@@ -671,7 +672,7 @@ def test_best_save_path_strips_ppo_suffix_consistently(tmp_path, monkeypatch):
 
     save_p = tmp_path / "cyberduck_v2_ppo.pt"
     res = train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2,
         rollout_steps=4,
         max_iterations=1,
@@ -723,7 +724,7 @@ def test_critic_value_loss_updates_across_large_return_gap(monkeypatch, tmp_path
     monkeypatch.setattr(sim_mod.ParallelSimRunner, "step_arrays", high_reward_step)
     save_p = tmp_path / "critic_ppo.pt"
     train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=4,
         rollout_steps=8,
         mini_batch_size=8,
@@ -755,7 +756,7 @@ def test_ppo_adaptive_kl_and_entropy_decay(tmp_path):
     from scripts.train_ppo import train_ppo
 
     res = train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=4,
         rollout_steps=8,
         mini_batch_size=8,
@@ -782,7 +783,7 @@ def test_ppo_target_kl_zero_disables_adaptive_lr_and_zero_entropy_stays_zero(tmp
     from scripts.train_ppo import train_ppo
 
     res = train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=4,
         rollout_steps=4,
         mini_batch_size=4,
@@ -806,7 +807,7 @@ def test_resume_restores_lr_and_handles_legacy_checkpoint_without_lr(tmp_path):
 
     save_p = tmp_path / "resume_lr_ppo.pt"
     train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2,
         rollout_steps=4,
         mini_batch_size=4,
@@ -824,7 +825,7 @@ def test_resume_restores_lr_and_handles_legacy_checkpoint_without_lr(tmp_path):
     torch.save(ckpt, str(save_p))
 
     res_legacy = train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2,
         rollout_steps=4,
         mini_batch_size=4,
@@ -863,7 +864,7 @@ def test_stage_promotion_best_ckpt_uses_rollout_stage_and_resets_baseline(monkey
     save_p = tmp_path / "stage_ppo.pt"
     best_p = tmp_path / "stage_best.pt"
     res1 = ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
     )
@@ -877,7 +878,7 @@ def test_stage_promotion_best_ckpt_uses_rollout_stage_and_resets_baseline(monkey
     reward_per_iter["val"] = 1.1
     dist_per_iter["val"] = 0.7
     ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, resume=True, save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
     )
@@ -905,7 +906,7 @@ def test_collapsed_promoted_stage_rollout_does_not_overwrite_best_ckpt(monkeypat
 
     # Seed valid Stage 0 best and Stage 1 resume ckpt
     ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
     )
@@ -923,7 +924,7 @@ def test_collapsed_promoted_stage_rollout_does_not_overwrite_best_ckpt(monkeypat
     monkeypatch.setattr(sim_mod.ParallelSimRunner, "get_mean_distance_x", lambda self: -0.2)
     monkeypatch.setattr(ppo_mod, "next_stage", lambda **kw: (1, 0))
     ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, resume=True, save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
     )
@@ -941,7 +942,7 @@ def test_resume_stage1_with_legacy_stage0_best_ckpt_unlocks_stage1_best(monkeypa
     save_p = tmp_path / "legacy_stage_ppo.pt"
     best_p = tmp_path / "legacy_stage_best.pt"
     ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
     )
@@ -971,7 +972,7 @@ def test_resume_stage1_with_legacy_stage0_best_ckpt_unlocks_stage1_best(monkeypa
     monkeypatch.setattr(sim_mod.ParallelSimRunner, "get_mean_distance_x", lambda self: 0.6)
     monkeypatch.setattr(ppo_mod, "next_stage", lambda **kw: (1, 0))
     ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, resume=True, save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
     )
@@ -988,7 +989,7 @@ def test_stage_promotion_caps_learning_rate_to_base_lr(monkeypatch, tmp_path):
 
     save_p = tmp_path / "lr_cap_ppo.pt"
     res = ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, learning_rate=2e-4, target_kl=0.015,
         save_path=str(save_p), device="cpu",
@@ -1008,7 +1009,7 @@ def test_stair_stage_promotion_caps_learning_rate_and_labels_best_ckpt(monkeypat
     save_p = tmp_path / "stairs_ppo.pt"
     best_p = tmp_path / "stairs_best.pt"
     res = ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, learning_rate=2e-4, terrain_mode="stairs",
         save_path=str(save_p), best_save_path=str(best_p), device="cpu", save_interval=1,
@@ -1033,7 +1034,7 @@ def test_corrupted_best_checkpoint_does_not_crash(tmp_path):
     best_p.write_text("corrupted non-pickle data")
 
     res = ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2, rollout_steps=4, mini_batch_size=4, num_epochs=1,
         max_iterations=1, save_path=str(save_p), best_save_path=str(best_p), device="cpu",
     )
@@ -1048,7 +1049,7 @@ def test_transfer_load_checkpoint_skips_velocity_warmup_and_iter1_best_lockout(m
 
     seed_save_p = tmp_path / "seed_transfer_ppo.pt"
     ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2,
         rollout_steps=4,
         mini_batch_size=4,
@@ -1090,7 +1091,7 @@ def test_transfer_load_checkpoint_skips_velocity_warmup_and_iter1_best_lockout(m
     transfer_best_p = tmp_path / "transfer_best.pt"
 
     ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         load_checkpoint=str(seed_save_p),
         num_envs=2,
         rollout_steps=4,
@@ -1121,7 +1122,7 @@ def test_transfer_load_checkpoint_warms_up_initial_lr_without_adam_shock(monkeyp
 
     seed_p = tmp_path / "seed_no_lr_ppo.pt"
     ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2,
         rollout_steps=4,
         mini_batch_size=4,
@@ -1149,7 +1150,7 @@ def test_transfer_load_checkpoint_warms_up_initial_lr_without_adam_shock(monkeyp
     best_p = tmp_path / "warmup_best.pt"
 
     res = ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         load_checkpoint=str(seed_p),
         learning_rate=3e-4,
         target_kl=0.015,
@@ -1197,7 +1198,7 @@ def test_missing_load_checkpoint_falls_back_to_scratch_warmup(monkeypatch, tmp_p
     monkeypatch.setattr(sim_mod.ParallelSimRunner, "step_arrays", scripted_step)
 
     res = ppo_mod.train_ppo(
-        model_path="pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         load_checkpoint=str(missing_ckpt),
         learning_rate=3e-4,
         target_kl=0.015,
@@ -1340,6 +1341,8 @@ def test_legacy_42dim_checkpoint_transfer_to_asymmetric_critic(tmp_path):
     legacy_model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256, critic_obs_dim=42)
     legacy_ckpt_path = tmp_path / "legacy_42dim_ckpt.pt"
     legacy_payload = {
+        "model_name": "cyberduck_v2.xml",
+        "model_path": "duck_v2/cyberduck_v2.xml",
         "model_state_dict": legacy_model.state_dict(),
         "actor_state_dict": legacy_model.actor.state_dict(),
         "critic_state_dict": legacy_model.critic.state_dict(),
@@ -1677,6 +1680,8 @@ def test_transfer_bc_and_legacy_squash_metadata_and_invalid_rejected(tmp_path):
     legacy = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256, critic_obs_dim=53)
     legacy_path = tmp_path / "legacy_no_squash.pt"
     torch.save({
+        "model_name": "cyberduck_v2.xml",
+        "model_path": "duck_v2/cyberduck_v2.xml",
         "model_state_dict": legacy.state_dict(),
         "obs_dim": 42,
         "critic_obs_dim": 53,

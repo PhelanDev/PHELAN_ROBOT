@@ -154,9 +154,9 @@ def test_runner_randomize_pillars_false_preserves_exact_positions():
 def test_runner_compute_d_min_filters_submerged_pillars():
     from training.run_parallel_sim import ParallelSimRunner
 
-    # Use 37-dim non-LiDAR model so step() calls _compute_d_min() directly
+    # V2 uses LiDAR for live distance; the geometric helper must also ignore submerged pillars.
     runner = ParallelSimRunner(
-        model_path="models/mjcf/microduck_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=2,
         num_threads=1,
         stage=1,
@@ -164,7 +164,7 @@ def test_runner_compute_d_min_filters_submerged_pillars():
         randomize_pillars=False,
     )
     try:
-        assert runner.obs_dim == 37
+        assert runner.obs_dim == 42
         # Step once with active obstacles so d_min, prev_d_min are populated with positive distances
         actions = np.zeros((2, runner.action_dim), dtype=np.float32)
         obs, rewards, dones, infos = runner.step(actions)
@@ -183,7 +183,7 @@ def test_runner_compute_d_min_filters_submerged_pillars():
         assert runner._compute_d_min(0) is None
         assert runner._compute_d_min() is None
 
-        # Step again: curr_d_min is None.
+        # With no active pillars, live V2 distance tracking also becomes inactive.
         # d_min, prev_d_min, d_min_dot must be reset to 0.0 without NaN/TypeError
         obs2, rewards2, dones2, infos2 = runner.step(actions)
         assert np.all(runner.d_min == 0.0)

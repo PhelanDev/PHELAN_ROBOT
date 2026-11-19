@@ -240,7 +240,7 @@ def test_parallel_sim_runner_auto_recovery_integration():
     assert recovered, f"Robot failed to auto-recover: root_z={sim.datas[0].qpos[2]:.3f}"
 
 
-@pytest.mark.parametrize("model_rel", ["models/mjcf/microduck_8dof.xml", "duck_v2/cyberduck_v2.xml"])
+@pytest.mark.parametrize("model_rel", ["duck_v2/cyberduck_v2.xml", "duck_v2/cyberduck_v2.xml"])
 def test_self_righting_completes_at_mjcf_standing_geometry_and_rejects_fallen_pose(model_rel):
     """F6: SelfRightingController must reach DONE at V1/V2 nominal root_z (~0.128m) and reject fallen/tilted poses."""
     import mujoco

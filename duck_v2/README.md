@@ -35,7 +35,7 @@ duck_v2/
 │   ├── cyberduck_v2_exploded.obj  # File 3D phân rã vỏ giáp (4.41 MB)
 │   ├── cyberduck_v2_stl_parts.zip # Gói nén trọn bộ 17 file STL vỏ ngoài (1.55 MB)
 │   ├── cyberduck_v2_skeleton.obj  # File 3D bộ khung cơ khí và 8 servo (383 KB)
-│   ├── cyberduck_v2_skeleton.mtl  # Thư viện màu khung nhôm & vỏ servo MG996R
+│   ├── cyberduck_v2_skeleton.mtl  # Vật liệu của mô hình concept khung cơ khí
 │   ├── cyberduck_v2_skeleton_parts.zip # Gói nén STL từng linh kiện khung để in 3D (31 KB)
 │   └── skeleton_stl_parts/        # Thư mục chứa 17 file STL khung cơ khí & servo
 ├── media/                      # Bộ ảnh render studio HD đa góc nhìn
@@ -74,8 +74,9 @@ duck_v2/
    - Khung xương & Khớp nối: Đen Carbon nhám (`rgba="0.15 0.16 0.18 1.0"`).
    - Kính ngắm & Lò phản ứng: Xanh Cyan Neon phát quang rực rỡ (`rgba="0.0 0.92 1.0 1.0"`).
 4. **Bộ Khung Cơ Khí Riêng Biệt (Mechanical Chassis & Servos)**:
-   - File CAD 3D `cyberduck_v2_skeleton.obj` thể hiện đầy đủ cấu trúc khung chịu lực bên trong và vị trí lắp ráp 8 động cơ servo MG996R.
-   - Gói file STL `cyberduck_v2_skeleton_parts.zip` tách riêng từng part cơ khí để sẵn sàng đưa vào phần mềm cắt lát (Slicer: Cura/PrusaSlicer) in 3D thực tế.
+   - Tệp `cyberduck_v2_skeleton.obj` và gói STL hiện là concept trực quan, chưa phải thiết kế lắp ráp có thể chế tạo.
+   - Các khối servo trong generator có kích thước mẫu micro-servo 23 × 12 × 22 mm, không phải MG996R. Dự án chọn MG996R cho phần cứng; cần thiết kế lại gối đỡ và kiểm tra khoảng hở theo đúng biến thể servo thực tế trước khi dùng STL cho phần cứng.
+   - Chiều dài khớp theo MJCF V2 là 44 mm và 36 mm. Không kéo giãn các khối servo trong CAD để ép vừa; hãy bố trí lại cụm khớp và xác minh toàn bộ hành trình trước khi in thử.
 
 ---
 

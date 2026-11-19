@@ -20,16 +20,11 @@ from model_test_helpers import (
     assert_sole_clearance_and_target_mass,
 )
 
-MJCF_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "pipelines", "rpi5_stack", "models", "mjcf", "microduck_rpi5_8dof.xml"
-)
-URDF_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "pipelines", "rpi5_stack", "models", "urdf", "microduck_rpi5_8dof.urdf"
-)
+from duck_v2.robot_spec import MODEL_PATH as MJCF_PATH, URDF_PATH, MJCF_MODEL_NAME, TOTAL_MASS_KG
 
 
 def test_rpi5_mjcf_structure_and_joints():
-    assert_mjcf_structure_and_joints(MJCF_PATH, "microduck_rpi5_8dof")
+    assert_mjcf_structure_and_joints(MJCF_PATH, MJCF_MODEL_NAME)
 
 
 def test_rpi5_mjcf_perception_suite():
@@ -39,11 +34,12 @@ def test_rpi5_mjcf_perception_suite():
 def test_rpi5_mujoco_compilation_and_mass_budget():
     assert_mujoco_compilation_and_mass(
         MJCF_PATH,
-        min_mass=0.725,
-        max_mass=0.805,
-        base_mass_min=0.370,
-        base_mass_max=0.410,
-        base_ipos_z_min=0.008,
+        min_mass=TOTAL_MASS_KG - 1e-6,
+        max_mass=TOTAL_MASS_KG + 1e-6,
+        base_mass_min=0.36 - 1e-6,
+        base_mass_max=0.36 + 1e-6,
+        base_ipos_z_min=-0.012 - 1e-6,
+        base_ipos_z_max=-0.012 + 1e-6,
         n_steps=50,
     )
 
@@ -51,11 +47,11 @@ def test_rpi5_mujoco_compilation_and_mass_budget():
 def test_rpi5_urdf_structure_and_inertials():
     assert_urdf_structure_and_joint_limits(
         URDF_PATH,
-        robot_name="microduck_rpi5_8dof",
-        min_total_mass=0.725,
-        max_total_mass=0.805,
-        min_base_mass=0.370,
-        max_base_mass=0.410,
+        robot_name="cyberduck_v2",
+        min_total_mass=TOTAL_MASS_KG - 1e-6,
+        max_total_mass=TOTAL_MASS_KG + 1e-6,
+        min_base_mass=0.36 - 1e-6,
+        max_base_mass=0.36 + 1e-6,
     )
 
 

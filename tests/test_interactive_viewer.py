@@ -27,7 +27,7 @@ def test_viewer_and_docs_exist():
     assert os.path.exists(os.path.join(PROJECT_ROOT, "README.md"))
     with open(os.path.join(PROJECT_ROOT, "README.md"), "r", encoding="utf-8") as f:
         content = f.read()
-        assert "MicroDuck 8-DOF" in content
+        assert "CyberDuck V2" in content
         assert "run_parallel_sim.py" in content
 
 
@@ -39,9 +39,10 @@ def test_readme_comprehensive_content():
     with open(readme_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # 1. Overview: MG996R servos, ~780g mass
+    # 1. Overview: MG996R hardware target and explicit V2 simulation mass
     assert "MG996R" in content
-    assert any(m in content for m in ["684", "764", "649", "780"])
+    assert "811" in content
+    assert "not a verified MG996R" in content
 
     # 2. Kinematic tree & link dimensions (2 DOF head, 6 DOF legs)
     assert "head_yaw" in content
@@ -60,8 +61,8 @@ def test_readme_comprehensive_content():
     assert "run_parallel_sim.py" in content
     assert "--num_envs" in content or "--envs" in content
 
-    # 6. RL Sim-to-Real training guide with 37-dim obs & 8-dim action & ONNX export
-    assert "37" in content or "42" in content
+    # 6. RL Sim-to-Real training guide with the V2 42x8 contract and ONNX export
+    assert "42" in content
     assert "8" in content   # 8-dim action
     assert "Sim-to-Real" in content or "sim-to-real" in content or "Sim-To-Real" in content
     assert "ONNX" in content
@@ -124,7 +125,7 @@ def test_interactive_viewer_headless_simulation():
     from scripts.interactive_viewer import run_simulation_headless
 
     metrics = run_simulation_headless(
-        model_path="models/mjcf/microduck_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         pose="stand",
         duration=0.1,
         dt=0.002,
@@ -141,7 +142,7 @@ def test_interactive_viewer_gait_demo_headless():
     from scripts.interactive_viewer import run_simulation_headless
 
     metrics = run_simulation_headless(
-        model_path="models/mjcf/microduck_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         pose="stand",
         duration=0.1,
         gait_demo=True,
@@ -171,7 +172,7 @@ def test_reset_last_actions_fix():
     from training.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
-        model_path="models/mjcf/microduck_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         num_envs=4,
         decimation=5,
     )
@@ -237,7 +238,7 @@ def test_interactive_viewer_cli_simulation(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda prompt="": next(commands))
 
     # Should run and exit without raising an exception
-    run_interactive_cli(model_path="models/mjcf/microduck_8dof.xml", dt=0.005)
+    run_interactive_cli(model_path="duck_v2/cyberduck_v2.xml", dt=0.005)
 
 
 def test_configure_viewer_camera():
@@ -286,25 +287,39 @@ def test_configure_viewer_camera():
 
 
 
-def test_interactive_viewer_policy_headless_stability():
-    """Verify that running policy brain in headless mode stays stable above z >= 0.18m."""
+def test_interactive_viewer_policy_headless_stability(tmp_path):
+    """A deterministic zero-action V2 policy holds the nominal stance in the viewer."""
     from scripts.interactive_viewer import run_simulation_headless
     from training.policy_contract import observation_schema
 
-    ckpt_path = os.path.join(PROJECT_ROOT, "models", "checkpoints", "microduck_ppo.pt")
-    if not os.path.exists(ckpt_path):
-        pytest.skip("Policy checkpoint not available")
+    import torch
+    from scripts.train_ppo import ActorCritic
+    from duck_v2.robot_spec import MODEL_NAME
+
+    actor = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=16)
+    with torch.no_grad():
+        for parameter in actor.parameters():
+            parameter.zero_()
+    ckpt_path = tmp_path / "v2_nominal.pt"
+    torch.save({
+        "model_state_dict": actor.state_dict(),
+        "model_name": MODEL_NAME,
+        "obs_dim": 42,
+        "action_dim": 8,
+        "hidden_dim": 16,
+        "squash_actions": False,
+        "observation_schema": observation_schema(42, True, 0.02),
+    }, ckpt_path)
 
     metrics = run_simulation_headless(
-        model_path="models/mjcf/microduck_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         policy_path=ckpt_path,
         duration=0.5,
         dt=0.002,
-        auto_reset=True,
-        legacy_observation_schema=observation_schema(42, True, 0.02),
+        auto_reset=False,
     )
     assert metrics["completed_steps"] > 0
-    # Must remain standing / walking and NOT collapse to z = 0.057m
+    # Check stance directly without an automatic reset masking a fall.
     assert metrics["final_root_z"] > 0.12, f"Robot collapsed to z={metrics['final_root_z']:.3f}m"
     assert metrics["is_stable"] is True
 
@@ -353,7 +368,7 @@ def test_interactive_viewer_fallback_and_stairs_handling(monkeypatch):
     monkeypatch.setattr(mujoco.viewer, "launch_passive", mock_launch_passive)
 
     run_interactive_viewer(
-        model_path="models/mjcf/microduck_8dof.xml",
+        model_path="duck_v2/cyberduck_v2.xml",
         pose="squat",
         duration=0.01,
         stage=2,

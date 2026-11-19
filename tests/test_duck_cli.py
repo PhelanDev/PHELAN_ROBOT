@@ -1,4 +1,4 @@
-"""Unit tests for unified MicroDuck CLI (duck.py)."""
+"""Unit tests for unified CyberDuck V2 CLI (duck.py)."""
 
 import os
 import subprocess
@@ -12,8 +12,8 @@ if str(REPO_ROOT) not in sys.path:
 ENV_UTF8 = dict(os.environ, PYTHONIOENCODING="utf-8")
 
 
-@pytest.mark.parametrize("target,prefix", [("rpi5", "microduck_rpi5"), ("pizero2w", "microduck_pizero2w"), ("esp32", "microduck_esp32"), ("v2", "cyberduck_v2")])
-def test_audit_checkpoint_namespace(monkeypatch, target, prefix):
+@pytest.mark.parametrize("target", ["rpi5", "pizero2w", "esp32", "v2"])
+def test_runtime_target_aliases_train_same_v2_checkpoint(monkeypatch, target):
     import duck
     from types import SimpleNamespace
     commands = []
@@ -21,18 +21,20 @@ def test_audit_checkpoint_namespace(monkeypatch, target, prefix):
     args = duck.build_parser().parse_args(["train", "--target", target, "--resume"])
     assert duck.cmd_train(args) == 0
     cmd = commands[0]
-    assert Path(cmd[cmd.index("--save-path") + 1]).name == prefix + "_ppo.pt"
-    assert Path(cmd[cmd.index("--best-save-path") + 1]).name == prefix + "_best.pt"
+    assert Path(cmd[cmd.index("--save-path") + 1]).name == "cyberduck_v2_ppo.pt"
+    assert Path(cmd[cmd.index("--best-save-path") + 1]).name == "cyberduck_v2_best.pt"
+    assert Path(cmd[cmd.index("--model-path") + 1]).name == "cyberduck_v2.xml"
     assert "--resume" in cmd
 
 
-def test_audit_export_all_routes_distinct_checkpoints_and_preflights_missing(tmp_path, monkeypatch):
+def test_export_all_uses_same_v2_checkpoint_and_preflights_missing(tmp_path, monkeypatch):
     import duck
     import scripts.export_policy as exporter
     monkeypatch.setattr(duck, "REPO_ROOT", tmp_path)
     directory = tmp_path / "models/checkpoints"
     directory.mkdir(parents=True)
     paths = {t: directory / (duck.CHECKPOINT_PREFIXES[t] + "_ppo.pt") for t in ("rpi5", "pizero2w", "esp32")}
+    assert len(set(paths.values())) == 1
     for path in paths.values():
         path.touch()
     calls = []
@@ -41,7 +43,7 @@ def test_audit_export_all_routes_distinct_checkpoints_and_preflights_missing(tmp
     monkeypatch.setattr(exporter, "export_esp32_headers", lambda checkpoint, **kw: calls.append(Path(checkpoint)) or (tmp_path / "w.h", tmp_path / "c.h"))
     args = duck.build_parser().parse_args(["export", "--target", "all"])
     assert duck.cmd_export(args) == 0
-    assert calls == list(paths.values())
+    assert calls == [next(iter(paths.values())), next(iter(paths.values()))]
     paths["esp32"].unlink()
     calls.clear()
     assert duck.cmd_export(args) == 1
@@ -68,11 +70,68 @@ def test_duck_cli_status():
     res = subprocess.run([sys.executable, str(duck_py), "status"], capture_output=True, encoding="utf-8", env=ENV_UTF8)
     assert res.returncode == 0
     assert "Stage" in res.stdout or "stage" in res.stdout
-    assert "MicroDuck" in res.stdout
+    assert "CyberDuck V2" in res.stdout
     assert "Pi Zero 2 W" in res.stdout
-    assert "microduck_pizero2w_policy.onnx" in res.stdout
+    assert "cyberduck_v2_policy.onnx" in res.stdout
     assert "RPi 5" in res.stdout
     assert "ESP32-S3" in res.stdout
+
+
+def test_status_requires_v2_checkpoint_metadata_and_both_esp32_headers(tmp_path, monkeypatch, capsys):
+    import duck
+    import torch
+    from training.policy_contract import observation_schema
+
+    monkeypatch.setattr(duck, "REPO_ROOT", tmp_path)
+    onnx_path = tmp_path / "cyberduck_v2_policy.onnx"
+    onnx_path.touch()
+    monkeypatch.setattr(duck, "DEFAULT_ONNX_PATH", onnx_path)
+    monkeypatch.setattr(duck.subprocess, "check_output", lambda *args, **kwargs: "test")
+    checkpoint = tmp_path / "models/checkpoints/cyberduck_v2_best.pt"
+    checkpoint.parent.mkdir(parents=True)
+    metadata = dict(model_name="cyberduck_v2.xml", obs_dim=42, action_dim=8,
+                    observation_schema=observation_schema(42, False, 0.02), stage=99, iterations=123)
+    invalid_metadata = (
+        {k: v for k, v in metadata.items() if k != "model_name"},
+        {k: v for k, v in metadata.items() if k != "observation_schema"},
+        dict(metadata, observation_schema=observation_schema(37, False, 0.02)),
+        dict(metadata, obs_dim=37),
+        dict(metadata, action_dim=9),
+        dict(metadata, model_name="microduck_8dof.xml"),
+    )
+    args = duck.build_parser().parse_args(["status"])
+    for invalid in invalid_metadata:
+        torch.save(invalid, checkpoint)
+        assert duck.cmd_status(args) == 0
+        output = capsys.readouterr().out
+        assert "CẦN HUẤN LUYỆN LẠI / XUẤT LẠI V2" in output
+        assert "Stage 99" not in output
+        assert "123 iterations" not in output
+
+    torch.save(metadata, checkpoint)
+    deployment = tmp_path / "pipelines/dual_esp32s3_stack/deployment"
+    deployment.mkdir(parents=True)
+    weights = deployment / "esp32_policy_weights.h"
+    config = deployment / "esp32_quant_config.h"
+    weights.write_text('#define CYBERDUCK_V2_POLICY 1\n#define POLICY_MODEL_NAME "cyberduck_v2.xml"\n', encoding="utf-8")
+    for config_text, expected in (
+        (None, "CẦN XUẤT LẠI V2"),
+        ('#define CYBERDUCK_V2_QUANT_CONFIG 0\n#define QUANT_MODEL_NAME "cyberduck_v2.xml"\n', "CẦN XUẤT LẠI V2"),
+        ('#define CYBERDUCK_V2_QUANT_CONFIG 1\n#define QUANT_MODEL_NAME "microduck_8dof.xml"\n', "CẦN XUẤT LẠI V2"),
+        ('#define CYBERDUCK_V2_QUANT_CONFIG 1\n#define QUANT_MODEL_NAME "cyberduck_v2.xml"\n', "ĐỦ MARKER V2"),
+    ):
+        if config_text is not None:
+            config.write_text(config_text, encoding="utf-8")
+        assert duck.cmd_status(args) == 0
+        output = capsys.readouterr().out
+        assert "Stage 99" in output
+        assert "ĐÃ XÁC MINH METADATA V2" in output
+        assert "TỆP TỒN TẠI; CHƯA XÁC MINH RUNTIME" in output
+        assert expected in output
+
+    weights.write_text("// legacy weights, no V2 marker\n", encoding="utf-8")
+    assert duck.cmd_status(args) == 0
+    assert "CẦN XUẤT LẠI V2" in capsys.readouterr().out
 
 
 def test_duck_cli_verify_help():
@@ -90,6 +149,17 @@ def test_duck_cli_status_cyberduck_v2():
     assert "CYBERDUCK V2 PRO" in res.stdout
     assert "cyberduck_v2.xml" in res.stdout
     assert "cyberduck_v2_best.pt" in res.stdout
+
+
+def test_pi_deployment_profiles_share_canonical_v2_policy():
+    from duck_v2.robot_spec import DEFAULT_ONNX_PATH
+    from pipelines.rpi5_stack.deployment.infer_rpi5 import DEFAULT_MODEL_PATH as rpi5_policy
+    from pipelines.pizero2w_stack.deployment.infer_pizero2w import DEFAULT_MODEL_PATH as pi_zero_policy
+
+    assert rpi5_policy == DEFAULT_ONNX_PATH
+    assert pi_zero_policy == DEFAULT_ONNX_PATH
+    assert rpi5_policy == pi_zero_policy
+    assert rpi5_policy.name == "cyberduck_v2_policy.onnx"
 
 
 def test_duck_cli_train_v2_resume_dry_run(tmp_path, isolated_cli_env):
@@ -223,7 +293,7 @@ def test_duck_cli_export_target_routing_isolated(tmp_path, isolated_cli_env):
     from training.policy_contract import observation_schema
     ckpt_path = tmp_path / "export.pt"
     model = ActorCritic(hidden_dim=16)
-    checkpoint = dict(model_state_dict=model.state_dict(), model_name="microduck_rpi5_8dof.xml",
+    checkpoint = dict(model_state_dict=model.state_dict(), model_name="cyberduck_v2.xml",
         observation_schema=observation_schema(42, True, 0.02))
     torch.save(checkpoint, ckpt_path)
 
@@ -239,7 +309,6 @@ def test_duck_cli_export_target_routing_isolated(tmp_path, isolated_cli_env):
     assert out_rpi5.exists() and out_rpi5.stat().st_size > 1000
 
     # Test pizero2w export to tmp_path
-    checkpoint["model_name"] = "microduck_pizero2w_8dof.xml"
     torch.save(checkpoint, ckpt_path)
     out_pizero = tmp_path / "test_pizero.onnx"
     res = subprocess.run(
@@ -252,7 +321,6 @@ def test_duck_cli_export_target_routing_isolated(tmp_path, isolated_cli_env):
     assert out_pizero.exists() and out_pizero.stat().st_size > 1000
 
     # Test esp32 export to tmp_path
-    checkpoint["model_name"] = "microduck_esp32_8dof.xml"
     torch.save(checkpoint, ckpt_path)
     out_esp32_w = tmp_path / "test_esp32.h"
     out_esp32_c = tmp_path / "test_esp32_cfg.h"
@@ -277,6 +345,26 @@ def test_duck_cli_export_target_routing_isolated(tmp_path, isolated_cli_env):
     assert res.returncode == 0, f"Export esp32 failed:\n{res.stderr}\n{res.stdout}"
     assert out_esp32_w.exists() and out_esp32_w.stat().st_size > 1000
     assert out_esp32_c.exists() and out_esp32_c.stat().st_size > 100
+
+
+def test_export_rejects_non_v2_checkpoint_identity(tmp_path):
+    from scripts.export_policy import export_onnx, prepare_target_exports
+    from scripts.train_ppo import ActorCritic
+    import torch
+
+    checkpoint_path = tmp_path / "legacy.pt"
+    torch.save(
+        {
+            "model_state_dict": ActorCritic(hidden_dim=16).state_dict(),
+            "model_name": "microduck_rpi5_8dof.xml",
+        },
+        checkpoint_path,
+    )
+    with pytest.raises(ValueError, match="does not match"):
+        prepare_target_exports({"rpi5": checkpoint_path})
+    with pytest.raises(ValueError, match="does not match"):
+        export_onnx(checkpoint_path, tmp_path / "must_not_exist.onnx")
+    assert not (tmp_path / "must_not_exist.onnx").exists()
 
 
 def test_pizero2w_runner_walk_min_z_and_no_duplicate_info():

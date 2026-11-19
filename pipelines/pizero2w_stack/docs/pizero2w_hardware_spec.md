@@ -1,9 +1,13 @@
-# Tài Liệu Đặc Tả Phần Cứng: Nhánh Raspberry Pi Zero 2 W (MicroDuck 8-DOF)
+# Tài Liệu Đặc Tả Phần Cứng: Nhánh Raspberry Pi Zero 2 W (CyberDuck V2 8-DOF)
 
-**Dự án:** Robot Bipedal 8 bậc tự do MicroDuck 8-DOF  
+**Dự án:** Robot Bipedal 8 bậc tự do CyberDuck V2 8-DOF
 **Nhánh phần cứng:** `pipelines/pizero2w_stack`  
 **Bộ xử lý trung tâm:** Raspberry Pi Zero 2 W (Broadcom BCM2710A1 Quad-core 64-bit Cortex-A53 @ 1.0GHz, 512MB LPDDR2 RAM)  
-**Tổng khối lượng danh định:** $\approx 745\text{ g} - 755\text{ g}$ (Bao gồm pin 2S 2200mAh/18650, module Buck 5V/2.5A, tản nhiệt nhôm phẳng, bo mở rộng PCA9685 và 8 servo MG996R)  
+**Khối lượng mô phỏng V2 dùng chung:** **0.811 kg (811 g)**; khối lượng robot lắp thực tế cần cân lại theo BOM và nền tảng điện tử.
+
+**Chuẩn train/deploy hiện tại:** `duck_v2/cyberduck_v2.xml`, actor **42 quan sát / 8 hành động**, điều khiển **50 Hz**. Các nhánh Pi 5, Pi Zero 2 W và ESP32 dùng cùng mô hình vật lý V2; tên nhánh chỉ chọn phần cứng và cách xuất policy. Tham số chuẩn nằm trong `duck_v2/robot_spec.py`.
+
+**Cơ khí MG996R:** Servo mục tiêu là **8 × MG996R**. Skeleton CAD hiện vẫn là bản concept theo micro-servo 23 × 12 × 22 mm, chưa xác nhận gá lắp MG996R. Cần thiết kế lại khoang servo, gá/horn, kiểm tra va chạm và đo khối lượng/CoM/inertia trước khi chế tạo hoặc chuyển policy sang robot thật. 811 g là số của mô hình mô phỏng hiện tại, chưa phải số cân của cấu hình MG996R đã lắp.
 
 ---
 
@@ -177,14 +181,12 @@ Trên nền tảng Raspberry Pi Zero 2 W, tác vụ đọc và lọc dữ liệu
    - SoC BCM2710A1 trang bị tản nhiệt nhôm phẳng anodized ($14\text{ mm} \times 14\text{ mm} \times 6\text{ mm}$) dán bằng keo dẫn nhiệt 3M.
    - Do mức tiêu thụ công suất toàn tải chỉ $\approx 2.5\text{W}$, tản nhiệt thụ động duy trì nhiệt độ SoC dưới $62^\circ\text{C}$ trong điều kiện phòng $28^\circ\text{C}$ mà không cần quạt tản nhiệt, loại bỏ hoàn toàn rung chấn cơ học lên cảm biến IMU.
 
-2. **Phân bổ khối lượng chi tiết (Weight Breakdown):**
+2. **Ước tính BOM điện tử để đối chiếu (chưa cân cấu hình V2):**
    - Bo mạch Pi Zero 2 W: $16\text{ g}$
    - Tản nhiệt nhôm phẳng: $8\text{ g}$
    - Module Buck Mini-360 (5V/2.5A): $5\text{ g}$
    - Bo mở rộng servo PCA9685: $10\text{ g}$
    - Hệ thống dây cáp nối và giắc cắm: $16\text{ g}$
-   - **Tổng cụm điện tử thân trên:** **$55\text{ g}$** (nhẹ hơn $85\text{ g}$ so với cụm $140\text{ g}$ của Pi 5).
-   - Thân cơ sở (khung in 3D + khớp nối): $220\text{ g}$
-   - Bộ 8 servo MG996R: $440\text{ g}$
-   - Khối đầu, mắt, cổ: $30\text{ g}$
-   - **Tổng khối lượng toàn thân robot:** **$\approx 745\text{ g} - 755\text{ g}$**.
+   - **Tổng cụm điện tử thân trên ước tính:** **$55\text{ g}$**; cần cân các linh kiện thực tế, không tự trừ khối lượng này khỏi mô hình V2.
+   - Bộ 8 servo MG996R ước tính: $440\text{ g}$; cần cân đúng lô servo.
+   - **Tổng mô phỏng dùng để train:** **811 g** theo MJCF V2. Chưa có tổng BOM MG996R đã cân; phải cập nhật các inertial sau khi hoàn thiện khung và lắp phần cứng.

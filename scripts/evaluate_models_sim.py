@@ -1,7 +1,6 @@
-"""Comprehensive Simulation Benchmark and Model Evaluation for MicroDuck V1 and CyberDuck V2.
+"""Simulation benchmark and evaluation for CyberDuck V2.
 
 Evaluates:
-- microduck_best.pt on MicroDuck V1 MJCF
 - cyberduck_v2_best.pt on CyberDuck V2 MJCF
 Across multiple locomotion scenarios:
 1. Nominal forward walking (vx = 0.5 m/s)
@@ -25,8 +24,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from duck_v2.robot_spec import CHECKPOINT_PREFIX, MODEL_NAME, MODEL_PATH, NUM_ACTIONS, NUM_OBSERVATIONS
 from training.env_config import _DEFAULT_CFG, quat_to_yaw
-from training.run_parallel_sim import ParallelSimRunner, has_obstacle_contact
+from training.policy_contract import validate_model_identity
+from training.run_parallel_sim import ParallelSimRunner, has_obstacle_contact, resolve_v2_model_path
 from training.nav_planner import LidarWaypointPlanner
 from scripts.export_policy import load_actor_from_checkpoint, PolicyOnnxWrapper
 
@@ -57,6 +58,7 @@ def compute_path_unstability(yaw_history: np.ndarray, dist_x: float) -> Tuple[fl
 
 def get_xml_supported_stage(xml_path: Path, requested_stage: int) -> int:
     """Return requested_stage if XML contains obstacle/stair geometry, else fallback to 0."""
+    xml_path = resolve_v2_model_path(xml_path)
     if requested_stage <= 0:
         return 0
     try:
@@ -74,11 +76,19 @@ def get_xml_supported_stage(xml_path: Path, requested_stage: int) -> int:
 
 def load_actor(checkpoint_path: Path) -> nn.Module:
     cp = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    if not isinstance(cp, dict):
+        raise ValueError("V2 checkpoint model identity metadata is required")
+    normalized_cp = dict(cp)
+    if normalized_cp.get("model_path"):
+        normalized_cp["model_path"] = str(normalized_cp["model_path"]).replace("\\", "/")
+    validate_model_identity(normalized_cp, MODEL_NAME)
     raw_actor = load_actor_from_checkpoint(cp)
     actor = PolicyOnnxWrapper(raw_actor).eval()
     actor.obs_dim = raw_actor[0].in_features
     actor.hidden_dim = raw_actor[0].out_features
     actor.action_dim = raw_actor[4].out_features
+    if actor.obs_dim != NUM_OBSERVATIONS or actor.action_dim != NUM_ACTIONS:
+        raise ValueError(f"V2 evaluation requires {NUM_OBSERVATIONS} observations and {NUM_ACTIONS} actions")
     actor.critic_obs_dim = cp.get("critic_obs_dim") if isinstance(cp, dict) else None
     actor.stage = int(cp.get("stage", 0)) if isinstance(cp, dict) else 0
     return actor
@@ -98,6 +108,8 @@ def run_benchmark_scenario(
     orig_nav_planner = getattr(runner, "nav_planner", None)
 
     effective_nav = orig_use_nav if use_nav_planner is None else bool(use_nav_planner)
+    if runner.obs_dim != NUM_OBSERVATIONS or getattr(actor, "obs_dim", NUM_OBSERVATIONS) != NUM_OBSERVATIONS:
+        raise ValueError(f"V2 evaluation requires {NUM_OBSERVATIONS}-dimensional observations")
     runner.use_nav_planner = effective_nav
     runner.nav_goal_xy = (float(goal_x), 0.0)
     if effective_nav and getattr(runner, "nav_planner", None) is None:
@@ -134,18 +146,11 @@ def run_benchmark_scenario(
         env_collided = np.zeros(num_envs, dtype=bool)
         min_clearance = np.full(num_envs, 2.0, dtype=np.float32)
 
-        actor_in_dim = getattr(actor, "obs_dim", None)
-        if actor_in_dim is None and hasattr(actor, "__getitem__") and hasattr(actor[0], "in_features"):
-            actor_in_dim = actor[0].in_features
-
         for step in range(max_steps):
             with torch.no_grad():
                 inp = torch.from_numpy(obs).float()
-                if actor_in_dim is not None and inp.shape[1] != actor_in_dim:
-                    if inp.shape[1] > actor_in_dim:
-                        inp = inp[:, :actor_in_dim]
-                    else:
-                        inp = torch.nn.functional.pad(inp, (0, actor_in_dim - inp.shape[1]))
+                if inp.shape[1] != NUM_OBSERVATIONS:
+                    raise ValueError(f"V2 evaluation observation mismatch: {inp.shape[1]} != {NUM_OBSERVATIONS}")
                 actions = actor(inp).numpy()
 
             next_obs, rewards, dones, infos = runner.step(actions)
@@ -240,38 +245,26 @@ def run_benchmark_scenario(
 
 
 def main():
-    default_v1_cp = REPO_ROOT / "models" / "checkpoints" / "microduck_best.pt"
-    default_v2_cp = REPO_ROOT / "models" / "checkpoints" / "cyberduck_v2_best.pt"
-
-    parser = argparse.ArgumentParser(description="🦆 MicroDuck V1 vs CyberDuck V2 Simulation Benchmark")
+    default_checkpoint = REPO_ROOT / "models" / "checkpoints" / f"{CHECKPOINT_PREFIX}_best.pt"
+    parser = argparse.ArgumentParser(description="CyberDuck V2 simulation benchmark")
     parser.add_argument("--use-nav-planner", action="store_true", help="Include Stage 1 Hurdles + L2 NavPlanner scenario")
     parser.add_argument("--num-envs", type=int, default=16, help="Number of parallel environments (default: 16)")
     parser.add_argument("--steps", type=int, default=500, help="Max steps per scenario (default: 500)")
     parser.add_argument(
-        "--v1-checkpoint",
+        "--checkpoint", "--v2-checkpoint",
+        dest="checkpoint",
         type=str,
-        default=str(default_v1_cp),
-        help=f"Path to MicroDuck V1 checkpoint (default: {default_v1_cp})",
-    )
-    parser.add_argument(
-        "--v2-checkpoint",
-        type=str,
-        default=str(default_v2_cp),
-        help=f"Path to CyberDuck V2 checkpoint (default: {default_v2_cp})",
+        default=str(default_checkpoint),
+        help=f"Path to CyberDuck V2 checkpoint (default: {default_checkpoint})",
     )
     args = parser.parse_args()
 
-    v1_model_path = REPO_ROOT / "pipelines" / "rpi5_stack" / "models" / "mjcf" / "microduck_rpi5_8dof.xml"
-    v2_model_path = REPO_ROOT / "duck_v2" / "cyberduck_v2.xml"
-    v1_checkpoint = Path(args.v1_checkpoint)
-    v2_checkpoint = Path(args.v2_checkpoint)
+    model_path = resolve_v2_model_path(MODEL_PATH)
+    actor = load_actor(Path(args.checkpoint))
 
     print("================================================================================")
-    print("🦆 EVALUATION REPORT: MICRODUCK V1 vs CYBERDUCK V2 IN MUJOCO SIMULATION")
+    print("CYBERDUCK V2 SIMULATION EVALUATION")
     print("================================================================================")
-
-    v1_actor = load_actor(v1_checkpoint)
-    v2_actor = load_actor(v2_checkpoint)
 
     scenarios = [
         {"name": "Standard Forward Walk (0.50 m/s)", "cmd_vx": 0.50, "steps": args.steps, "stage": 0, "use_nav": False},
@@ -287,64 +280,33 @@ def main():
     results = []
 
     for sc in scenarios:
-        print(f"\n>>> Running Scenario: {sc['name']} ...")
-        # Run V1
-        stage_v1 = get_xml_supported_stage(v1_model_path, sc.get("stage", 0))
-        r_v1 = ParallelSimRunner(
-            model_path=v1_model_path,
+        print(f"\n>>> Running V2 scenario: {sc['name']} ...")
+        stage = get_xml_supported_stage(model_path, sc.get("stage", 0))
+        runner = ParallelSimRunner(
+            model_path=model_path,
             num_envs=args.num_envs,
             max_episode_steps=sc["steps"],
-            stage=stage_v1,
+            stage=stage,
             use_nav_planner=sc.get("use_nav", False),
         )
         try:
-            res_v1 = run_benchmark_scenario(
-                r_v1,
-                v1_actor,
+            result = run_benchmark_scenario(
+                runner,
+                actor,
                 cmd_vx=sc["cmd_vx"],
                 max_steps=sc["steps"],
                 scenario_name=sc["name"],
                 use_nav_planner=sc.get("use_nav", False),
             )
-            res_v1["model"] = "MicroDuck V1 (microduck_best.pt)"
-            results.append(res_v1)
+            result["model"] = "CyberDuck V2"
+            results.append(result)
         finally:
-            r_v1.close()
-
-        # Run V2
-        stage_v2 = get_xml_supported_stage(v2_model_path, sc.get("stage", 0))
-        r_v2 = ParallelSimRunner(
-            model_path=v2_model_path,
-            num_envs=args.num_envs,
-            max_episode_steps=sc["steps"],
-            stage=stage_v2,
-            use_nav_planner=sc.get("use_nav", False),
-        )
-        try:
-            res_v2 = run_benchmark_scenario(
-                r_v2,
-                v2_actor,
-                cmd_vx=sc["cmd_vx"],
-                max_steps=sc["steps"],
-                scenario_name=sc["name"],
-                use_nav_planner=sc.get("use_nav", False),
-            )
-            res_v2["model"] = "CyberDuck V2 (cyberduck_v2_best.pt)"
-            results.append(res_v2)
-        finally:
-            r_v2.close()
-
+            runner.close()
         print(
-            f"  [V1] EpLen: {res_v1['mean_eplen']:.1f}/{sc['steps']} | DistX: {res_v1['mean_dist_x']:+.3f}m | "
-            f"Reward: {res_v1['mean_reward']:+.2f} | Tilt: {res_v1['mean_tilt_deg']:.1f}° | "
-            f"Unstab: {res_v1['yaw_unstability']:.2f} | Coll/100: {res_v1['collision_rate_per_100']:.1f} | "
-            f"MinClr: {res_v1['min_clearance_m']:.2f}m"
-        )
-        print(
-            f"  [V2] EpLen: {res_v2['mean_eplen']:.1f}/{sc['steps']} | DistX: {res_v2['mean_dist_x']:+.3f}m | "
-            f"Reward: {res_v2['mean_reward']:+.2f} | Tilt: {res_v2['mean_tilt_deg']:.1f}° | "
-            f"Unstab: {res_v2['yaw_unstability']:.2f} | Coll/100: {res_v2['collision_rate_per_100']:.1f} | "
-            f"MinClr: {res_v2['min_clearance_m']:.2f}m"
+            f"  EpLen: {result['mean_eplen']:.1f}/{sc['steps']} | DistX: {result['mean_dist_x']:+.3f}m | "
+            f"Reward: {result['mean_reward']:+.2f} | Tilt: {result['mean_tilt_deg']:.1f}° | "
+            f"Unstab: {result['yaw_unstability']:.2f} | Coll/100: {result['collision_rate_per_100']:.1f} | "
+            f"MinClr: {result['min_clearance_m']:.2f}m"
         )
 
     header = f"{'Model':<16} | {'Scenario':<30} | {'Surv%':<6} | {'EpLen':<8} | {'DistX (m)':<10} | {'Reward':<9} | {'Tilt°':<6} | {'Unstab':<8} | {'Coll/100':<9} | {'MinClr':<8} | {'Pwr (W)':<7}"
@@ -354,9 +316,8 @@ def main():
     print(header)
     print("-" * len(header))
     for r in results:
-        m_short = "MicroDuck V1" if "V1" in r["model"] else "CyberDuck V2"
         print(
-            f"{m_short:<16} | {r['scenario'][:30]:<30} | {r['success_rate']*100:5.1f}% | {r['mean_eplen']:8.1f} | "
+            f"{'CyberDuck V2':<16} | {r['scenario'][:30]:<30} | {r['success_rate']*100:5.1f}% | {r['mean_eplen']:8.1f} | "
             f"{r['mean_dist_x']:+10.3f} | {r['mean_reward']:+9.2f} | {r['mean_tilt_deg']:5.1f}° | "
             f"{r['yaw_unstability']:8.2f} | {r['collision_rate_per_100']:8.1f}% | {r['min_clearance_m']:7.2f}m | {r['mean_power_watt']:6.2f}W"
         )

@@ -1,0 +1,324 @@
+{
+  "upstream_commit": "c6113328a5695b976a010a203a90fe86191769bf",
+  "catalog_sha256": "00eeb681b6631625d67dd83cfe5796b7d5e1517d488d3ba1e8c231c17aa3283c",
+  "retrieved_utc": "2026-11-18T11:48:00.644972+00:00",
+  "assembly_uses_these_sources": false,
+  "models": {
+    "raspberry_pi_5": {
+      "file": "raspberry_pi_5.step",
+      "sha256": "c6347ecec58e77adaf8c1f1cbaa5bb7d02884a108b466a48449bfbbe80bb01cb",
+      "bytes": 5481433,
+      "download": "https://media.githubusercontent.com/media/earthtojake/step.parts/c6113328a5695b976a010a203a90fe86191769bf/catalog/step/raspberry_pi_5.step",
+      "catalog": {
+        "id": "raspberry_pi_5",
+        "name": "Raspberry Pi 5",
+        "description": "Raspberry Pi 5 single-board computer.",
+        "category": "electronics",
+        "family": "raspberry-pi",
+        "tags": [
+          "board",
+          "single-board-computer",
+          "sbc"
+        ],
+        "aliases": [
+          "Pi 5",
+          "RPi 5",
+          "Raspberry Pi 5 Model B"
+        ],
+        "attributes": {
+          "manufacturer": "Raspberry Pi",
+          "model": "Raspberry Pi 5",
+          "formFactor": "credit-card-sbc",
+          "boardLengthMm": 85,
+          "boardWidthMm": 56,
+          "gpioHeader": "40-pin",
+          "wireless": true
+        }
+      },
+      "fit_reference_compared": false,
+      "vendor_certified": false,
+      "note": "Source reference pending datum/fit comparison."
+    },
+    "esp32_s3_wroom_1": {
+      "file": "esp32_s3_wroom_1.step",
+      "sha256": "b99ed9efcaaa4ffd5b27b3afae86fb146662d6f2f3078a55d5495a75cb4997c3",
+      "bytes": 1907041,
+      "download": "https://media.githubusercontent.com/media/earthtojake/step.parts/c6113328a5695b976a010a203a90fe86191769bf/catalog/step/esp32_s3_wroom_1.step",
+      "catalog": {
+        "id": "esp32_s3_wroom_1",
+        "name": "ESP32-S3-WROOM-1",
+        "description": "RF Module footprint model, ESP32-S3-WROOM-1.",
+        "category": "electronics",
+        "family": "rf-module",
+        "tags": [
+          "rf",
+          "wireless",
+          "module"
+        ],
+        "aliases": [
+          "ESP32-S3-WROOM-1"
+        ],
+        "stepSource": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/0bc64e922178140eb6890377646efd45e15011bd/RF_Module.3dshapes/ESP32-S3-WROOM-1.step",
+        "attributes": {
+          "model": "ESP32-S3-WROOM-1"
+        }
+      },
+      "fit_reference_compared": false,
+      "vendor_certified": false,
+      "note": "RF module only; NOT the 70 x 29 mm DevKit carrier board."
+    },
+    "bearing_flanged_f623_simple": {
+      "file": "bearing_flanged_f623_simple.step",
+      "sha256": "3d0f905657756e001f2a782725f74c92a8555962dab4d6854d3156cdcd823a14",
+      "bytes": 21974,
+      "download": "https://media.githubusercontent.com/media/earthtojake/step.parts/c6113328a5695b976a010a203a90fe86191769bf/catalog/step/bearing_flanged_f623_simple.step",
+      "catalog": {
+        "id": "bearing_flanged_f623_simple",
+        "name": "Flanged ball bearings, F623",
+        "description": "Flanged ball bearing, F623.",
+        "category": "bearing",
+        "family": "flanged-ball-bearing",
+        "tags": [
+          "ball-bearing",
+          "metric",
+          "flanged"
+        ],
+        "aliases": [
+          "bearing_flanged_F623_simple"
+        ],
+        "attributes": {
+          "geometryRepresentation": "analytic simplified",
+          "bearingCode": "F623",
+          "boreMm": 3,
+          "outerDiameterMm": 10,
+          "sealType": "open",
+          "variant": "flanged",
+          "widthMm": 4,
+          "nominalSize": "F623",
+          "flanged": true
+        }
+      },
+      "fit_reference_compared": false,
+      "vendor_certified": false,
+      "note": "Simplified open F623 envelope; NOT a certified F623ZZ model."
+    },
+    "raspberry_pi_zero_mounting_holes_cutter_reference": {
+      "file": "raspberry_pi_zero_mounting_holes_cutter_reference.step",
+      "sha256": "b42cd019a665ff62647ccc47da7cca79ba303a4c997ee020b29e207d0f4268cc",
+      "bytes": 25029,
+      "download": "https://media.githubusercontent.com/media/earthtojake/step.parts/c6113328a5695b976a010a203a90fe86191769bf/catalog/step/raspberry_pi_zero_mounting_holes_cutter_reference.step",
+      "catalog": {
+        "id": "raspberry_pi_zero_mounting_holes_cutter_reference",
+        "name": "Mounting/cutout reference patterns, raspberry_pi_zero_mounting_holes",
+        "description": "Mounting/cutout reference pattern, raspberry pi zero mounting holes.",
+        "category": "cad-helper",
+        "family": "mounting-reference",
+        "tags": [
+          "bracket"
+        ],
+        "aliases": [
+          "raspberry_pi_zero_mounting_holes_cutter_reference"
+        ],
+        "attributes": {
+          "geometryRepresentation": "analytic simplified",
+          "pattern": "raspberry_pi_zero_mounting_holes"
+        }
+      },
+      "fit_reference_compared": false,
+      "vendor_certified": false,
+      "note": "Mounting-hole cutter pattern only; NOT a Pi Zero 2 W board model."
+    },
+    "iso4762_socket_head_cap_screw_m3x6": {
+      "file": "iso4762_socket_head_cap_screw_m3x6.step",
+      "sha256": "f65060b0c2e332c28c942bfa7c4a118a1a1f18d5870f0e9e5a47c2061952c72d",
+      "bytes": 39479,
+      "download": "https://media.githubusercontent.com/media/earthtojake/step.parts/c6113328a5695b976a010a203a90fe86191769bf/catalog/step/iso4762_socket_head_cap_screw_m3x6.step",
+      "catalog": {
+        "id": "iso4762_socket_head_cap_screw_m3x6",
+        "name": "ISO 4762 hexagon socket head cap screw, M3 x 6",
+        "description": "ISO 4762, socket head cap screw, M3 x 6.",
+        "category": "fastener",
+        "family": "socket-head-cap-screw",
+        "tags": [
+          "screw",
+          "metric",
+          "socket-head"
+        ],
+        "aliases": [
+          "ISO 4762 M3x6",
+          "ISO4762 M3x6",
+          "M3 socket head cap screw"
+        ],
+        "standard": {
+          "body": "ISO",
+          "number": "4762",
+          "designation": "ISO 4762"
+        },
+        "attributes": {
+          "thread": "M3",
+          "lengthMm": 6,
+          "headStyle": "socket-head",
+          "driveStyle": "hex-socket",
+          "nominalSize": "M3 x 6"
+        }
+      },
+      "fit_reference_compared": false,
+      "vendor_certified": false,
+      "note": "Source reference pending datum/fit comparison."
+    },
+    "iso4762_socket_head_cap_screw_m3x8": {
+      "file": "iso4762_socket_head_cap_screw_m3x8.step",
+      "sha256": "be8177f1dad3e8a1c447c7d791171442352dd1668687bb6f27cf981b843f63a4",
+      "bytes": 39507,
+      "download": "https://media.githubusercontent.com/media/earthtojake/step.parts/c6113328a5695b976a010a203a90fe86191769bf/catalog/step/iso4762_socket_head_cap_screw_m3x8.step",
+      "catalog": {
+        "id": "iso4762_socket_head_cap_screw_m3x8",
+        "name": "ISO 4762 hexagon socket head cap screw, M3 x 8",
+        "description": "ISO 4762, socket head cap screw, M3 x 8.",
+        "category": "fastener",
+        "family": "socket-head-cap-screw",
+        "tags": [
+          "screw",
+          "metric",
+          "socket-head"
+        ],
+        "aliases": [
+          "ISO 4762 M3x8",
+          "ISO4762 M3x8",
+          "M3 socket head cap screw"
+        ],
+        "standard": {
+          "body": "ISO",
+          "number": "4762",
+          "designation": "ISO 4762"
+        },
+        "attributes": {
+          "thread": "M3",
+          "lengthMm": 8,
+          "headStyle": "socket-head",
+          "driveStyle": "hex-socket",
+          "nominalSize": "M3 x 8"
+        }
+      },
+      "fit_reference_compared": false,
+      "vendor_certified": false,
+      "note": "Source reference pending datum/fit comparison."
+    },
+    "iso4762_socket_head_cap_screw_m3x12": {
+      "file": "iso4762_socket_head_cap_screw_m3x12.step",
+      "sha256": "7720179ea94ed5c4e2b32f6e4c2583a77423240599c602690c5b2b2f5471cc47",
+      "bytes": 58826,
+      "download": "https://media.githubusercontent.com/media/earthtojake/step.parts/c6113328a5695b976a010a203a90fe86191769bf/catalog/step/iso4762_socket_head_cap_screw_m3x12.step",
+      "catalog": {
+        "id": "iso4762_socket_head_cap_screw_m3x12",
+        "name": "ISO 4762 socket head cap screw, M3 x 12",
+        "description": "ISO 4762, socket head cap screw, M3 x 12.",
+        "category": "fastener",
+        "family": "socket-head-cap-screw",
+        "tags": [
+          "screw",
+          "socket-head",
+          "metric"
+        ],
+        "aliases": [
+          "SHCS M3x12",
+          "M3 socket head cap screw",
+          "ISO 4762 M3x12",
+          "ISO4762 M3x12"
+        ],
+        "standard": {
+          "body": "ISO",
+          "number": "4762",
+          "designation": "ISO 4762"
+        },
+        "attributes": {
+          "thread": "M3",
+          "lengthMm": 12,
+          "nominalSize": "M3 x 12",
+          "headStyle": "socket-head",
+          "driveStyle": "hex-socket"
+        }
+      },
+      "fit_reference_compared": false,
+      "vendor_certified": false,
+      "note": "Source reference pending datum/fit comparison."
+    },
+    "iso4762_socket_head_cap_screw_m3x18": {
+      "file": "iso4762_socket_head_cap_screw_m3x18.step",
+      "sha256": "e046f709734d11736620d621fd8e5db97be290a04e458b3f65a3e83917881ce2",
+      "bytes": 39471,
+      "download": "https://media.githubusercontent.com/media/earthtojake/step.parts/c6113328a5695b976a010a203a90fe86191769bf/catalog/step/iso4762_socket_head_cap_screw_m3x18.step",
+      "catalog": {
+        "id": "iso4762_socket_head_cap_screw_m3x18",
+        "name": "ISO 4762 hexagon socket head cap screw, M3 x 18",
+        "description": "ISO 4762, socket head cap screw, M3 x 18.",
+        "category": "fastener",
+        "family": "socket-head-cap-screw",
+        "tags": [
+          "screw",
+          "metric",
+          "socket-head"
+        ],
+        "aliases": [
+          "ISO 4762 M3x18",
+          "ISO4762 M3x18",
+          "M3 socket head cap screw"
+        ],
+        "standard": {
+          "body": "ISO",
+          "number": "4762",
+          "designation": "ISO 4762"
+        },
+        "attributes": {
+          "thread": "M3",
+          "lengthMm": 18,
+          "headStyle": "socket-head",
+          "driveStyle": "hex-socket",
+          "nominalSize": "M3 x 18"
+        }
+      },
+      "fit_reference_compared": false,
+      "vendor_certified": false,
+      "note": "Source reference pending datum/fit comparison."
+    },
+    "iso4762_socket_head_cap_screw_m3x20": {
+      "file": "iso4762_socket_head_cap_screw_m3x20.step",
+      "sha256": "09f4d17e743f51db131e5d3a1efd71d3d22a0f34461e9d09961896aa2fcaf5b6",
+      "bytes": 58827,
+      "download": "https://media.githubusercontent.com/media/earthtojake/step.parts/c6113328a5695b976a010a203a90fe86191769bf/catalog/step/iso4762_socket_head_cap_screw_m3x20.step",
+      "catalog": {
+        "id": "iso4762_socket_head_cap_screw_m3x20",
+        "name": "ISO 4762 socket head cap screw, M3 x 20",
+        "description": "ISO 4762, socket head cap screw, M3 x 20.",
+        "category": "fastener",
+        "family": "socket-head-cap-screw",
+        "tags": [
+          "screw",
+          "socket-head",
+          "metric"
+        ],
+        "aliases": [
+          "SHCS M3x20",
+          "M3 socket head cap screw",
+          "ISO 4762 M3x20",
+          "ISO4762 M3x20"
+        ],
+        "standard": {
+          "body": "ISO",
+          "number": "4762",
+          "designation": "ISO 4762"
+        },
+        "attributes": {
+          "thread": "M3",
+          "lengthMm": 20,
+          "nominalSize": "M3 x 20",
+          "headStyle": "socket-head",
+          "driveStyle": "hex-socket"
+        }
+      },
+      "fit_reference_compared": false,
+      "vendor_certified": false,
+      "note": "Source reference pending datum/fit comparison."
+    }
+  }
+}

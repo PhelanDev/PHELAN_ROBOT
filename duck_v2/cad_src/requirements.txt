@@ -1,0 +1,7 @@
+build123d==0.13.0
+trimesh==4.12.2
+manifold3d==3.5.5
+pytest>=8,<10
+matplotlib>=3.9,<4
+networkx>=3.4,<4
+lxml>=5,<7

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Interactive 3D Visualizer and Pose Controller for MicroDuck 8-DOF.
+"""Interactive 3D Visualizer and Pose Controller for CyberDuck V2.
 
-Visualizes the MicroDuck 8-DOF robot using `mujoco.viewer` with interactive
+Visualizes the CyberDuck V2 robot using `mujoco.viewer` with interactive
 joint manipulation, preset poses (standing, squatting, stepping, bowing),
 dynamic walking gait demonstration, and headless/CLI fallback support for
 headless environments or remote servers.
@@ -38,6 +38,10 @@ import numpy as np
 
 # Ensure repository root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from duck_v2.robot_spec import MODEL_NAME, MODEL_PATH, NUM_ACTIONS, NUM_OBSERVATIONS
+from training.policy_contract import validate_model_identity
+from training.run_parallel_sim import resolve_v2_model_path
 
 try:
     from training.env_config import (
@@ -174,7 +178,7 @@ def _setup_viewer_scene(
     pose: str,
 ) -> Tuple[Any, Any, np.ndarray]:
     """Load MJCF model, apply curriculum stage (including Stage 0), and spawn at native height."""
-    model_str = str(model_path)
+    model_str = str(resolve_v2_model_path(model_path))
     if not os.path.exists(model_str):
         raise FileNotFoundError(f"Model file not found: {model_str}")
     model = mujoco.MjModel.from_xml_path(model_str)
@@ -203,14 +207,14 @@ POSE_PRESETS: Dict[str, List[float]] = {
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build command-line interface argument parser."""
     parser = argparse.ArgumentParser(
-        description="MicroDuck 8-DOF Interactive 3D Viewer & Kinematic Controller",
+        description="CyberDuck V2 Interactive 3D Viewer & Kinematic Controller",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "--model",
         type=str,
         default=None,
-        help="Path to MicroDuck 8-DOF MJCF model XML file",
+        help="Path to CyberDuck V2 MJCF model XML file",
     )
     parser.add_argument(
         "--pose",
@@ -452,9 +456,9 @@ def extract_viewer_observation(
     embed_phase_clock: Optional[bool] = None,
     period: float = 0.8,
 ) -> np.ndarray:
-    """Extract observation vector (37 or 42 dimensions) from current MuJoCo simulation data.
+    """Extract the V2 42-dimensional observation vector from MuJoCo simulation data.
 
-    Matches the observation specification of MicroDuck 8-DOF RL environment:
+    Matches the observation specification of CyberDuck V2 RL environment:
     - Base angular velocity [wx, wy, wz] (3) from gyro sensor (sensordata 3:6)
     - Projected gravity vector [gx, gy, gz] (3) from orientation quaternion (sensordata 6:10)
     - Velocity commands [vx, vy, wz] (3)
@@ -478,8 +482,8 @@ def extract_viewer_observation(
         eff_period = schema["period"]
         phase_clock = phase_clock_for_schema(schema, episode_step)
     else:
-        eff_obs_dim = 42 if obs_dim is None else int(obs_dim)
-        if eff_obs_dim not in (37, 42):
+        eff_obs_dim = NUM_OBSERVATIONS if obs_dim is None else int(obs_dim)
+        if eff_obs_dim != NUM_OBSERVATIONS:
             raise ValueError(f"Unsupported viewer obs_dim: {eff_obs_dim}")
         eff_control_dt = float(control_dt)
         eff_period = float(period)
@@ -491,6 +495,9 @@ def extract_viewer_observation(
             phase_clock = np.array([clock_sin, clock_cos], dtype=np.float32)
         else:
             phase_clock = None
+
+    if eff_obs_dim != NUM_OBSERVATIONS:
+        raise ValueError(f"V2 viewer requires {NUM_OBSERVATIONS} observations, got {eff_obs_dim}")
 
     if last_actions is None:
         last_actions = np.zeros(8, dtype=np.float32)
@@ -551,12 +558,7 @@ def extract_viewer_observation(
 
 
 def resolve_viewer_model_path(model_arg=None, policy_path=None) -> str:
-    """Resolve omitted model from reliable metadata; explicit paths are never replaced."""
-    root = Path(__file__).resolve().parent.parent
-    default = root / "models/mjcf/microduck_8dof.xml"
-    known = {"microduck_8dof.xml": default, "cyberduck_v2.xml": root / "duck_v2/cyberduck_v2.xml",
-             "microduck_rpi5_8dof.xml": root / "pipelines/rpi5_stack/models/mjcf/microduck_rpi5_8dof.xml",
-             "microduck_esp32_8dof.xml": root / "pipelines/dual_esp32s3_stack/models/mjcf/microduck_esp32_8dof.xml"}
+    """Resolve a V2 MJCF and reject missing, retired, or conflicting checkpoint identity."""
     metadata = {}
     if policy_path is not None:
         p = Path(policy_path)
@@ -569,37 +571,17 @@ def resolve_viewer_model_path(model_arg=None, policy_path=None) -> str:
             import torch
             ckpt = torch.load(p, map_location="cpu", weights_only=False)
             metadata = ckpt if isinstance(ckpt, dict) else {}
-    expected = None
-    if metadata.get("model_path"):
-        expected = Path(str(metadata["model_path"]).replace("\\", "/"))
-        if not expected.is_absolute():
-            expected = root / expected
-        if not expected.is_file():
-            raise FileNotFoundError(f"Checkpoint model_path does not exist: {expected}")
-        if metadata.get("model_name") and str(metadata["model_name"]) != expected.name:
-            raise ValueError("Checkpoint model_name conflicts with model_path")
-    elif metadata.get("model_name"):
-        name = str(metadata["model_name"])
-        if name not in known:
-            raise ValueError(f"Unknown checkpoint model_name: {name}")
-        expected = known[name]
+        normalized_metadata = dict(metadata)
+        if normalized_metadata.get("model_path"):
+            normalized_metadata["model_path"] = str(normalized_metadata["model_path"]).replace("\\", "/")
+        validate_model_identity(normalized_metadata, MODEL_NAME)
     if model_arg is not None:
-        selected = Path(str(model_arg).replace("\\", "/"))
-        if not selected.is_absolute():
-            selected = root / selected
-        if expected is not None and selected.resolve() != expected.resolve():
-            raise ValueError(f"Explicit model {selected} conflicts with checkpoint model {expected}")
-    elif expected is not None:
-        selected = expected
-    elif policy_path is not None and Path(policy_path).stem.lower().startswith("cyberduck_v2_"):
-        selected = known["cyberduck_v2.xml"]
+        selected = resolve_v2_model_path(model_arg)
     else:
-        selected = default
-    if not selected.is_file():
-        raise FileNotFoundError(f"Viewer model not found: {selected}")
+        selected = resolve_v2_model_path(MODEL_PATH)
     if policy_path:
-        print(f"[POLICY] model={selected.resolve()} checkpoint={policy_path}")
-    return str(selected.resolve())
+        print(f"[POLICY] model={selected} checkpoint={policy_path}")
+    return str(selected)
 
 
 def _validate_viewer_policy_dimensions(policy):
@@ -610,7 +592,7 @@ def _validate_viewer_policy_dimensions(policy):
         import torch.nn as nn
         layers = [m for m in policy.modules() if isinstance(m, nn.Linear)]
         obs_width, action_width = layers[0].in_features, layers[-1].out_features
-    if obs_width not in (37, 42) or action_width != 8:
+    if obs_width != NUM_OBSERVATIONS or action_width != NUM_ACTIONS:
         raise ValueError(f"Unsupported viewer policy dimensions: obs={obs_width}, actions={action_width}")
     return int(obs_width)
 
@@ -632,6 +614,8 @@ def _attach_viewer_policy_schema(policy: Any, obs_width: int, legacy_observation
         raise ValueError("Invalid policy observation_schema") from exc
     if schema["obs_dim"] != obs_width:
         raise ValueError(f"observation_schema obs_dim ({schema['obs_dim']}) disagrees with policy input width ({obs_width})")
+    if schema["obs_dim"] != NUM_OBSERVATIONS:
+        raise ValueError(f"V2 viewer policies require {NUM_OBSERVATIONS} observations")
     policy._observation_schema = schema
     return policy
 
@@ -652,6 +636,7 @@ def load_viewer_policy(
     p_path = Path(policy_path).resolve()
     if not p_path.exists():
         raise FileNotFoundError(f"Policy file not found at {p_path}")
+    resolve_viewer_model_path(policy_path=p_path)
 
     suffix = p_path.suffix.lower()
     if suffix == ".onnx":
@@ -688,7 +673,6 @@ def policy_step(policy: Any, obs: np.ndarray) -> np.ndarray:
     if obs_arr.ndim == 1:
         obs_arr = obs_arr.reshape(1, -1)
 
-    # Auto-adapt observation vector dimension (e.g. 37 vs 42 channels)
     expected_dim = None
     if hasattr(policy, "get_inputs"):
         try:
@@ -703,19 +687,14 @@ def policy_step(policy: Any, obs: np.ndarray) -> np.ndarray:
                 expected_dim = m.in_features
                 break
 
+    if obs_arr.shape[-1] != NUM_OBSERVATIONS:
+        raise ValueError(f"V2 viewer requires {NUM_OBSERVATIONS} observations, got {obs_arr.shape[-1]}")
     if expected_dim is not None and expected_dim > 0:
         schema = getattr(policy, "_observation_schema", None)
         if schema is not None and obs_arr.shape[-1] != schema["obs_dim"]:
             raise ValueError(f"Policy observation mismatch: {obs_arr.shape[-1]} vs {schema['obs_dim']}")
-        if obs_arr.shape[-1] != expected_dim and {obs_arr.shape[-1], expected_dim} != {37, 42}:
+        if obs_arr.shape[-1] != expected_dim:
             raise ValueError(f"Policy observation mismatch: {obs_arr.shape[-1]} vs {expected_dim}")
-        if obs_arr.shape[-1] > expected_dim:
-            obs_arr = obs_arr[:, :expected_dim]
-        elif obs_arr.shape[-1] < expected_dim:
-            pad_width = expected_dim - obs_arr.shape[-1]
-            obs_arr = np.pad(
-                obs_arr, ((0, 0), (0, pad_width)), mode="constant", constant_values=2.0
-            )
 
     # Check for ONNX Runtime session
     if hasattr(policy, "run") and hasattr(policy, "get_inputs"):
@@ -1213,7 +1192,7 @@ def run_opencv_viewer(
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         video_writer = cv2.VideoWriter(str(record_path), fourcc, 30, (640, 480))
 
-    win_name = "MicroDuck 8-DOF - 3D Live Viewer (OpenCV Engine)"
+    win_name = "CyberDuck V2 - 3D Live Viewer (OpenCV Engine)"
     cv2.namedWindow(win_name, cv2.WINDOW_AUTOSIZE)
 
     print("=" * 70)
@@ -1306,7 +1285,7 @@ def run_opencv_viewer(
             hud_color = (0, 255, 0) if state["is_stable"] else (0, 0, 255)
             cv2.putText(
                 bgr_frame,
-                f"MicroDuck 8-DOF (Stage {stage})",
+                f"CyberDuck V2 (Stage {stage})",
                 (20, 30),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
@@ -1393,7 +1372,7 @@ def run_opencv_viewer(
 
 
 def run_interactive_cli(
-    model_path: Union[str, Path] = "models/mjcf/microduck_8dof.xml",
+    model_path: Union[str, Path] = MODEL_PATH,
     dt: float = 0.002,
 ):
     """Run interactive text-based terminal prompt for manual joint testing."""
@@ -1401,6 +1380,7 @@ def run_interactive_cli(
         print("[LỖI] Thư viện mujoco chưa được cài đặt.")
         return
 
+    model_path = resolve_v2_model_path(model_path)
     model = mujoco.MjModel.from_xml_path(str(model_path))
     model.opt.timestep = dt
     data = mujoco.MjData(model)
@@ -1424,7 +1404,7 @@ def run_interactive_cli(
 
     while True:
         try:
-            cmd_line = input("\n[MicroDuck-CLI] >> ").strip()
+            cmd_line = input("\n[CyberDuck-V2] >> ").strip()
             if not cmd_line:
                 continue
 

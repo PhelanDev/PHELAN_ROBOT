@@ -626,7 +626,7 @@ def test_audit_13_four_golden_hoops_anti_vibration():
 
     # 4. Hoop 4: Floor friction >= 1.5 & Foot slip penalty (-0.8)
     assert _DEFAULT_CFG.REWARD_WEIGHTS.get("foot_slip_penalty") == -0.8
-    xml_path = Path(__file__).resolve().parent.parent / "models" / "mjcf" / "microduck_8dof.xml"
+    xml_path = Path(__file__).resolve().parent.parent / "duck_v2" / "cyberduck_v2.xml"
     with open(xml_path, "r", encoding="utf-8") as f:
         xml_text = f.read()
     assert 'friction="1.5' in xml_text
@@ -734,31 +734,46 @@ def test_audit_14_anti_backward_and_forward_gait_lock():
     assert r_fwd_gait["feet_air_time"] > 0.0, "vx=0.05 must receive >0.0 feet_air_time"
 
     # 4. Kinematics verification
-    xml_path = Path(__file__).resolve().parent.parent / "models" / "mjcf" / "microduck_8dof.xml"
+    xml_path = Path(__file__).resolve().parent.parent / "duck_v2" / "cyberduck_v2.xml"
     model = mujoco.MjModel.from_xml_path(str(xml_path))
     data = mujoco.MjData(model)
     mujoco.mj_forward(model, data)
 
-    base_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "base_link")
-    foot_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_foot_link")
-    beak_geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "beak_geom")
+    base_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trunk_base")
+    foot_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_foot")
+    # V2's beak visual geom is unnamed; resolve its unique named mesh explicitly.
+    beak_mesh_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_MESH, "cyber_beak")
+    assert beak_mesh_id >= 0
+    beak_geoms = np.flatnonzero((model.geom_type == mujoco.mjtGeom.mjGEOM_MESH)
+                               & (model.geom_dataid == beak_mesh_id))
+    assert len(beak_geoms) == 1
+    beak_geom_id = int(beak_geoms[0])
+    assert min(base_id, foot_id, beak_geom_id) >= 0
 
     assert data.geom_xpos[beak_geom_id][0] > data.xpos[base_id][0], "Beak must point along +X"
 
     hip_jnt_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "left_hip_pitch")
     knee_jnt_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "left_knee_pitch")
+    assert min(hip_jnt_id, knee_jnt_id) >= 0
     hip_qadr = model.jnt_qposadr[hip_jnt_id]
     knee_qadr = model.jnt_qposadr[knee_jnt_id]
 
     data.qpos[hip_qadr] = -0.35
     data.qpos[knee_qadr] = 0.0
     mujoco.mj_forward(model, data)
-    assert (data.xpos[foot_id][0] - data.xpos[base_id][0]) > 0.02, "Hip pitch < 0 swings foot forward (+X)"
+    # V2: hip origin x=5mm, foot offset x=4mm, thigh=44mm, shin=36mm.
+    expected_hip_x = 0.005 + 0.004 * np.cos(-0.35) - (0.044 + 0.036) * np.sin(-0.35)
+    hip_x = data.xpos[foot_id][0] - data.xpos[base_id][0]
+    assert hip_x == pytest.approx(expected_hip_x, abs=1e-9)
+    assert hip_x > 0.009, "Hip pitch < 0 must advance the foot from its neutral x=9mm"
 
     data.qpos[hip_qadr] = 0.0
     data.qpos[knee_qadr] = 0.50
     mujoco.mj_forward(model, data)
-    assert (data.xpos[foot_id][0] - data.xpos[base_id][0]) < -0.01, "Knee pitch > 0 folds foot backward (-X)"
+    expected_knee_x = 0.005 + 0.004 * np.cos(0.50) - 0.036 * np.sin(0.50)
+    knee_x = data.xpos[foot_id][0] - data.xpos[base_id][0]
+    assert knee_x == pytest.approx(expected_knee_x, abs=1e-9)
+    assert knee_x < 0.0, "Knee pitch > 0 must fold the V2 foot behind the base (-X)"
 
 
 def test_audit_15_six_part_locomotion_overhaul():
@@ -845,6 +860,7 @@ def test_audit_15_six_part_locomotion_overhaul():
     assert np.isclose(clock_sin, 1.0, atol=1e-5), "phase 0.25 must yield clock_sin == 1.0"
     assert np.isclose(clock_cos, 0.0, atol=1e-5), "phase 0.25 must yield clock_cos == 0.0"
 
+    lidar_ranges = np.array([0.15, 0.3, 0.6, 1.2, 2.0], dtype=np.float32)
     obs = compute_observations(
         base_ang_vel=np.zeros(3, dtype=np.float32),
         proj_grav=np.array([0.0, 0.0, -1.0], dtype=np.float32),
@@ -853,11 +869,13 @@ def test_audit_15_six_part_locomotion_overhaul():
         joint_vel=np.zeros(8, dtype=np.float32),
         last_actions=np.zeros(8, dtype=np.float32),
         foot_contact=np.zeros(4, dtype=np.float32),
+        lidar_ranges=lidar_ranges,
         phase_clock=np.array([clock_sin, clock_cos], dtype=np.float32),
     )
-    assert obs.shape == (37,), "Base observation dimension must be 37"
+    assert obs.shape == (42,), "V2 observations must include all 5 LiDAR rays"
     assert np.isclose(obs[35], clock_sin, atol=1e-5), "obs[35] must store clock_sin"
     assert np.isclose(obs[36], clock_cos, atol=1e-5), "obs[36] must store clock_cos"
+    np.testing.assert_array_equal(obs[37:42], lidar_ranges)
 
     # gait_sync is strictly 0.0 when walking backward (vx_local < 0.0)
     r_gait_still = compute_rewards(
@@ -1025,13 +1043,14 @@ def test_audit_15_six_part_locomotion_overhaul():
             data=data,
             cmd_vel=runner_sync.commands[0],
             last_actions=runner_sync.last_actions[0],
-            obs_dim=37,
+            obs_dim=42,
             episode_step=7,
             control_dt=runner_sync.control_dt,
         )
 
-        assert sim_obs.shape == viewer_obs.shape == (37,), "Observation dimensions must be (37,)"
+        assert sim_obs.shape == viewer_obs.shape == (42,), "V2 observation dimensions must be (42,)"
         assert np.allclose(sim_obs, viewer_obs, atol=1e-5), "Observation mismatch between ParallelSimRunner and interactive_viewer"
+        np.testing.assert_allclose(viewer_obs[37:42], runner_sync._get_lidar_ranges(0), atol=1e-6)
         assert np.isclose(sim_obs[35], viewer_obs[35], atol=1e-5)
         assert np.isclose(sim_obs[36], viewer_obs[36], atol=1e-5)
         assert not (np.isclose(sim_obs[35], 0.0, atol=1e-4) and np.isclose(sim_obs[36], 0.0, atol=1e-4))
