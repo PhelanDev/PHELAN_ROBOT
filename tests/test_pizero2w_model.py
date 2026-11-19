@@ -59,7 +59,7 @@ def test_pizero2w_mjcf_obstacles():
 
 def test_pizero2w_infer_script_import_and_mock():
     """Verify Pi Zero 2 W inference runtime import, angle-to-PWM mapping, and mock mode."""
-    from pipelines.pizero2w_stack.deployment.infer_pizero2w import (
+    from hardware.pizero2w.deployment.infer_pizero2w import (
         PiZero2WInferenceEngine,
         angle_to_pwm,
         pack_pizero2w_observation,
@@ -97,10 +97,10 @@ def test_pizero2w_infer_cli(tmp_path):
     """Verify CLI flags --mock, --mock-pca, --freq, --rate work properly."""
     import subprocess
 
-    script_path = REPO_ROOT / "pipelines" / "pizero2w_stack" / "deployment" / "infer_pizero2w.py"
+    script_path = REPO_ROOT / "hardware" / "pizero2w" / "deployment" / "infer_pizero2w.py"
     assert script_path.exists(), f"Missing script: {script_path}"
     import json
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
     from scripts.train_ppo import ActorCritic
     from scripts.export_policy import export_onnx
     policy = ActorCritic(hidden_dim=16)
@@ -138,10 +138,10 @@ def test_pizero2w_v2_feet_symmetric_and_all_profiles_use_v2():
     assert m_pizero.geom_pos[re_id][0] == pytest.approx(m_pizero.geom_pos[le_id][0], abs=1e-4)
     assert m_pizero.geom_pos[re_id][2] == pytest.approx(m_pizero.geom_pos[le_id][2], abs=1e-4)
 
-    from training.run_parallel_sim import MODEL_PATH as core_model
-    from pipelines.rpi5_stack.training.run_parallel_sim import DEFAULT_MODEL_PATH as rpi5_model
-    from pipelines.dual_esp32s3_stack.training.run_parallel_sim import DEFAULT_MODEL_PATH as esp32_model
-    from pipelines.pizero2w_stack.training.run_parallel_sim import DEFAULT_MODEL_PATH as pizero_model
+    from sim.env.run_parallel_sim import MODEL_PATH as core_model
+    from hardware.rpi5.training.run_parallel_sim import DEFAULT_MODEL_PATH as rpi5_model
+    from hardware.dual_esp32s3.training.run_parallel_sim import DEFAULT_MODEL_PATH as esp32_model
+    from hardware.pizero2w.training.run_parallel_sim import DEFAULT_MODEL_PATH as pizero_model
     for path in (core_model, rpi5_model, esp32_model, pizero_model):
         assert Path(path).resolve() == MJCF_PATH.resolve()
         assert_sole_clearance(str(path))
@@ -150,7 +150,7 @@ def test_pizero2w_v2_feet_symmetric_and_all_profiles_use_v2():
 def test_pizero2w_target_mass_sync():
     """Verify TARGET_MASS in pizero2w env_config matches MuJoCo total mass."""
     import mujoco
-    from pipelines.pizero2w_stack.training.env_config import _DEFAULT_CFG
+    from hardware.pizero2w.training.env_config import _DEFAULT_CFG
     m = mujoco.MjModel.from_xml_path(str(MJCF_PATH))
     total_mass = float(mujoco.mj_getTotalmass(m))
     assert _DEFAULT_CFG.TARGET_MASS == pytest.approx(total_mass, abs=1e-3), (

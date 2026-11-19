@@ -15,7 +15,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from training.env_config import compute_rewards, LocomotionMode, _DEFAULT_CFG
+from sim.env.env_config import compute_rewards, LocomotionMode, _DEFAULT_CFG
 from robot.robot_spec import MODEL_PATH
 
 
@@ -94,7 +94,7 @@ def test_hoop1_single_support_and_double_support_dwell():
 
 def test_parallel_sim_runner_double_support_time_tracking():
     """Verify that ParallelSimRunner accumulates double_support_time when both feet touch."""
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
     sim = ParallelSimRunner(num_envs=2)
     obs = sim.reset()
     assert hasattr(sim, "double_support_time")
@@ -385,7 +385,7 @@ def test_hoop5_anti_backward_walking_and_forward_gate():
 
 def test_parallel_sim_always_commands_forward_walking():
     """Đảm bảo khi stand_still=False, 100% môi trường nhận lệnh tiến cmd_x >= 0.10 m/s (không có lệnh đứng im <= 0.05)."""
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
     sim = ParallelSimRunner(num_envs=16, stand_still=False)
     try:
         for _ in range(5):

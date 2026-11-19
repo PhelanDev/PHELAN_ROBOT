@@ -17,7 +17,7 @@ import pytest
 # Ensure repository root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from training.env_config import (
+from sim.env.env_config import (
     MicroDuck8DoFConfig,
     EmotionState,
     NUM_EMOTIONS,
@@ -26,7 +26,7 @@ from training.env_config import (
     compute_observations,
     compute_rewards,
 )
-from training.run_parallel_sim import ParallelSimRunner
+from sim.env.run_parallel_sim import ParallelSimRunner
 
 
 def test_emotion_enum_and_constants():

@@ -137,7 +137,7 @@ def test_cyberduck_v2_sensor_suite_and_camera():
 
 def test_cyberduck_v2_parallel_sim_integration():
     """Verify CyberDuck V2 runs in ParallelSimRunner and outputs standard (num_envs, 42) observations."""
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
     sim = ParallelSimRunner(num_envs=2, model_path=MJCF_PATH, decimation=1)
     obs = sim.get_observations()
     assert obs.shape == (2, NUM_OBSERVATIONS), f"Expected obs shape (2, 42), got {obs.shape}"
@@ -222,8 +222,8 @@ def test_cyberduck_v2_collision_geoms_transparent():
 
 
 def test_cyberduck_v2_foot_dynamics_and_heading_turn_gate():
-    from training.run_parallel_sim import ParallelSimRunner
-    from training.env_config import compute_rewards
+    from sim.env.run_parallel_sim import ParallelSimRunner
+    from sim.env.env_config import compute_rewards
 
     runner = ParallelSimRunner(model_path="robot/cyberduck_v2.xml", num_envs=1)
     try:
@@ -253,8 +253,8 @@ def test_cyberduck_v2_foot_dynamics_and_heading_turn_gate():
 
 def test_cyberduck_v2_lightweight_collisions_curriculum_and_ground_clearance():
     """Verify CyberDuck V2 uses primitive colliders, contact exclusions, curriculum terrain, and ground clearance."""
-    from training.terrain_curriculum import apply_stage, apply_stair_stage
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.terrain_curriculum import apply_stage, apply_stair_stage
+    from sim.env.run_parallel_sim import ParallelSimRunner
 
     model = mujoco.MjModel.from_xml_path(MJCF_PATH)
     data = mujoco.MjData(model)

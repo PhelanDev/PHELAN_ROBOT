@@ -64,5 +64,5 @@ def test_rpi5_mjcf_obstacles():
 
 
 def test_rpi5_sole_clearance_and_target_mass():
-    from pipelines.rpi5_stack.training.env_config import _DEFAULT_CFG
+    from hardware.rpi5.training.env_config import _DEFAULT_CFG
     assert_sole_clearance_and_target_mass(MJCF_PATH, _DEFAULT_CFG.TARGET_MASS)

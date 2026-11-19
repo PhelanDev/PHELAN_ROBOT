@@ -7,8 +7,8 @@ _ROOT = str(Path(__file__).resolve().parent.parent)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 from robot.robot_spec import CHECKPOINT_PREFIX, MODEL_NAME, MODEL_PATH
-from training.policy_contract import observation_schema
-from training.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
+from sim.env.policy_contract import observation_schema
+from sim.env.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
 
 DEFAULT_SAVE_PATH = Path(_ROOT) / "models" / "checkpoints" / f"{CHECKPOINT_PREFIX}_sac.pt"
 

@@ -1,30 +1,37 @@
-"""Reinforcement Learning Environment Configuration for MicroDuck 8-DOF (RPi 5 Stack).
+"""Reinforcement Learning Environment Configuration for MicroDuck 8-DOF (Dual ESP32-S3 Stack).
 
-Thin parameterized wrapper delegating common training environment logic to training.env_config.
+Thin parameterized wrapper delegating common training environment logic to sim.env.env_config.
 """
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 from robot.robot_spec import TOTAL_MASS_KG
 
-from training.env_config import (
+from sim.env.env_config import (
     MicroDuck8DoFConfig as BaseConfig,
     compute_observations,
     scale_actions,
     clip_action_rates,
     quat_rotate_inverse,
     compute_rewards,
+    DEFAULT_OBS_BOUNDS,
+    DEFAULT_OBS_SCALES,
+    quantize_obs_int8,
+    dequantize_obs_int8,
+    dequantize_act_int8,
+    generate_esp32_quant_header,
 )
 
 
 @dataclass
 class MicroDuck8DoFConfig(BaseConfig):
-    """Configuration dataclass for MicroDuck 8-DOF on Raspberry Pi 5 Stack."""
+    """Configuration dataclass for MicroDuck 8-DOF on Dual ESP32-S3 Stack."""
 
-    STACK_NAME: str = "rpi5_stack"
+    STACK_NAME: str = "dual_esp32s3_stack"
     TARGET_MASS: float = TOTAL_MASS_KG  # Shared V2 model; runtime profile does not change physics.
-    POLICY_DTYPE: str = "float32"
+    POLICY_DTYPE: str = "int8"  # Quantized for ESP32-S3 PIE vector instructions
 
     OBS_DIM: int = 42
     ACTION_DIM: int = 8

@@ -17,11 +17,11 @@ import math
 from typing import Dict, Optional, Tuple, Union
 import numpy as np
 
-from training.env_config import (
+from sim.env.env_config import (
     DEFAULT_NOMINAL_QPOS,
     JOINT_LIMITS,
 )
-from training.self_righting import (
+from sim.behaviors.self_righting import (
     FallClassifier,
     FallType,
     RecoveryState,

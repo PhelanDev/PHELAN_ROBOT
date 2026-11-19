@@ -13,8 +13,8 @@ import pytest
 # Ensure repository root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from training.env_config import MicroDuck8DoFConfig
-from training.run_parallel_sim import ParallelSimRunner, run_benchmark
+from sim.env.env_config import MicroDuck8DoFConfig
+from sim.env.run_parallel_sim import ParallelSimRunner, run_benchmark
 
 
 @pytest.mark.parametrize("fast", [False, True])
@@ -44,7 +44,7 @@ def test_audit_action_history_terminal_and_partial_reset(fast):
 
 
 def test_audit_reward_uses_previous_action(monkeypatch):
-    import training.run_parallel_sim as module
+    import sim.env.run_parallel_sim as module
     original = module.compute_rewards
     captured = []
     def capture(**kwargs):
@@ -66,7 +66,7 @@ def test_parallel_sim_benchmark_cli():
     res = subprocess.run(
         [
             sys.executable,
-            "training/run_parallel_sim.py",
+            "sim/env/run_parallel_sim.py",
             "--num_envs",
             "16",
             "--steps",
@@ -184,7 +184,7 @@ def test_parallel_sim_cli_invalid_path():
     res = subprocess.run(
         [
             sys.executable,
-            "training/run_parallel_sim.py",
+            "sim/env/run_parallel_sim.py",
             "--model_path",
             "non_existent.xml",
         ],

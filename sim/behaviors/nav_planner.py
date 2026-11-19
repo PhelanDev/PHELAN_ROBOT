@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Optional
 import numpy as np
 
-from training.env_config import quat_to_yaw
+from sim.env.env_config import quat_to_yaw
 
 # 5-Ray angles [m30, m15, 0, p15, p30] matching MuJoCo rangefinder fan
 RAY_ANGLES = np.array(

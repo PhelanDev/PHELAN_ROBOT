@@ -19,14 +19,14 @@ import pytest
 # Ensure repository root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from training.env_config import (
+from sim.env.env_config import (
     MicroDuck8DoFConfig,
     LocomotionMode,
     SIT_NOMINAL_QPOS,
     TARGET_SIT_HEIGHT,
     compute_rewards,
 )
-from training.run_parallel_sim import ParallelSimRunner
+from sim.env.run_parallel_sim import ParallelSimRunner
 
 
 def test_locomotion_mode_enum_and_constants():

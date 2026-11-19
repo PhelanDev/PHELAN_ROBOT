@@ -16,8 +16,8 @@ from scripts.evaluate_models_sim import (
     has_obstacle_contact,
     run_benchmark_scenario,
 )
-from training.env_config import quat_to_yaw
-from training.run_parallel_sim import ParallelSimRunner
+from sim.env.env_config import quat_to_yaw
+from sim.env.run_parallel_sim import ParallelSimRunner
 
 
 def test_compute_path_unstability_handles_pi_wraparound():

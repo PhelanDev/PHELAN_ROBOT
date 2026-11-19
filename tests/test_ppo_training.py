@@ -409,7 +409,7 @@ def test_export_esp32_c_headers_syntax_and_compilation(tmp_path):
     """Verify INT8 quantized weights and INT32 biases header generation and C++ compilation."""
     from scripts.train_ppo import ActorCritic
     from scripts.export_policy import export_esp32_headers
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
 
     torch.manual_seed(42)
     model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256)
@@ -638,7 +638,7 @@ def test_duck_train_v2_resume_prefers_ppo_over_best(monkeypatch):
 
 def test_runner_mean_distance_y_and_fast_rollout_parity():
     """Verify runner.get_mean_distance_y() and fast rollout step parity against standard step."""
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
     runner = ParallelSimRunner(
         model_path="robot/cyberduck_v2.xml",
         num_envs=4,
@@ -710,7 +710,7 @@ def test_actor_critic_clamps_extreme_loaded_log_std_in_forward():
 def test_critic_value_loss_updates_across_large_return_gap(monkeypatch, tmp_path):
     """Critic must update values even when |mb_ret - mb_val| >> clip_epsilon (no v_clipped zero-grad lock)."""
     from scripts.train_ppo import ActorCritic, train_ppo
-    import training.run_parallel_sim as sim_mod
+    import sim.env.run_parallel_sim as sim_mod
 
     orig_step_arrays = sim_mod.ParallelSimRunner.step_arrays
 
@@ -844,7 +844,7 @@ def test_stage_promotion_best_ckpt_uses_rollout_stage_and_resets_baseline(monkey
     """Promoting Stage 0->1 after iter 1 must label best_ckpt Stage 0; iter 2 Stage 1 rollout resets baseline."""
     monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
     import scripts.train_ppo as ppo_mod
-    import training.run_parallel_sim as sim_mod
+    import sim.env.run_parallel_sim as sim_mod
 
     orig_step = sim_mod.ParallelSimRunner.step_arrays
     reward_per_iter = {"val": 2.5}
@@ -891,7 +891,7 @@ def test_collapsed_promoted_stage_rollout_does_not_overwrite_best_ckpt(monkeypat
     """Negative-distance collapsed Stage 1 rollout must NOT overwrite a valid Stage 0 best checkpoint."""
     monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
     import scripts.train_ppo as ppo_mod
-    import training.run_parallel_sim as sim_mod
+    import sim.env.run_parallel_sim as sim_mod
 
     save_p = tmp_path / "collapse_ppo.pt"
     best_p = tmp_path / "collapse_best.pt"
@@ -937,7 +937,7 @@ def test_resume_stage1_with_legacy_stage0_best_ckpt_unlocks_stage1_best(monkeypa
     """Resuming legacy Stage 1 ppo.pt (missing 'best_stage') + Stage 0 best.pt allows Stage 1 rollout to update best.pt."""
     monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
     import scripts.train_ppo as ppo_mod
-    import training.run_parallel_sim as sim_mod
+    import sim.env.run_parallel_sim as sim_mod
 
     save_p = tmp_path / "legacy_stage_ppo.pt"
     best_p = tmp_path / "legacy_stage_best.pt"
@@ -1045,7 +1045,7 @@ def test_transfer_load_checkpoint_skips_velocity_warmup_and_iter1_best_lockout(m
     """Transfer loading skips early velocity clamping and prevents Iter-1 rollout from locking best_checkpoint."""
     monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
     import scripts.train_ppo as ppo_mod
-    import training.run_parallel_sim as sim_mod
+    import sim.env.run_parallel_sim as sim_mod
 
     seed_save_p = tmp_path / "seed_transfer_ppo.pt"
     ppo_mod.train_ppo(
@@ -1175,7 +1175,7 @@ def test_missing_load_checkpoint_falls_back_to_scratch_warmup(monkeypatch, tmp_p
     """When load_checkpoint does not exist, training falls back to scratch with velocity warmup applied."""
     monkeypatch.setattr("scripts.train_ppo.evaluate_deterministic_rollout", lambda **kw: (0.3, 1.0))
     import scripts.train_ppo as ppo_mod
-    import training.run_parallel_sim as sim_mod
+    import sim.env.run_parallel_sim as sim_mod
 
     missing_ckpt = tmp_path / "does_not_exist.pt"
     save_p = tmp_path / "scratch_missing_ppo.pt"
@@ -1261,7 +1261,7 @@ def test_running_mean_std_statistics_no_nan_and_clipping():
 def test_parallel_sim_runner_privileged_obs_and_terminal_critic_obs():
     """ParallelSimRunner privileged_obs_dim is obs_dim + 11, get_privileged_obs() is finite,
     and step() includes terminal_critic_obs before resetting envs."""
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
         model_path="robot/cyberduck_v2.xml",
@@ -1510,7 +1510,7 @@ def test_atomic_torch_save_replaces_cleanly(tmp_path):
 
 def test_get_privileged_obs_vectorized_subsets_and_eval_runner_reuse(tmp_path):
     """ParallelSimRunner.get_privileged_obs handles empty/arbitrary subsets and eval_runner reuse."""
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
     from scripts.train_ppo import ActorCritic, RunningMeanStd, evaluate_deterministic_rollout
 
     # 1. Privileged obs with hurdles
@@ -1604,7 +1604,7 @@ def test_transfer_preserves_squash_actions_and_pre_optimizer_parity(monkeypatch,
     """F8: Warm-start transfer must preserve source squash_actions metadata and pre-optimizer action semantics."""
     import scripts.train_ppo as ppo_mod
     from scripts.train_ppo import ActorCritic, RunningMeanStd
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
 
     obs_dim, act_dim, hidden_dim = 42, 8, 256
     src = ActorCritic(obs_dim=obs_dim, action_dim=act_dim, hidden_dim=hidden_dim, squash_actions=source_squash)
@@ -1666,7 +1666,7 @@ def test_transfer_bc_and_legacy_squash_metadata_and_invalid_rejected(tmp_path):
     """F8: BC checkpoints declare squash_actions=False; legacy without metadata fails loud unless explicit; bad type writes nothing."""
     from scripts.pretrain_bc import train_behavior_cloning, save_bc_checkpoint
     from scripts.train_ppo import ActorCritic, train_ppo
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
 
     obs = np.random.randn(20, 42).astype(np.float32)
     acts = np.random.uniform(-0.5, 0.5, size=(20, 8)).astype(np.float32)

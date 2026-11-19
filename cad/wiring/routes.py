@@ -41,10 +41,9 @@ def harnesses(variant):
         # Rear S-loop through the open neck cable channel (all neck X <= -30).
         Harness('head_harness', (
             ('trunk_base', (-55, 0, 14)),
-            ('trunk_base', (-53, 0, 28)),
-            ('trunk_base', (-50, 0, 43)),
-            ('neck', (-46, 0, 22)),
-            ('neck', (-46, 0, 40)),
+            ('trunk_base', (-51, 0, 42)),
+            ('neck', (-44, 0, 24)),
+            ('neck', (-46, 0, 44)),
             ('neck', (-44, 0, 58)),
             ('head', (-52 + HEAD_FORWARD, 4, 24)),
             ('head', (-34 + HEAD_FORWARD, 4, 24)),

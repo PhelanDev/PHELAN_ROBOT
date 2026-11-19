@@ -65,5 +65,5 @@ def test_esp32_mjcf_obstacles():
 
 
 def test_esp32_sole_clearance_and_target_mass():
-    from pipelines.dual_esp32s3_stack.training.env_config import _DEFAULT_CFG
+    from hardware.dual_esp32s3.training.env_config import _DEFAULT_CFG
     assert_sole_clearance_and_target_mass(MJCF_PATH, _DEFAULT_CFG.TARGET_MASS)

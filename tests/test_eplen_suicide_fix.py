@@ -17,14 +17,14 @@ import mujoco
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from training.env_config import (
+from sim.env.env_config import (
     MicroDuck8DoFConfig,
     _DEFAULT_CFG,
     LocomotionMode,
     compute_rewards,
     DEFAULT_NOMINAL_QPOS,
 )
-from training.run_parallel_sim import ParallelSimRunner
+from sim.env.run_parallel_sim import ParallelSimRunner
 
 
 def test_suicide_lunge_17_steps_is_net_negative():
@@ -271,8 +271,8 @@ def test_stack_runners_success_rate_and_distance_methods():
     """Verify ParallelSimRunner in both pipelines/rpi5_stack and pipelines/dual_esp32s3_stack
     have completed_distances_x, get_mean_distance_x(), and get_success_rate(), and use
     calibrated grav_z > -0.707 instead of -0.3."""
-    from pipelines.rpi5_stack.training.run_parallel_sim import ParallelSimRunner as RPi5Runner
-    from pipelines.dual_esp32s3_stack.training.run_parallel_sim import ParallelSimRunner as ESP32Runner
+    from hardware.rpi5.training.run_parallel_sim import ParallelSimRunner as RPi5Runner
+    from hardware.dual_esp32s3.training.run_parallel_sim import ParallelSimRunner as ESP32Runner
 
     for RunnerCls, name in [(RPi5Runner, "RPi5"), (ESP32Runner, "ESP32-S3")]:
         runner = RunnerCls(num_envs=1)
@@ -352,8 +352,8 @@ def test_interactive_viewer_observation_phase_clock_parity():
     """Verify extract_viewer_observation embeds [clock_sin, clock_cos] at obs[35:37],
     matching ParallelSimRunner._extract_obs()."""
     from scripts.interactive_viewer import extract_viewer_observation
-    from training.run_parallel_sim import ParallelSimRunner
-    from training.env_config import compute_gait_phase
+    from sim.env.run_parallel_sim import ParallelSimRunner
+    from sim.env.env_config import compute_gait_phase
 
     runner = ParallelSimRunner(num_envs=1, terrain_mode="flat")
     try:
@@ -389,8 +389,8 @@ def test_task2_locomotion_fall_tolerance_relaxation():
     3. WALK mode tilt threshold is -0.707 (45 deg) instead of -0.81915 (35 deg).
     4. Early fall at step < 60 only receives fall_penalty (-5.0) without extra -10.0.
     """
-    from pipelines.rpi5_stack.training.run_parallel_sim import ParallelSimRunner as RPi5Runner
-    from pipelines.dual_esp32s3_stack.training.run_parallel_sim import ParallelSimRunner as ESP32Runner
+    from hardware.rpi5.training.run_parallel_sim import ParallelSimRunner as RPi5Runner
+    from hardware.dual_esp32s3.training.run_parallel_sim import ParallelSimRunner as ESP32Runner
 
     # 1. Default walk_min_z across all 3 runners
     r_main = ParallelSimRunner(num_envs=1)

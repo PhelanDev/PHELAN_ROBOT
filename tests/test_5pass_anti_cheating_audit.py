@@ -29,7 +29,7 @@ import mujoco
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from training.env_config import (
+from sim.env.env_config import (
     MicroDuck8DoFConfig,
     _DEFAULT_CFG,
     LocomotionMode,
@@ -48,16 +48,16 @@ from training.env_config import (
     TARGET_LIE_HEIGHT,
     JOINT_LIMITS,
 )
-from training.run_parallel_sim import ParallelSimRunner
-from training.terrain_curriculum import next_stage, next_stair_stage
+from sim.env.run_parallel_sim import ParallelSimRunner
+from sim.env.terrain_curriculum import next_stage, next_stair_stage
 from scripts.interactive_viewer import extract_viewer_observation
-from training.self_righting import (
+from sim.behaviors.self_righting import (
     SelfRightingController,
     FallClassifier,
     FallType,
     RecoveryState,
 )
-from training.voice_commander import (
+from sim.perception.voice_commander import (
     VoiceCommander,
     VoiceIntent,
     parse_text,
@@ -573,7 +573,7 @@ def test_audit_12_voice_intent_crc16_integrity():
 
 def test_audit_13_four_golden_hoops_anti_vibration():
     """Audit 13: 4 Golden Hoops Anti-Vibration & Locomotion Integrity Certification."""
-    from training.env_config import _DEFAULT_CFG, compute_rewards
+    from sim.env.env_config import _DEFAULT_CFG, compute_rewards
 
     # 1. Hoop 1: Single support & double support dwell threshold
     assert _DEFAULT_CFG.REWARD_WEIGHTS.get("double_support_penalty") == -0.5

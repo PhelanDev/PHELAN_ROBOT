@@ -1,12 +1,12 @@
 """Comprehensive Tests for Hardware Deployment Artifacts and Firmware.
 
 Covers:
-1. pipelines/rpi5_stack/deployment/infer_rpi5.py
-2. pipelines/rpi5_stack/docs/rpi5_hardware_spec.md
-3. pipelines/dual_esp32s3_stack/deployment/uart_packet_protocol.h
-4. pipelines/dual_esp32s3_stack/deployment/mcu1_vision_audio_s3/mcu1_main.ino
-5. pipelines/dual_esp32s3_stack/deployment/mcu2_locomotion_s3/mcu2_main.ino
-6. pipelines/dual_esp32s3_stack/docs/dual_esp32s3_hardware_spec.md
+1. hardware/rpi5/deployment/infer_rpi5.py
+2. hardware/rpi5/docs/rpi5_hardware_spec.md
+3. hardware/dual_esp32s3/deployment/uart_packet_protocol.h
+4. hardware/dual_esp32s3/deployment/mcu1_vision_audio_s3/mcu1_main.ino
+5. hardware/dual_esp32s3/deployment/mcu2_locomotion_s3/mcu2_main.ino
+6. hardware/dual_esp32s3/docs/dual_esp32s3_hardware_spec.md
 """
 
 from pathlib import Path
@@ -35,7 +35,7 @@ def test_audit_esp32_rejects_37_before_creating_artifacts(tmp_path):
 def test_esp32_export_requires_verified_v2_identity(tmp_path, model_name):
     from scripts.export_policy import export_esp32_headers
     from scripts.train_ppo import ActorCritic
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
 
     actor = ActorCritic(hidden_dim=16)
     actor.observation_schema = observation_schema(42, True, 0.02)
@@ -54,7 +54,7 @@ def test_esp32_firmware_v2_identity_contract(tmp_path, mutation):
         pytest.skip("g++ compiler not available")
     from scripts.export_policy import export_esp32_headers
     from scripts.train_ppo import ActorCritic
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
 
     actor = ActorCritic(hidden_dim=16)
     actor.model_name = "cyberduck_v2.xml"
@@ -71,8 +71,8 @@ def test_esp32_firmware_v2_identity_contract(tmp_path, mutation):
     elif mutation == "wrong_config_model":
         config.write_text(config.read_text(encoding="utf-8").replace('QUANT_MODEL_NAME "cyberduck_v2.xml"', 'QUANT_MODEL_NAME "microduck_esp32_8dof.xml"'), encoding="utf-8")
 
-    contract = REPO_ROOT / "pipelines/dual_esp32s3_stack/deployment/v2_policy_contract.h"
-    firmware = (REPO_ROOT / "pipelines/dual_esp32s3_stack/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
+    contract = REPO_ROOT / "hardware/dual_esp32s3/deployment/v2_policy_contract.h"
+    firmware = (REPO_ROOT / "hardware/dual_esp32s3/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
     assert '#include "../v2_policy_contract.h"' in firmware
     source = tmp_path / "identity.cpp"
     source.write_text(
@@ -96,8 +96,8 @@ def test_audit_firmware_guards_and_assembly_canary(tmp_path, obs_dim, layer_inpu
     import re
     from scripts.export_policy import export_esp32_headers
     from scripts.train_ppo import ActorCritic
-    from training.policy_contract import observation_schema
-    firmware = (REPO_ROOT / "pipelines/dual_esp32s3_stack/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
+    from sim.env.policy_contract import observation_schema
+    firmware = (REPO_ROOT / "hardware/dual_esp32s3/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
     guards = "\n".join(re.findall(r'^static_assert\([^\n]+', firmware, re.M))
     assert guards
     function = firmware[firmware.index("void assemble_observation("):firmware.index("void evaluate_locomotion_policy(")]
@@ -164,7 +164,7 @@ def _compile_and_run_cpp(
 
 def test_rpi5_infer_script_import_and_mock():
     """Verify RPi5 inference runtime import, angle-to-PWM mapping, and mock mode."""
-    from pipelines.rpi5_stack.deployment.infer_rpi5 import (
+    from hardware.rpi5.deployment.infer_rpi5 import (
         RPi5InferenceEngine,
         angle_to_pwm,
         pack_rpi5_observation,
@@ -233,7 +233,7 @@ def test_rpi5_infer_onnx_model_execution(tmp_path):
     """Test RPi5 inference runtime loading and evaluating a real ONNX model."""
     import onnx
     from onnx import helper, TensorProto
-    from pipelines.rpi5_stack.deployment.infer_rpi5 import RPi5InferenceEngine
+    from hardware.rpi5.deployment.infer_rpi5 import RPi5InferenceEngine
 
     # Build a tiny dummy ONNX model: output = MatMul(obs, W) where W is 42x8
     input_tensor = helper.make_tensor_value_info("obs", TensorProto.FLOAT, [1, 42])
@@ -255,7 +255,7 @@ def test_rpi5_infer_onnx_model_execution(tmp_path):
 
     model_file = tmp_path / "dummy_policy.onnx"
     import json
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
     onnx.helper.set_model_props(model, {"observation_schema": json.dumps(observation_schema(42, False, 0.02))})
     onnx.save(model, str(model_file))
 
@@ -274,10 +274,10 @@ def test_rpi5_infer_onnx_model_execution(tmp_path):
 
 def test_rpi5_infer_cli(tmp_path):
     """Verify CLI flags --mock, --mock-pca, --freq, --rate, --model work properly."""
-    script_path = REPO_ROOT / "pipelines" / "rpi5_stack" / "deployment" / "infer_rpi5.py"
+    script_path = REPO_ROOT / "hardware" / "rpi5" / "deployment" / "infer_rpi5.py"
     assert script_path.exists(), f"Missing script: {script_path}"
     import json
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
     schema_file = tmp_path / "verified-test-schema.json"
     schema_file.write_text(json.dumps(observation_schema(42, False, 0.02)), encoding="utf-8")
     from scripts.train_ppo import ActorCritic
@@ -316,7 +316,7 @@ def test_rpi5_infer_cli(tmp_path):
 
 def test_rpi5_hardware_spec_doc():
     """Verify rpi5_hardware_spec.md exists and contains thorough technical documentation."""
-    spec_path = REPO_ROOT / "pipelines" / "rpi5_stack" / "docs" / "rpi5_hardware_spec.md"
+    spec_path = REPO_ROOT / "hardware" / "rpi5" / "docs" / "rpi5_hardware_spec.md"
     assert spec_path.exists(), f"Missing spec: {spec_path}"
 
     content = spec_path.read_text(encoding="utf-8")
@@ -339,7 +339,7 @@ def test_rpi5_hardware_spec_doc():
 
 def test_pizero2w_hardware_spec_doc():
     """Verify pizero2w_hardware_spec.md exists and contains thorough technical documentation."""
-    spec_path = REPO_ROOT / "pipelines" / "pizero2w_stack" / "docs" / "pizero2w_hardware_spec.md"
+    spec_path = REPO_ROOT / "hardware" / "pizero2w" / "docs" / "pizero2w_hardware_spec.md"
     assert spec_path.exists(), f"Missing spec: {spec_path}"
 
     content = spec_path.read_text(encoding="utf-8")
@@ -366,8 +366,8 @@ def test_uart_packet_protocol_cpp_compilation(tmp_path):
     """Test C/C++ header compilation and packet encode/decode/CRC validation."""
     header_path = (
         REPO_ROOT
-        / "pipelines"
-        / "dual_esp32s3_stack"
+        / "hardware"
+        / "dual_esp32s3"
         / "deployment"
         / "uart_packet_protocol.h"
     )
@@ -470,8 +470,8 @@ def test_mcu1_vision_audio_sketch():
     """Verify MCU 1 Arduino sketch contains necessary peripherals, pinouts, and high-speed UART."""
     sketch_path = (
         REPO_ROOT
-        / "pipelines"
-        / "dual_esp32s3_stack"
+        / "hardware"
+        / "dual_esp32s3"
         / "deployment"
         / "mcu1_vision_audio_s3"
         / "mcu1_main.ino"
@@ -495,8 +495,8 @@ def test_mcu2_locomotion_sketch():
     """Verify MCU 2 Arduino sketch handles UART, MPU6050, 42-dim obs, and 50Hz INT8 policy."""
     sketch_path = (
         REPO_ROOT
-        / "pipelines"
-        / "dual_esp32s3_stack"
+        / "hardware"
+        / "dual_esp32s3"
         / "deployment"
         / "mcu2_locomotion_s3"
         / "mcu2_main.ino"
@@ -544,8 +544,8 @@ def test_dual_esp32_hardware_spec_doc():
     """Verify dual_esp32s3_hardware_spec.md exists and contains thorough technical documentation."""
     spec_path = (
         REPO_ROOT
-        / "pipelines"
-        / "dual_esp32s3_stack"
+        / "hardware"
+        / "dual_esp32s3"
         / "docs"
         / "dual_esp32s3_hardware_spec.md"
     )
@@ -575,15 +575,15 @@ def test_mcu2_int8_policy_cpp_execution(tmp_path):
     """Compile and verify INT8 policy inference and IMU gravity filtering with C++ compiler."""
     quant_header = (
         REPO_ROOT
-        / "pipelines"
-        / "dual_esp32s3_stack"
+        / "hardware"
+        / "dual_esp32s3"
         / "deployment"
         / "esp32_quant_config.h"
     )
     policy_header = (
         REPO_ROOT
-        / "pipelines"
-        / "dual_esp32s3_stack"
+        / "hardware"
+        / "dual_esp32s3"
         / "deployment"
         / "esp32_policy_weights.h"
     )
@@ -667,8 +667,8 @@ def test_mcu2_mahony_filter_cpp_execution(tmp_path):
     """Compile and verify MCU2 Mahony AHRS algorithm, fast inverse square root, and impact gating in C++."""
     sketch_path = (
         REPO_ROOT
-        / "pipelines"
-        / "dual_esp32s3_stack"
+        / "hardware"
+        / "dual_esp32s3"
         / "deployment"
         / "mcu2_locomotion_s3"
         / "mcu2_main.ino"
@@ -820,8 +820,8 @@ def test_all_three_models_mpu6050_filtering():
     # 1. MCU 2 (ESP32-S3)
     mcu2_sketch = (
         REPO_ROOT
-        / "pipelines"
-        / "dual_esp32s3_stack"
+        / "hardware"
+        / "dual_esp32s3"
         / "deployment"
         / "mcu2_locomotion_s3"
         / "mcu2_main.ino"
@@ -832,7 +832,7 @@ def test_all_three_models_mpu6050_filtering():
     assert "0x1A" in content and "0x03" in content
 
     # 2. Pi Zero 2 W
-    from pipelines.pizero2w_stack.deployment.infer_pizero2w import (
+    from hardware.pizero2w.deployment.infer_pizero2w import (
         MPU6050FilterReader as PiZero2W_IMU,
         PiZero2WInferenceEngine,
     )
@@ -846,7 +846,7 @@ def test_all_three_models_mpu6050_filtering():
     assert hasattr(engine_pizero, "imu_reader")
 
     # 3. Raspberry Pi 5
-    from pipelines.rpi5_stack.deployment.infer_rpi5 import (
+    from hardware.rpi5.deployment.infer_rpi5 import (
         MPU6050FilterReader as RPi5_IMU,
         RPi5InferenceEngine,
     )
@@ -862,7 +862,7 @@ def test_all_three_models_mpu6050_filtering():
 
 def test_pizero2w_mahony_filter_algorithm():
     """Verify Pi Zero 2 W MPU6050FilterReader vectorized Mahony AHRS and dynamic impact gating."""
-    from pipelines.pizero2w_stack.deployment.infer_pizero2w import (
+    from hardware.pizero2w.deployment.infer_pizero2w import (
         MPU6050FilterReader,
         PiZero2WInferenceEngine,
     )
@@ -929,7 +929,7 @@ def test_pizero2w_mahony_filter_algorithm():
 
 def test_rpi5_mahony_filter_algorithm():
     """Verify Raspberry Pi 5 MPU6050FilterReader vectorized Mahony AHRS and dynamic impact gating."""
-    from pipelines.rpi5_stack.deployment.infer_rpi5 import (
+    from hardware.rpi5.deployment.infer_rpi5 import (
         MPU6050FilterReader,
         RPi5InferenceEngine,
     )
@@ -998,12 +998,12 @@ def test_deploy_proj_grav_tilted_and_nominal_action_match_sim(tmp_path):
     """Verify RPi5, PiZero2W, and MCU2 proj_grav formula against quat_rotate_inverse(q, [0, 0, -1])
     for tilted pitch +20deg and roll +20deg, AND verify action = zeros(8) maps to DEFAULT_NOMINAL_QPOS."""
     import re
-    from training.env_config import quat_rotate_inverse, DEFAULT_NOMINAL_QPOS
-    from pipelines.rpi5_stack.deployment.infer_rpi5 import (
+    from sim.env.env_config import quat_rotate_inverse, DEFAULT_NOMINAL_QPOS
+    from hardware.rpi5.deployment.infer_rpi5 import (
         MPU6050FilterReader as RPi5_IMU,
         RPi5InferenceEngine,
     )
-    from pipelines.pizero2w_stack.deployment.infer_pizero2w import (
+    from hardware.pizero2w.deployment.infer_pizero2w import (
         MPU6050FilterReader as PiZero2W_IMU,
         PiZero2WInferenceEngine,
     )
@@ -1048,8 +1048,8 @@ def test_deploy_proj_grav_tilted_and_nominal_action_match_sim(tmp_path):
     # Check MCU2 tilted proj_grav and nominal action scaling by compiling C++ test with formulas from mcu2_main.ino
     mcu2_sketch = (
         REPO_ROOT
-        / "pipelines"
-        / "dual_esp32s3_stack"
+        / "hardware"
+        / "dual_esp32s3"
         / "deployment"
         / "mcu2_locomotion_s3"
         / "mcu2_main.ino"
@@ -1063,7 +1063,7 @@ def test_deploy_proj_grav_tilted_and_nominal_action_match_sim(tmp_path):
     assert m0 and m1 and m2, "Could not extract proj_grav lines from mcu2_main.ino"
 
     # Extract action scaling from evaluate_locomotion_policy in mcu2_main.ino
-    from training.env_config import DEFAULT_ACTION_SCALES, scale_actions
+    from sim.env.env_config import DEFAULT_ACTION_SCALES, scale_actions
     m_scale = re.search(r"const\s+float\s+JOINT_ACTION_SCALE\[8\]\s*=\s*\{([^}]+)\};", mcu2_content)
     assert m_scale, "Could not extract JOINT_ACTION_SCALE from mcu2_main.ino"
     mcu_scales = np.array([float(x.replace("f", "").strip()) for x in m_scale.group(1).split(",")], dtype=np.float32)
@@ -1183,8 +1183,8 @@ def test_esp32_int8_export_matches_float32_inference(tmp_path):
     import torch
     from scripts.train_ppo import ActorCritic
     from scripts.export_policy import export_esp32_headers
-    from pipelines.dual_esp32s3_stack.training.env_config import DEFAULT_OBS_BOUNDS
-    from training.policy_contract import observation_schema
+    from hardware.dual_esp32s3.training.env_config import DEFAULT_OBS_BOUNDS
+    from sim.env.policy_contract import observation_schema
 
     torch.manual_seed(42)
     np.random.seed(42)
@@ -1307,9 +1307,9 @@ def test_esp32_int8_export_matches_float32_inference(tmp_path):
 
 def test_uart_protocol_and_sensor_wiring_in_firmware_and_python():
     """Task 6: Structural and protocol assertions for firmware and deployment scripts."""
-    proto = Path("pipelines/dual_esp32s3_stack/deployment/uart_packet_protocol.h").read_text(encoding="utf-8")
-    mcu1 = Path("pipelines/dual_esp32s3_stack/deployment/mcu1_vision_audio_s3/mcu1_main.ino").read_text(encoding="utf-8")
-    mcu2 = Path("pipelines/dual_esp32s3_stack/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
+    proto = Path("hardware/dual_esp32s3/deployment/uart_packet_protocol.h").read_text(encoding="utf-8")
+    mcu1 = Path("hardware/dual_esp32s3/deployment/mcu1_vision_audio_s3/mcu1_main.ino").read_text(encoding="utf-8")
+    mcu2 = Path("hardware/dual_esp32s3/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
 
     assert "PKT_TYPE_COLOR_TARGET" in proto, "uart_packet_protocol.h missing PKT_TYPE_COLOR_TARGET"
     assert "ColorTargetPacket" in proto, "uart_packet_protocol.h missing ColorTargetPacket struct"
@@ -1343,8 +1343,8 @@ def test_uart_protocol_and_sensor_wiring_in_firmware_and_python():
     )
 
     for py_path in (
-        "pipelines/rpi5_stack/deployment/infer_rpi5.py",
-        "pipelines/pizero2w_stack/deployment/infer_pizero2w.py",
+        "hardware/rpi5/deployment/infer_rpi5.py",
+        "hardware/pizero2w/deployment/infer_pizero2w.py",
     ):
         src = Path(py_path).read_text(encoding="utf-8")
         assert "prev_q" in src, f"{py_path} must compute finite-difference joint_vel using prev_q"
@@ -1354,7 +1354,7 @@ def test_uart_protocol_and_sensor_wiring_in_firmware_and_python():
 
 def test_uart_protocol_header_compilation_and_crc(tmp_path):
     """Verify C++ compilation and real CRC16 packing/unpacking for uart_packet_protocol.h."""
-    header_path = REPO_ROOT / "pipelines" / "dual_esp32s3_stack" / "deployment" / "uart_packet_protocol.h"
+    header_path = REPO_ROOT / "hardware" / "dual_esp32s3" / "deployment" / "uart_packet_protocol.h"
     cpp_source = f"""#include <iostream>
 #include <cassert>
 #include "{header_path.as_posix()}"
@@ -1408,8 +1408,8 @@ int main() {{
 
 def test_rpi5_and_pizero2w_joint_vel_and_sensor_fallback():
     """Verify finite-difference joint_vel and sensor fallback warnings in Python engines."""
-    from pipelines.rpi5_stack.deployment.infer_rpi5 import RPi5InferenceEngine
-    from pipelines.pizero2w_stack.deployment.infer_pizero2w import PiZero2WInferenceEngine
+    from hardware.rpi5.deployment.infer_rpi5 import RPi5InferenceEngine
+    from hardware.pizero2w.deployment.infer_pizero2w import PiZero2WInferenceEngine
 
     for engine_cls, name in [(RPi5InferenceEngine, "RPi5"), (PiZero2WInferenceEngine, "PiZero2W")]:
         engine = engine_cls(mock=True, freq=50.0)
@@ -1434,7 +1434,7 @@ def test_rpi5_and_pizero2w_joint_vel_and_sensor_fallback():
 
 def test_mcu2_emergency_stop_latching_and_crc_validation(tmp_path):
     """Verify MCU2 C++ packet parser: E-stop CRC validation, latching, and CRC-guarded watchdog."""
-    header_path = REPO_ROOT / "pipelines" / "dual_esp32s3_stack" / "deployment" / "uart_packet_protocol.h"
+    header_path = REPO_ROOT / "hardware" / "dual_esp32s3" / "deployment" / "uart_packet_protocol.h"
     cpp_source = f"""#include <iostream>
 #include <cassert>
 #include <cstring>
@@ -1513,8 +1513,8 @@ def test_mcu2_gait_phase_observation():
     """Verify MCU 2 injects gait phase clock [sin(phase), cos(phase)] into obs_out[35..36]."""
     mcu2_sketch = (
         REPO_ROOT
-        / "pipelines"
-        / "dual_esp32s3_stack"
+        / "hardware"
+        / "dual_esp32s3"
         / "deployment"
         / "mcu2_locomotion_s3"
         / "mcu2_main.ino"
@@ -1537,7 +1537,7 @@ def test_export_policy_obs_norm_and_asymmetric_critic_parity(tmp_path):
     import torch
     from scripts.train_ppo import ActorCritic
     from scripts.export_policy import export_onnx, export_esp32_headers
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
 
     torch.manual_seed(42)
     np.random.seed(42)
@@ -1678,8 +1678,8 @@ def test_zero_variance_obs_rms_does_not_amplify_by_100x():
 
 def test_mcu2_separate_packet_timestamps_and_independent_expiry(tmp_path):
     """F1: Heartbeat/color must not refresh command/LiDAR freshness; velocity must not refresh LiDAR; CRC error refreshes nothing."""
-    header_path = REPO_ROOT / "pipelines" / "dual_esp32s3_stack" / "deployment" / "uart_packet_protocol.h"
-    mcu2_src = (REPO_ROOT / "pipelines/dual_esp32s3_stack/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
+    header_path = REPO_ROOT / "hardware" / "dual_esp32s3" / "deployment" / "uart_packet_protocol.h"
+    mcu2_src = (REPO_ROOT / "hardware/dual_esp32s3/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
     proc_fn = mcu2_src[mcu2_src.index("void process_uart_packets()"):mcu2_src.index("// ============================================================================\n// 42-Dimensional")]
     lidar_fn = mcu2_src[mcu2_src.index("void read_lidar_distances("):mcu2_src.index("void assemble_observation(")]
     # Extract watchdog logic from loop() or helper
@@ -1807,7 +1807,7 @@ int main() {{
 
 def test_mpu6050_signed_int16_decode_and_i2c_error_freshness():
     """F2: MPU6050FilterReader must decode negative two's complement words on NumPy 2.x and expose I2C error/staleness."""
-    from pipelines.rpi_infer_core import MPU6050FilterReader, BaseRPiInferenceEngine
+    from hardware.rpi_infer_core import MPU6050FilterReader, BaseRPiInferenceEngine
 
     class FakeBus:
         def __init__(self):
@@ -1890,11 +1890,11 @@ def test_mpu6050_signed_int16_decode_and_i2c_error_freshness():
 @pytest.mark.parametrize("embed_clock,moving", [(False, False), (False, True), (True, False), (True, True)])
 def test_esp32_schema_clock_parity_and_rejection(tmp_path, embed_clock, moving):
     """F3: ESP32 export rejects unsupported schemas before writing; MCU2 C++ clock matches runner on reset/steps/zero-cmd."""
-    from training.policy_contract import observation_schema
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.policy_contract import observation_schema
+    from sim.env.run_parallel_sim import ParallelSimRunner
     from scripts.train_ppo import ActorCritic
     from scripts.export_policy import export_esp32_headers
-    from pipelines.dual_esp32s3_stack.training.env_config import MicroDuck8DoFConfig
+    from hardware.dual_esp32s3.training.env_config import MicroDuck8DoFConfig
 
     # 1. Unsupported control_dt and missing schema must fail BEFORE creating directory/files
     bad_dir = tmp_path / "bad_export"
@@ -1926,7 +1926,7 @@ def test_esp32_schema_clock_parity_and_rejection(tmp_path, embed_clock, moving):
         model.observation_schema = schema
         weights_h, config_h = export_esp32_headers(model, tmp_path / "weights.h", tmp_path / "config.h")
 
-        mcu2_src = (REPO_ROOT / "pipelines/dual_esp32s3_stack/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
+        mcu2_src = (REPO_ROOT / "hardware/dual_esp32s3/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
         assert "POLICY_EMBED_PHASE_CLOCK" in mcu2_src
         asm_fn = mcu2_src[mcu2_src.index("void assemble_observation("):mcu2_src.index("void evaluate_locomotion_policy(")]
         eval_fn = mcu2_src[mcu2_src.index("void evaluate_locomotion_policy("):mcu2_src.index("// ============================================================================\n// Main Setup")]

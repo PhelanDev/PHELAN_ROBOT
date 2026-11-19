@@ -1,6 +1,6 @@
 """Reinforcement Learning Environment Configuration for MicroDuck 8-DOF (RPi Zero 2 W Stack).
 
-Thin parameterized wrapper delegating common training environment logic to training.env_config.
+Thin parameterized wrapper delegating common training environment logic to sim.env.env_config.
 """
 
 from dataclasses import dataclass, field
@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 from robot.robot_spec import TOTAL_MASS_KG
 
-from training.env_config import (
+from sim.env.env_config import (
     MicroDuck8DoFConfig as BaseConfig,
     compute_observations,
     scale_actions,

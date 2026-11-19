@@ -8,8 +8,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from training.env_config import compute_foot_clearance_and_stumble, compute_rewards
-from training.run_parallel_sim import DuckParallelSim
+from sim.env.env_config import compute_foot_clearance_and_stumble, compute_rewards
+from sim.env.run_parallel_sim import DuckParallelSim
 
 
 def test_stance_foot_zero_clearance_penalty():

@@ -17,8 +17,8 @@ import mujoco
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from training.env_config import compute_rewards
-from training.run_parallel_sim import ParallelSimRunner
+from sim.env.env_config import compute_rewards
+from sim.env.run_parallel_sim import ParallelSimRunner
 
 
 def test_strict_tilt_termination():

@@ -19,7 +19,7 @@ def reward_args(**overrides):
 
 
 def test_reward_dwell_and_weighted_progress_scalar_batch():
-    from training.env_config import compute_rewards, LocomotionMode
+    from sim.env.env_config import compute_rewards, LocomotionMode
 
     rewards = [compute_rewards(**reward_args(standstill_time=t, delta_root_x=0))
                for t in (0.10, 0.14, 0.3)]
@@ -43,7 +43,7 @@ def test_reward_dwell_and_weighted_progress_scalar_batch():
 
 @pytest.mark.parametrize('dt,steps', [(0.02, 2), (0.01, 4), (0.05, 2)])
 def test_gait_hysteresis_rejects_chatter_and_tracks_same_foot(dt, steps):
-    from training.run_parallel_sim import update_gait_hysteresis_state
+    from sim.env.run_parallel_sim import update_gait_hysteresis_state
 
     state = dict(standstill_time=np.array([0.2]), progress_streak=np.zeros(1, dtype=int),
                  double_support_time=np.array([0.22]), swing_clear_time=np.zeros((1, 2)),
@@ -75,7 +75,7 @@ def test_gait_hysteresis_rejects_chatter_and_tracks_same_foot(dt, steps):
 
 
 def test_sole_clearance_geometry_and_reset_isolation():
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner('robot/cyberduck_v2.xml', num_envs=2, num_threads=1)
     try:
@@ -102,7 +102,7 @@ def test_sole_clearance_geometry_and_reset_isolation():
 
 @pytest.mark.parametrize('fast', [False, True])
 def test_terminal_reward_diagnostics_precede_autoreset(fast):
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner('robot/cyberduck_v2.xml', num_envs=1, max_episode_steps=1, num_threads=1)
     try:
@@ -351,7 +351,7 @@ def test_generated_c_applies_output_transform_before_quantization(tmp_path, squa
     import subprocess
     from scripts.export_policy import export_esp32_headers
     from scripts.train_ppo import ActorCritic
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
     model = ActorCritic(hidden_dim=256, squash_actions=squash)
     model.model_name = 'cyberduck_v2.xml'
     model.observation_schema = observation_schema(42, False, 0.02)
@@ -395,7 +395,7 @@ def test_pytorch_viewing_has_no_onnx_dependency(monkeypatch, tmp_path):
 
 def test_deterministic_evaluation_repeats_same_episode_seeds():
     from scripts.train_ppo import ActorCritic, RunningMeanStd, evaluate_deterministic_rollout
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
     model = ActorCritic(squash_actions=True)
     runner = ParallelSimRunner('robot/cyberduck_v2.xml', num_envs=1)
     rms = RunningMeanStd(42)
@@ -498,7 +498,7 @@ def test_failed_best_write_preserves_existing_file(monkeypatch, tmp_path):
     (np.pi/3, 0.15, 0.003, True), (0, 0, 0.2, False), (0, 0.15, -1.2, False),
     (0, -0.15, -0.003, True)])
 def test_progress_consistency_uses_world_frame(monkeypatch, yaw, world_vx, dx, valid):
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
     runner = ParallelSimRunner('robot/cyberduck_v2.xml', num_envs=1, num_threads=1)
     try:
         d = runner.datas[0]
@@ -551,7 +551,7 @@ def test_resume_with_corrupt_best_preserves_it_until_qualified(monkeypatch, tmp_
 
 
 def test_sole_clearance_accounts_for_rotation_and_raised_terrain():
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
     runner = ParallelSimRunner('robot/cyberduck_v2.xml', num_envs=1)
     try:
         d = runner.datas[0]

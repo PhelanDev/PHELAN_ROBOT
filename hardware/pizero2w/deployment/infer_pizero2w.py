@@ -1,6 +1,6 @@
-"""Raspberry Pi 5 Real-Time Inference and Actuation Runtime for CyberDuck V2.
+"""Raspberry Pi Zero 2 W Real-Time Inference and Actuation Runtime for CyberDuck V2.
 
-Thin parameterized wrapper delegating shared inference and hardware control to pipelines.rpi_infer_core.
+Thin parameterized wrapper delegating shared inference and hardware control to hardware.rpi_infer_core.
 """
 
 import sys
@@ -11,9 +11,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from pipelines.rpi_infer_core import (
+from hardware.rpi_infer_core import (
     angle_to_pwm,
-    pack_rpi_observation as pack_rpi5_observation,
+    pack_rpi_observation as pack_pizero2w_observation,
     MockPCA9685,
     HardwarePCA9685,
     MPU6050FilterReader,
@@ -24,8 +24,8 @@ from pipelines.rpi_infer_core import (
 from robot.robot_spec import DEFAULT_ONNX_PATH as DEFAULT_MODEL_PATH
 
 
-class RPi5InferenceEngine(BaseRPiInferenceEngine):
-    """Raspberry Pi 5 Real-Time Locomotion Engine for MicroDuck 8-DOF."""
+class PiZero2WInferenceEngine(BaseRPiInferenceEngine):
+    """Raspberry Pi Zero 2 W Real-Time Locomotion Engine for MicroDuck 8-DOF."""
 
     def __init__(
         self,
@@ -41,7 +41,7 @@ class RPi5InferenceEngine(BaseRPiInferenceEngine):
             mock=mock,
             freq=freq,
             legacy_observation_schema=legacy_observation_schema,
-            engine_name="RPi5InferenceEngine",
+            engine_name="PiZero2WInferenceEngine",
         )
         # Explicit contract hooks preserving: prev_q, read_foot_contact, read_lidar_ranges
         self.prev_q = self.last_targets.copy()
@@ -57,8 +57,8 @@ class RPi5InferenceEngine(BaseRPiInferenceEngine):
 
 def main():
     run_rpi_cli(
-        RPi5InferenceEngine,
-        "Raspberry Pi 5 Locomotion Inference Engine for CyberDuck V2",
+        PiZero2WInferenceEngine,
+        "Raspberry Pi Zero 2 W Locomotion Inference Engine for CyberDuck V2",
         default_model=str(DEFAULT_MODEL_PATH),
     )
 

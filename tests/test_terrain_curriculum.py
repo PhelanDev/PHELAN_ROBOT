@@ -8,7 +8,7 @@ import mujoco
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from training.terrain_curriculum import (
+from sim.env.terrain_curriculum import (
     STAGES,
     Stage,
     apply_stage,
@@ -261,7 +261,7 @@ def test_default_hold_iters_is_five():
 
 def test_stage3_min_distance_threshold_and_fallback():
     """Verify Stage 3 defines >= 1.8m clearance and out-of-range stages do not regress to 0.8m."""
-    from training.terrain_curriculum import STAGE_MIN_DISTANCE_X
+    from sim.env.terrain_curriculum import STAGE_MIN_DISTANCE_X
 
     assert STAGE_MIN_DISTANCE_X[3] == pytest.approx(1.8)
     assert STAGE_MIN_DISTANCE_X.get(3) >= STAGE_MIN_DISTANCE_X[2]
@@ -269,7 +269,7 @@ def test_stage3_min_distance_threshold_and_fallback():
 
 def test_set_stage_clears_completed_buffers_only_on_change():
     """Verify ParallelSimRunner.set_stage clears completed windows on stage transition only."""
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(num_envs=2, stage=1, num_threads=1)
     try:

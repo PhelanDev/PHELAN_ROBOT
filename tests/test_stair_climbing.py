@@ -9,8 +9,8 @@ import mujoco
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from training.terrain_curriculum import apply_stair_stage, STAIR_STAGES, next_stair_stage
-from training.run_parallel_sim import ParallelSimRunner
+from sim.env.terrain_curriculum import apply_stair_stage, STAIR_STAGES, next_stair_stage
+from sim.env.run_parallel_sim import ParallelSimRunner
 from scripts.train_ppo import train_ppo
 
 

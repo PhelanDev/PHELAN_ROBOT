@@ -40,11 +40,11 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from robot.robot_spec import MODEL_NAME, MODEL_PATH, NUM_ACTIONS, NUM_OBSERVATIONS
-from training.policy_contract import validate_model_identity
-from training.run_parallel_sim import resolve_v2_model_path
+from sim.env.policy_contract import validate_model_identity
+from sim.env.run_parallel_sim import resolve_v2_model_path
 
 try:
-    from training.env_config import (
+    from sim.env.env_config import (
         _DEFAULT_CFG,
         compute_observations,
         compute_gait_phase,
@@ -66,7 +66,7 @@ except Exception:
     DEFAULT_NOMINAL_QPOS = None
 
 try:
-    from training.terrain_curriculum import (
+    from sim.env.terrain_curriculum import (
         apply_stage,
         apply_stair_stage,
         STAGES,
@@ -79,7 +79,7 @@ except Exception:
     STAIR_STAGES = []
 
 try:
-    from training.run_parallel_sim import extract_filtered_lidar_ranges
+    from sim.env.run_parallel_sim import extract_filtered_lidar_ranges
 except Exception:
     extract_filtered_lidar_ranges = None
 
@@ -97,7 +97,7 @@ except ImportError:
     _CV2_AVAILABLE = False
 
 try:
-    from training.advanced_gaits import (
+    from sim.behaviors.advanced_gaits import (
         BipedalGaitGenerator,
         GaitPattern,
         AdvancedBehaviorController,
@@ -107,7 +107,7 @@ except Exception:
     _ADVANCED_GAITS_AVAILABLE = False
 
 try:
-    from training.vision_tracker import (
+    from sim.perception.vision_tracker import (
         TargetColor,
         ColorBlobTracker,
         VisualServoingHeadController,
@@ -468,7 +468,7 @@ def extract_viewer_observation(
     - Feet contact sensors (4) from touch sensors (sensordata 10, 11, zero padded)
     - Optional LiDAR ranges (5) from rangefinder sensors (sensordata 28:33, clipped to max range)
     """
-    from training.policy_contract import phase_clock_for_schema, validate_observation_schema
+    from sim.env.policy_contract import phase_clock_for_schema, validate_observation_schema
 
     if sim_step is not None:
         episode_step = sim_step
@@ -598,7 +598,7 @@ def _validate_viewer_policy_dimensions(policy):
 
 
 def _attach_viewer_policy_schema(policy: Any, obs_width: int, legacy_observation_schema: Optional[Dict[str, Any]], require_schema: bool) -> Any:
-    from training.policy_contract import validate_observation_schema
+    from sim.env.policy_contract import validate_observation_schema
 
     metadata = dict(getattr(policy, "_model_metadata", {}))
     raw_schema = metadata.get("observation_schema")

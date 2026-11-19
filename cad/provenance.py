@@ -15,7 +15,7 @@ def source_receipt(root=REPO_ROOT):
     inputs += list(sources.glob('requirements*.txt'))
     source_models = sources / 'purchased/sources'
     inputs += [p for p in source_models.glob('*') if p.suffix in ('.step', '.json', '.txt')]
-    for name in ('robot/robot_spec.py', 'training/env_config.py'):
+    for name in ('robot/robot_spec.py', 'sim/env/env_config.py'):
         path = root / name
         if path.is_file():
             inputs.append(path)

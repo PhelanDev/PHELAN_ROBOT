@@ -14,7 +14,7 @@ from typing import Optional, Tuple, Union
 import numpy as np
 from robot.robot_spec import BASE_HEIGHT_M
 
-from training.env_config import (
+from sim.env.env_config import (
     LocomotionMode,
     DEFAULT_NOMINAL_QPOS,
     SIT_NOMINAL_QPOS,

@@ -17,14 +17,14 @@ import mujoco
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from training.env_config import (
+from sim.env.env_config import (
     MicroDuck8DoFConfig,
     _DEFAULT_CFG,
     JOINT_LIMITS,
     compute_rewards,
 )
-from training.terrain_curriculum import next_stage, next_stair_stage
-from training.run_parallel_sim import ParallelSimRunner
+from sim.env.terrain_curriculum import next_stage, next_stair_stage
+from sim.env.run_parallel_sim import ParallelSimRunner
 
 
 def test_curriculum_requires_cohort_success_rate():

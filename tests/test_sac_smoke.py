@@ -12,7 +12,7 @@ from scripts.train_sac import (
     save_sac_checkpoint,
     train_sac,
 )
-from training.run_parallel_sim import ParallelSimRunner
+from sim.env.run_parallel_sim import ParallelSimRunner
 
 
 def test_sac_update_step_and_checkpoint(tmp_path: Path):
@@ -195,7 +195,7 @@ def test_sac_checkpoint_roundtrip_consumers_and_esp32_reject(tmp_path: Path, hid
     from scripts.export_policy import load_actor_from_checkpoint, export_onnx, export_esp32_headers, policy_actor_forward
     from scripts.interactive_viewer import load_viewer_policy, policy_step
     from scripts.evaluate_models_sim import load_actor
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
 
     torch.manual_seed(7)
     obs_dim, act_dim = 42, 8

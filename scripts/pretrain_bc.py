@@ -17,10 +17,10 @@ if _ROOT not in sys.path:
 from scripts.export_policy import load_actor_from_checkpoint, policy_actor_forward
 from scripts.train_ppo import ActorCritic, RunningMeanStd
 from robot.robot_spec import CHECKPOINT_PREFIX, CONTROL_DT_S, MODEL_NAME, MODEL_PATH, NUM_ACTIONS, NUM_OBSERVATIONS
-from training.advanced_gaits import BipedalGaitGenerator
-from training.env_config import unscale_actions
-from training.policy_contract import observation_schema, validate_model_identity
-from training.run_parallel_sim import ParallelSimRunner
+from sim.behaviors.advanced_gaits import BipedalGaitGenerator
+from sim.env.env_config import unscale_actions
+from sim.env.policy_contract import observation_schema, validate_model_identity
+from sim.env.run_parallel_sim import ParallelSimRunner
 
 
 def _get_actor_in_dim(actor: nn.Module) -> int:

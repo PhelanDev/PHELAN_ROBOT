@@ -6,7 +6,7 @@ import pytest
 # Ensure repository root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from training.env_config import MicroDuck8DoFConfig, scale_actions, unscale_actions
+from sim.env.env_config import MicroDuck8DoFConfig, scale_actions, unscale_actions
 
 
 def test_unscale_actions_round_trip_nominal_centered():
@@ -95,7 +95,7 @@ def test_unscale_actions_out_of_bounds_clamping():
 
 def test_bc_pretrain_decreases_loss_and_loads_into_ppo(tmp_path: Path):
     import torch
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
     from scripts.pretrain_bc import collect_gait_demonstrations, train_behavior_cloning, save_bc_checkpoint
     from scripts.train_ppo import train_ppo
 
@@ -132,7 +132,7 @@ def test_bc_pretrain_decreases_loss_and_loads_into_ppo(tmp_path: Path):
 def test_collect_teacher_demonstrations_rejects_retired_v1_dim_slicing():
     import torch
     import torch.nn as nn
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
     from scripts.pretrain_bc import collect_teacher_demonstrations
 
     runner = ParallelSimRunner(model_path="robot/cyberduck_v2.xml", num_envs=2, num_threads=1, stage=0)

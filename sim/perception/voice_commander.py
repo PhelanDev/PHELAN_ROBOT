@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from training.env_config import EmotionState, LocomotionMode
+from sim.env.env_config import EmotionState, LocomotionMode
 
 
 class VoiceIntent(str, Enum):

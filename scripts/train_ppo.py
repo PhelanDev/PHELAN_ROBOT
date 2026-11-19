@@ -25,10 +25,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from training.env_config import MicroDuck8DoFConfig, _DEFAULT_CFG
-from training.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
+from sim.env.env_config import MicroDuck8DoFConfig, _DEFAULT_CFG
+from sim.env.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
 from robot.robot_spec import MODEL_PATH, MODEL_NAME, CHECKPOINT_PREFIX
-from training.terrain_curriculum import (
+from sim.env.terrain_curriculum import (
     STAGES,
     STAIR_STAGES,
     STAGE_MIN_DISTANCE_X,
@@ -611,7 +611,7 @@ def train_ppo(
         if source_path in (save_path, latest_save_path, best_save_path):
             raise ValueError("Transfer requires new output paths; do not overwrite the source checkpoint")
 
-    from training.policy_contract import validate_model_identity
+    from sim.env.policy_contract import validate_model_identity
     # Validate every existing output before any write, including fresh runs.
     for output in (save_path, latest_save_path, best_save_path):
         if output.exists():
@@ -672,7 +672,7 @@ def train_ppo(
 
     obs_dim = runner.obs_dim
     critic_obs_dim = getattr(runner, "privileged_obs_dim", obs_dim)
-    from training.policy_contract import observation_schema, validate_observation_schema
+    from sim.env.policy_contract import observation_schema, validate_observation_schema
     schema = observation_schema(obs_dim, runner.embed_phase_clock, runner.control_dt)
     action_dim = runner.action_dim
     hidden_dim = 256

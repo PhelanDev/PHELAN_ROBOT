@@ -1,6 +1,6 @@
-"""Batched Parallel Simulation Runner & FPS Benchmark for MicroDuck 8-DOF (Dual ESP32-S3 Stack).
+"""Batched Parallel Simulation Runner & FPS Benchmark for MicroDuck 8-DOF (RPi 5 Stack).
 
-Thin parameterized wrapper delegating shared simulation logic to training.run_parallel_sim.
+Thin parameterized wrapper delegating shared simulation logic to sim.env.run_parallel_sim.
 """
 
 from collections import deque
@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from pipelines.dual_esp32s3_stack.training.env_config import (
+from hardware.rpi5.training.env_config import (
     MicroDuck8DoFConfig,
     _DEFAULT_CFG,
     DEFAULT_NOMINAL_QPOS,
@@ -30,7 +30,7 @@ from pipelines.dual_esp32s3_stack.training.env_config import (
     quat_rotate_inverse,
     scale_actions,
 )
-from training.run_parallel_sim import (
+from sim.env.run_parallel_sim import (
     ParallelSimRunner as BaseRunner,
     run_benchmark as base_run_benchmark,
 )
@@ -41,7 +41,7 @@ DEFAULT_MODEL_PATH = MODEL_PATH
 
 
 class ParallelSimRunner(BaseRunner):
-    """Vectorized / batched simulation runner for MicroDuck 8-DOF (Dual ESP32-S3 Stack)."""
+    """Vectorized / batched simulation runner for MicroDuck 8-DOF (RPi 5 Stack)."""
 
     def __init__(
         self,
@@ -99,7 +99,7 @@ def run_benchmark(
 def main():
     """Command-line interface for parallel simulation runner and benchmark."""
     parser = argparse.ArgumentParser(
-        description="Parallel Batched Simulation Runner & FPS Benchmark for Dual ESP32-S3 Stack"
+        description="Parallel Batched Simulation Runner & FPS Benchmark for RPi 5 Stack"
     )
     parser.add_argument("--model_path", type=str, default=str(DEFAULT_MODEL_PATH))
     parser.add_argument("--num_envs", type=int, default=16)

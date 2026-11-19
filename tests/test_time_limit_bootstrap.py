@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.train_ppo import apply_timeout_bootstrap
-from training.run_parallel_sim import DuckParallelSim
+from sim.env.run_parallel_sim import DuckParallelSim
 
 
 def test_apply_timeout_bootstrap_adds_gamma_v_only_on_timeouts():

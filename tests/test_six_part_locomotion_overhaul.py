@@ -15,7 +15,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from training.env_config import (
+from sim.env.env_config import (
     quat_to_yaw,
     quat_rotate_inverse,
     compute_gait_phase,
@@ -27,9 +27,9 @@ from training.env_config import (
     compute_rewards,
     MicroDuck8DoFConfig,
 )
-from training.run_parallel_sim import ParallelSimRunner
+from sim.env.run_parallel_sim import ParallelSimRunner
 from robot.robot_spec import MODEL_PATH, NUM_OBSERVATIONS
-from training.terrain_curriculum import next_stage, next_stair_stage
+from sim.env.terrain_curriculum import next_stage, next_stair_stage
 from scripts.interactive_viewer import (
     _setup_viewer_scene,
     extract_viewer_observation,
@@ -715,7 +715,7 @@ class TestPart4TrainViewerSynchronization:
             test_act = np.array([0.5, -0.3, 0.2, -0.4, 0.6, -0.1, 0.3, -0.5], dtype=np.float32)
             cfg = runner.cfg
             scaled_runner = scale_actions(test_act.reshape(1, 8), cfg, nominal_centered=True)[0]
-            from training.env_config import _DEFAULT_CFG, clip_action_rates
+            from sim.env.env_config import _DEFAULT_CFG, clip_action_rates
             scaled_viewer = scale_actions(test_act, _DEFAULT_CFG, nominal_centered=True)
             assert np.allclose(scaled_viewer, scaled_runner, atol=1e-6)
 

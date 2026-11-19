@@ -8,7 +8,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from training.env_config import (
+from sim.env.env_config import (
     MicroDuck8DoFConfig,
     LocomotionMode,
     compute_rewards,

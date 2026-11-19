@@ -35,7 +35,7 @@ def test_train_ppo_signature_and_caps_action_std(tmp_path: Path):
 
 
 import numpy as np
-from training.run_parallel_sim import ParallelSimRunner
+from sim.env.run_parallel_sim import ParallelSimRunner
 
 
 def test_hurdles_command_sampling_aligns_with_corridor_and_stages():

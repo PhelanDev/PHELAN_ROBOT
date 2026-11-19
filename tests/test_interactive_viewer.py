@@ -158,7 +158,7 @@ def test_interactive_viewer_pd_gains_sync():
     """Verify interactive viewer PD gains match MicroDuck8DoFConfig."""
     import inspect
     from scripts.interactive_viewer import apply_pd_control
-    from training.env_config import _DEFAULT_CFG
+    from sim.env.env_config import _DEFAULT_CFG
 
     sig = inspect.signature(apply_pd_control)
     kp_default = sig.parameters["kp"].default
@@ -169,7 +169,7 @@ def test_interactive_viewer_pd_gains_sync():
 
 def test_reset_last_actions_fix():
     """Test the deferred item: runner.last_actions[dones] is zeroed when envs reset."""
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
         model_path="robot/cyberduck_v2.xml",
@@ -290,7 +290,7 @@ def test_configure_viewer_camera():
 def test_interactive_viewer_policy_headless_stability(tmp_path):
     """A deterministic zero-action V2 policy holds the nominal stance in the viewer."""
     from scripts.interactive_viewer import run_simulation_headless
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
 
     import torch
     from scripts.train_ppo import ActorCritic
@@ -391,7 +391,7 @@ def test_viewer_stage0_applies_wide_pillars_submerges_stairs_and_spawns_native_h
     """Stage 0 in viewer must still apply terrain_curriculum.apply_stage(model, 0) and spawn at model.qpos0[2]."""
     import mujoco
     from scripts.interactive_viewer import run_simulation_headless
-    from training.terrain_curriculum import apply_stage
+    from sim.env.terrain_curriculum import apply_stage
 
     model_rel = "robot/cyberduck_v2.xml"
     model_abs = os.path.join(PROJECT_ROOT, model_rel)
@@ -431,7 +431,7 @@ def test_extract_viewer_observation_filters_floor_lidar_hits():
     """Viewer extract_viewer_observation must filter z_hit <= 0.012 floor rays to 2.0m like ParallelSimRunner."""
     import mujoco
     from scripts.interactive_viewer import extract_viewer_observation
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
         model_path=os.path.join(PROJECT_ROOT, "robot", "cyberduck_v2.xml"),

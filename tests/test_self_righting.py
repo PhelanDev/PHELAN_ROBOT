@@ -24,20 +24,20 @@ import pytest
 # Ensure repository root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from training.env_config import (
+from sim.env.env_config import (
     MicroDuck8DoFConfig,
     LocomotionMode,
     DEFAULT_NOMINAL_QPOS,
     SIT_NOMINAL_QPOS,
     LIE_NOMINAL_QPOS,
 )
-from training.self_righting import (
+from sim.behaviors.self_righting import (
     FallType,
     RecoveryState,
     FallClassifier,
     SelfRightingController,
 )
-from training.run_parallel_sim import ParallelSimRunner
+from sim.env.run_parallel_sim import ParallelSimRunner
 
 
 def test_fall_type_and_recovery_state_enums():
@@ -244,7 +244,7 @@ def test_parallel_sim_runner_auto_recovery_integration():
 def test_self_righting_completes_at_mjcf_standing_geometry_and_rejects_fallen_pose(model_rel):
     """F6: SelfRightingController must reach DONE at V1/V2 nominal root_z (~0.128m) and reject fallen/tilted poses."""
     import mujoco
-    from training.env_config import DEFAULT_NOMINAL_QPOS
+    from sim.env.env_config import DEFAULT_NOMINAL_QPOS
 
     m = mujoco.MjModel.from_xml_path(str(Path(__file__).resolve().parent.parent / model_rel))
     ctrl = SelfRightingController.from_model(m) if hasattr(SelfRightingController, "from_model") else SelfRightingController()

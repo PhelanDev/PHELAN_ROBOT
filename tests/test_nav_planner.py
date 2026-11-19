@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from training.nav_planner import LidarWaypointPlanner, NavPlannerConfig, RAY_ANGLES
+from sim.behaviors.nav_planner import LidarWaypointPlanner, NavPlannerConfig, RAY_ANGLES
 
 
 def test_nav_planner_steers_toward_goal_and_avoids_blocked_front():
@@ -106,7 +106,7 @@ def test_nav_planner_handles_none_short_lidar_and_quat_wraparound():
 
 def test_parallel_sim_runner_nav_planner_integration():
     import mujoco
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
         model_path="robot/cyberduck_v2.xml",
@@ -165,7 +165,7 @@ def test_parallel_sim_runner_nav_planner_integration():
 def test_nav_planner_stage0_bearing_heading_and_yaw_termination(goal_xy, yaw):
     """F5: Stage 0 navigation must align target_yaw to waypoint bearing rather than world-X."""
     import mujoco
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
         model_path="robot/cyberduck_v2.xml",

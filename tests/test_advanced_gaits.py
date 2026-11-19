@@ -1,4 +1,4 @@
-"""Unit tests for Advanced Gait & Behavior Engine (training/advanced_gaits.py)."""
+"""Unit tests for Advanced Gait & Behavior Engine (sim/behaviors/advanced_gaits.py)."""
 
 import os
 import sys
@@ -9,14 +9,14 @@ import pytest
 # Ensure repository root in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from training.env_config import JOINT_LIMITS, DEFAULT_NOMINAL_QPOS
-from training.advanced_gaits import (
+from sim.env.env_config import JOINT_LIMITS, DEFAULT_NOMINAL_QPOS
+from sim.behaviors.advanced_gaits import (
     JOINT_NAMES,
     GaitPattern,
     BipedalGaitGenerator,
     AdvancedBehaviorController,
 )
-from training.self_righting import FallType, RecoveryState
+from sim.behaviors.self_righting import FallType, RecoveryState
 
 
 def test_gait_pattern_enum():
@@ -134,8 +134,8 @@ def test_advanced_behavior_controller_fall_recovery_transition():
 
 def test_bipedal_gait_generator_quadrature_forward_walk_and_waddle():
     """Verify compute_walk and compute_waddle advance forward >0.015m and survive 250 steps."""
-    from training.run_parallel_sim import ParallelSimRunner
-    from training.env_config import unscale_actions
+    from sim.env.run_parallel_sim import ParallelSimRunner
+    from sim.env.env_config import unscale_actions
 
     gen = BipedalGaitGenerator(default_freq=1.25)
     runner = ParallelSimRunner(

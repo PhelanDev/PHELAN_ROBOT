@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from pipelines.dual_esp32s3_stack.training.env_config import (
+from hardware.dual_esp32s3.training.env_config import (
     DEFAULT_OBS_BOUNDS,
     generate_esp32_quant_header,
 )
@@ -33,10 +33,10 @@ from robot.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME
 DEFAULT_CHECKPOINT_PATH = REPO_ROOT / "models" / "checkpoints" / f"{CHECKPOINT_PREFIX}_ppo.pt"
 DEFAULT_PIZERO2W_ONNX_PATH = DEFAULT_ONNX_PATH
 DEFAULT_ESP32_WEIGHTS_PATH = (
-    REPO_ROOT / "pipelines" / "dual_esp32s3_stack" / "deployment" / "esp32_policy_weights.h"
+    REPO_ROOT / "hardware" / "dual_esp32s3" / "deployment" / "esp32_policy_weights.h"
 )
 DEFAULT_ESP32_CONFIG_PATH = (
-    REPO_ROOT / "pipelines" / "dual_esp32s3_stack" / "deployment" / "esp32_quant_config.h"
+    REPO_ROOT / "hardware" / "dual_esp32s3" / "deployment" / "esp32_quant_config.h"
 )
 
 
@@ -56,13 +56,13 @@ def _validate_ckpt_dims(ckpt: dict, expected: Tuple[Tuple[str, int], ...]) -> No
 def _validate_v2_actor_identity(actor: nn.Module, required: bool = False) -> None:
     metadata = getattr(actor, "_model_metadata", {})
     if required or metadata.get("model_name") or metadata.get("model_path"):
-        from training.policy_contract import validate_model_identity
+        from sim.env.policy_contract import validate_model_identity
         validate_model_identity(metadata, MODEL_NAME)
 
 
 def prepare_target_exports(checkpoints, legacy_model_name=None, schema_override=None):
     """Validate one V2 policy for each requested runtime before writing artifacts."""
-    from training.policy_contract import TARGET_MODELS, validate_model_identity, validate_observation_schema
+    from sim.env.policy_contract import TARGET_MODELS, validate_model_identity, validate_observation_schema
     prepared = {}
     for target, path in checkpoints.items():
         checkpoint = torch.load(str(path), map_location="cpu", weights_only=False)
@@ -89,7 +89,7 @@ def prepare_target_exports(checkpoints, legacy_model_name=None, schema_override=
 
 
 def _resolve_esp32_schema(actor: nn.Module, legacy_observation_schema: Optional[dict] = None) -> dict:
-    from training.policy_contract import validate_observation_schema
+    from sim.env.policy_contract import validate_observation_schema
 
     raw_schema = getattr(actor, "_model_metadata", {}).get("observation_schema")
     if raw_schema is not None and legacy_observation_schema is not None:
@@ -254,7 +254,7 @@ def load_actor_from_checkpoint(
                 metadata[key] = str(value)
         schema = getattr(checkpoint_or_model, "observation_schema", None)
         if hasattr(checkpoint_or_model, "observation_schema"):
-            from training.policy_contract import validate_observation_schema
+            from sim.env.policy_contract import validate_observation_schema
             schema = validate_observation_schema(schema)
             if schema["obs_dim"] != next(m.in_features for m in actor.modules() if isinstance(m, nn.Linear)):
                 raise ValueError("observation_schema dimension disagrees with actor weights")
@@ -331,7 +331,7 @@ def load_actor_from_checkpoint(
         raise ValueError("Policy actor weights must be finite")
     actor._model_metadata = {k: str(ckpt[k]) for k in ("model_path", "model_name") if ckpt.get(k)}
     if "observation_schema" in ckpt:
-        from training.policy_contract import validate_observation_schema
+        from sim.env.policy_contract import validate_observation_schema
         schema = validate_observation_schema(ckpt["observation_schema"])
         if schema["obs_dim"] != obs_d:
             raise ValueError("observation_schema dimension disagrees with actor weights")
@@ -656,7 +656,7 @@ def main():
 
     args = parser.parse_args()
 
-    from training.policy_contract import resolve_target_checkpoints
+    from sim.env.policy_contract import resolve_target_checkpoints
     targets = ("rpi5", "pizero2w", "esp32") if args.target == "all" else (args.target,)
     try:
         checkpoints = resolve_target_checkpoints(REPO_ROOT, targets, args.checkpoint)

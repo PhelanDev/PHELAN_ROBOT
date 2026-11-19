@@ -13,8 +13,8 @@ from scripts.interactive_viewer import load_viewer_policy, policy_step, resolve_
 from scripts.pretrain_bc import collect_teacher_demonstrations, save_bc_checkpoint
 from scripts.train_ppo import ActorCritic, train_ppo
 from scripts.train_sac import train_sac
-from training.env_config import MicroDuck8DoFConfig
-from training.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
+from sim.env.env_config import MicroDuck8DoFConfig
+from sim.env.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
 
 
 def test_default_runner_is_v2_with_canonical_observations():

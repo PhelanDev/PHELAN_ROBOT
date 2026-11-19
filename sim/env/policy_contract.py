@@ -60,7 +60,7 @@ def validate_observation_schema(schema):
 def phase_clock_for_schema(schema, episode_steps):
     """Return [sin, cos] gait phase clock per validated observation_schema, or None if disabled."""
     import numpy as np
-    from training.env_config import compute_gait_phase
+    from sim.env.env_config import compute_gait_phase
 
     validated = validate_observation_schema(schema)
     if not validated["embed_phase_clock"]:

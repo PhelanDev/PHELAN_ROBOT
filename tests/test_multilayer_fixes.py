@@ -6,7 +6,7 @@ import pytest
 # Ensure repository root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from training.env_config import (
+from sim.env.env_config import (
     MicroDuck8DoFConfig,
     scale_actions,
     unscale_actions,
@@ -80,17 +80,17 @@ def test_symmetric_residual_action_scale_derivatives_and_bounds():
 
 
 def test_pipeline_subconfigs_nominal_knee_pitch_flat_feet():
-    from pipelines.dual_esp32s3_stack.training.env_config import (
+    from hardware.dual_esp32s3.training.env_config import (
         MicroDuck8DoFConfig as DualESPConfig,
         DEFAULT_NOMINAL_JOINT_POS as DUAL_NOM_DICT,
         DEFAULT_NOMINAL_QPOS as DUAL_NOM_QPOS,
     )
-    from pipelines.rpi5_stack.training.env_config import (
+    from hardware.rpi5.training.env_config import (
         MicroDuck8DoFConfig as RPi5Config,
         DEFAULT_NOMINAL_JOINT_POS as RPI5_NOM_DICT,
         DEFAULT_NOMINAL_QPOS as RPI5_NOM_QPOS,
     )
-    from pipelines.pizero2w_stack.training.env_config import (
+    from hardware.pizero2w.training.env_config import (
         MicroDuck8DoFConfig as PiZeroConfig,
         DEFAULT_NOMINAL_JOINT_POS as PIZERO_NOM_DICT,
         DEFAULT_NOMINAL_QPOS as PIZERO_NOM_QPOS,
@@ -116,8 +116,8 @@ def test_pipeline_subconfigs_nominal_knee_pitch_flat_feet():
 
 def test_parallel_sim_gyro_invariance_under_tilt(monkeypatch):
     """Verify that sensordata[3:6] (<gyro>) is fed directly to compute_rewards without double rotation."""
-    from training.run_parallel_sim import ParallelSimRunner
-    import training.run_parallel_sim as rps_mod
+    from sim.env.run_parallel_sim import ParallelSimRunner
+    import sim.env.run_parallel_sim as rps_mod
 
     runner = ParallelSimRunner(
         model_path="robot/cyberduck_v2.xml",

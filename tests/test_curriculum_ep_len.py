@@ -9,8 +9,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from training.run_parallel_sim import ParallelSimRunner
-from training.terrain_curriculum import next_stage
+from sim.env.run_parallel_sim import ParallelSimRunner
+from sim.env.terrain_curriculum import next_stage
 
 
 def test_completed_ep_lens_records_on_done():

@@ -4,8 +4,8 @@ import mujoco
 import numpy as np
 import pytest
 
-from training.env_config import DEFAULT_NOMINAL_QPOS, compute_rewards
-from training.run_parallel_sim import ParallelSimRunner
+from sim.env.env_config import DEFAULT_NOMINAL_QPOS, compute_rewards
+from sim.env.run_parallel_sim import ParallelSimRunner
 
 
 def _reward_inputs(**overrides):

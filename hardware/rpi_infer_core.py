@@ -21,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from training.env_config import (
+from sim.env.env_config import (
     MicroDuck8DoFConfig,
     compute_observations,
     scale_actions,
@@ -422,7 +422,7 @@ class BaseRPiInferenceEngine:
             opts.intra_op_num_threads = 4  # Utilize all 4 CPU cores
             self.ort_session = ort.InferenceSession(self.model_path, opts)
             self.input_name = self.ort_session.get_inputs()[0].name
-            from training.policy_contract import validate_model_identity, validate_observation_schema
+            from sim.env.policy_contract import validate_model_identity, validate_observation_schema
             metadata = self.ort_session.get_modelmeta().custom_metadata_map
             if metadata.get("model_name") or metadata.get("model_path"):
                 validate_model_identity(metadata, MODEL_NAME)
@@ -464,7 +464,7 @@ class BaseRPiInferenceEngine:
     def phase_clock(self):
         if self.observation_schema is None:
             return None
-        from training.policy_contract import phase_clock_for_schema
+        from sim.env.policy_contract import phase_clock_for_schema
         return phase_clock_for_schema(self.observation_schema, self.episode_steps)
 
     def read_foot_contact(self) -> List[float]:

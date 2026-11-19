@@ -12,10 +12,10 @@ from scripts.train_ppo import ActorCritic, RunningMeanStd
 
 @pytest.mark.parametrize("moving", [False, True])
 def test_audit_schema_roundtrip_and_rpi_clock_parity(tmp_path, moving):
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
     from scripts.export_policy import export_onnx
-    from pipelines.rpi_infer_core import BaseRPiInferenceEngine, pack_rpi_observation
-    from training.run_parallel_sim import ParallelSimRunner
+    from hardware.rpi_infer_core import BaseRPiInferenceEngine, pack_rpi_observation
+    from sim.env.run_parallel_sim import ParallelSimRunner
     model, _ = make_policy()
     model.observation_schema = observation_schema(42, True, 0.006)
     output = export_onnx(model, tmp_path / "clock.onnx")
@@ -51,8 +51,8 @@ def test_audit_schema_roundtrip_and_rpi_clock_parity(tmp_path, moving):
 
 def test_audit_rpi_legacy_requires_explicit_schema(tmp_path):
     from scripts.export_policy import export_onnx
-    from pipelines.rpi_infer_core import BaseRPiInferenceEngine
-    from training.policy_contract import observation_schema
+    from hardware.rpi_infer_core import BaseRPiInferenceEngine
+    from sim.env.policy_contract import observation_schema
     model, _ = make_policy()
     output = export_onnx(model, tmp_path / "legacy.onnx")
     with pytest.raises(ValueError, match="schema|legacy"):
@@ -65,7 +65,7 @@ def test_audit_rpi_legacy_requires_explicit_schema(tmp_path):
 @pytest.mark.parametrize("change", [{"period": 0}, {"control_dt": float("nan")},
     {"embed_phase_clock": "true"}, {"reset": "stop_when_still"}, {"version": 2}, {"obs_dim": 37}])
 def test_audit_malformed_schema_rejected_before_export(tmp_path, change):
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
     from scripts.export_policy import export_onnx
     model, _ = make_policy()
     model.observation_schema = dict(observation_schema(42, True, 0.02), **change)
@@ -85,9 +85,9 @@ def test_audit_cli_export_rejects_cross_target_identity(tmp_path):
 
 def test_audit_both_pi_wrappers_run_metadata_policy(tmp_path):
     from scripts.export_policy import export_onnx
-    from training.policy_contract import observation_schema
-    from pipelines.rpi5_stack.deployment.infer_rpi5 import RPi5InferenceEngine
-    from pipelines.pizero2w_stack.deployment.infer_pizero2w import PiZero2WInferenceEngine
+    from sim.env.policy_contract import observation_schema
+    from hardware.rpi5.deployment.infer_rpi5 import RPi5InferenceEngine
+    from hardware.pizero2w.deployment.infer_pizero2w import PiZero2WInferenceEngine
     model, _ = make_policy()
     model.observation_schema = observation_schema(42, True, 0.02)
     output = export_onnx(model, tmp_path / "policy.onnx")
@@ -124,8 +124,8 @@ def run_generated_policy(tmp_path, weights, config, observation):
 
 def test_generated_policy_preserves_clipped_rms_and_actual_hidden_width(tmp_path):
     from scripts.export_policy import export_esp32_headers
-    from training.env_config import DEFAULT_OBS_BOUNDS
-    from training.policy_contract import observation_schema
+    from sim.env.env_config import DEFAULT_OBS_BOUNDS
+    from sim.env.policy_contract import observation_schema
 
     model, rms = make_policy()
     with torch.no_grad():
@@ -221,8 +221,8 @@ def test_esp32_rejects_invalid_quantization_before_writing(tmp_path, scale):
 ])
 def test_viewer_schema_clock_and_layout_parity_with_runner(tmp_path, embed_clock, control_dt):
     """Viewer extraction and headless loops honor the V2 clock schema and control interval."""
-    from training.policy_contract import observation_schema
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.policy_contract import observation_schema
+    from sim.env.run_parallel_sim import ParallelSimRunner
     from scripts.export_policy import export_onnx
     from scripts.interactive_viewer import extract_viewer_observation, run_simulation_headless
 
@@ -289,8 +289,8 @@ def test_viewer_schema_clock_and_layout_parity_with_runner(tmp_path, embed_clock
 
 
 def test_viewer_rejects_retired_37_observation_layout(tmp_path):
-    from training.policy_contract import observation_schema
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.policy_contract import observation_schema
+    from sim.env.run_parallel_sim import ParallelSimRunner
     from scripts.export_policy import export_onnx
     from scripts.interactive_viewer import extract_viewer_observation, load_viewer_policy
 
@@ -315,7 +315,7 @@ def test_viewer_rejects_retired_37_observation_layout(tmp_path):
 
 def test_viewer_rejects_legacy_policy_without_explicit_schema(tmp_path):
     """F4: Viewer simulation loops must reject legacy policies lacking observation_schema unless explicit override is given."""
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
     from scripts.export_policy import export_onnx
     from scripts.interactive_viewer import run_simulation_headless
 

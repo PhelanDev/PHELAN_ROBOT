@@ -30,7 +30,7 @@ def sample_poses(samples=JOINT_SWEEP_SAMPLES):
     if samples < 2:
         raise ValueError('A sweep requires at least the two joint endpoints')
     yield 'straight', {}
-    from training.env_config import DEFAULT_NOMINAL_QPOS, LIE_NOMINAL_QPOS, SIT_NOMINAL_QPOS
+    from sim.env.env_config import DEFAULT_NOMINAL_QPOS, LIE_NOMINAL_QPOS, SIT_NOMINAL_QPOS
     for name, values in (('stand', DEFAULT_NOMINAL_QPOS), ('sit', SIT_NOMINAL_QPOS),
                          ('lie', LIE_NOMINAL_QPOS)):
         yield name, dict(zip(EXPECTED_JOINTS, map(float, values)))

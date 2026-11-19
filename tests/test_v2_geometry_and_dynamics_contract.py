@@ -5,9 +5,9 @@ import numpy as np
 import pytest
 
 from robot.robot_spec import BASE_HEIGHT_M
-from training.env_config import MicroDuck8DoFConfig
-from training.run_parallel_sim import ParallelSimRunner
-from training.self_righting import SelfRightingController
+from sim.env.env_config import MicroDuck8DoFConfig
+from sim.env.run_parallel_sim import ParallelSimRunner
+from sim.behaviors.self_righting import SelfRightingController
 
 
 def test_reset_follows_loaded_geometry_instead_of_old_height_literal():

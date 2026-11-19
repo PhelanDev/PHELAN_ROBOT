@@ -17,9 +17,9 @@ import pytest
 # Ensure repository root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from training.env_config import EmotionState, LocomotionMode
-from training.run_parallel_sim import ParallelSimRunner
-from training.voice_commander import (
+from sim.env.env_config import EmotionState, LocomotionMode
+from sim.env.run_parallel_sim import ParallelSimRunner
+from sim.perception.voice_commander import (
     VoiceCommander,
     VoiceIntent,
     calc_crc16,

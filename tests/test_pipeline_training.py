@@ -1,8 +1,8 @@
 """Comprehensive Tests for 42-Dimensional Perception RL Training Pipeline.
 
 Covers both hardware pipelines:
-1. pipelines/rpi5_stack/training/
-2. pipelines/dual_esp32s3_stack/training/
+1. hardware/rpi5/training/
+2. hardware/dual_esp32s3/training/
 
 Validates:
 - 42-dimensional observation space packing (including 5 LiDAR rangefinder rays)
@@ -25,20 +25,20 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 # Import RPi5 training modules
-from pipelines.rpi5_stack.training.env_config import (
+from hardware.rpi5.training.env_config import (
     MicroDuck8DoFConfig as RPi5Config,
     compute_observations as rpi5_compute_observations,
     scale_actions as rpi5_scale_actions,
     clip_action_rates as rpi5_clip_action_rates,
     compute_rewards as rpi5_compute_rewards,
 )
-from pipelines.rpi5_stack.training.run_parallel_sim import (
+from hardware.rpi5.training.run_parallel_sim import (
     ParallelSimRunner as RPi5ParallelSimRunner,
     run_benchmark as rpi5_run_benchmark,
 )
 
 # Import Dual ESP32-S3 training modules
-from pipelines.dual_esp32s3_stack.training.env_config import (
+from hardware.dual_esp32s3.training.env_config import (
     MicroDuck8DoFConfig as ESP32Config,
     compute_observations as esp32_compute_observations,
     scale_actions as esp32_scale_actions,
@@ -51,7 +51,7 @@ from pipelines.dual_esp32s3_stack.training.env_config import (
     DEFAULT_OBS_BOUNDS,
     DEFAULT_OBS_SCALES,
 )
-from pipelines.dual_esp32s3_stack.training.run_parallel_sim import (
+from hardware.dual_esp32s3.training.run_parallel_sim import (
     ParallelSimRunner as ESP32ParallelSimRunner,
     run_benchmark as esp32_run_benchmark,
 )
@@ -337,7 +337,7 @@ def test_cli_benchmark_both_stacks():
     res_rpi5 = subprocess.run(
         [
             sys.executable,
-            "pipelines/rpi5_stack/training/run_parallel_sim.py",
+            "hardware/rpi5/training/run_parallel_sim.py",
             "--num_envs",
             "4",
             "--steps",
@@ -355,7 +355,7 @@ def test_cli_benchmark_both_stacks():
     res_esp32 = subprocess.run(
         [
             sys.executable,
-            "pipelines/dual_esp32s3_stack/training/run_parallel_sim.py",
+            "hardware/dual_esp32s3/training/run_parallel_sim.py",
             "--num_envs",
             "4",
             "--steps",

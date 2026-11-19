@@ -8,13 +8,13 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from training.env_config import (
+from sim.env.env_config import (
     ang_vel_mask,
     avoid_vel_penalty,
     compute_rewards,
     MicroDuck8DoFConfig,
 )
-from training.run_parallel_sim import DuckParallelSim
+from sim.env.run_parallel_sim import DuckParallelSim
 
 
 def test_ang_mask_values():

@@ -2,7 +2,7 @@
 
 Executes vectorized MuJoCo simulation instances sharing a single mjModel across
 multiple environments using multi-threaded stepping or batched loops.
-Integrates with training.env_config for observation packing, action scaling,
+Integrates with sim.env.env_config for observation packing, action scaling,
 rate limiting, and reward computation.
 """
 
@@ -20,9 +20,9 @@ import mujoco
 import numpy as np
 
 # Ensure repository root is in sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from training.env_config import (
+from sim.env.env_config import (
     MicroDuck8DoFConfig,
     _DEFAULT_CFG,
     DEFAULT_NOMINAL_QPOS,
@@ -42,9 +42,9 @@ from training.env_config import (
     quat_to_yaw,
     scale_actions,
 )
-from training.terrain_curriculum import apply_stage, apply_stair_stage, STAIR_STAGES, randomize_pillars
-from training.self_righting import FallClassifier, SelfRightingController
-from training.nav_planner import LidarWaypointPlanner, NavPlannerConfig
+from sim.env.terrain_curriculum import apply_stage, apply_stair_stage, STAIR_STAGES, randomize_pillars
+from sim.behaviors.self_righting import FallClassifier, SelfRightingController
+from sim.behaviors.nav_planner import LidarWaypointPlanner, NavPlannerConfig
 from robot.robot_spec import MODEL_PATH, MJCF_MODEL_NAME, REPO_ROOT
 
 

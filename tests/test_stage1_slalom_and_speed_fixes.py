@@ -9,8 +9,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from training.run_parallel_sim import ParallelSimRunner
-from training.env_config import compute_rewards, LocomotionMode, MicroDuck8DoFConfig
+from sim.env.run_parallel_sim import ParallelSimRunner
+from sim.env.env_config import compute_rewards, LocomotionMode, MicroDuck8DoFConfig
 
 
 def test_lidar_d_min_dot_ignores_miss_acquisition_and_bounds_closing_speed():

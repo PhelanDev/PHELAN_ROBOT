@@ -9,7 +9,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from training.terrain_curriculum import apply_stage, randomize_pillars
+from sim.env.terrain_curriculum import apply_stage, randomize_pillars
 
 XML_V2 = Path(__file__).resolve().parent.parent / "robot" / "cyberduck_v2.xml"
 
@@ -110,7 +110,7 @@ def test_randomize_pillars_stage0_or_density0_noop():
 
 
 def test_runner_randomize_pillars_changes_positions_when_enabled():
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
         model_path=str(XML_V2),
@@ -133,7 +133,7 @@ def test_runner_randomize_pillars_changes_positions_when_enabled():
 
 
 def test_runner_randomize_pillars_false_preserves_exact_positions():
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
 
     runner = ParallelSimRunner(
         model_path=str(XML_V2),
@@ -152,7 +152,7 @@ def test_runner_randomize_pillars_false_preserves_exact_positions():
 
 
 def test_runner_compute_d_min_filters_submerged_pillars():
-    from training.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner
 
     # V2 uses LiDAR for live distance; the geometric helper must also ignore submerged pillars.
     runner = ParallelSimRunner(

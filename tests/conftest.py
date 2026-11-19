@@ -13,7 +13,7 @@ for _p in (str(REPO_ROOT), str(TESTS_ROOT)):
 
 
 def make_isolated_env(tmp_path: Path, base_env: dict = None) -> dict:
-    """Create isolated subprocess environment redirecting checkpoint writes away from tracked models/ and pipelines/."""
+    """Create isolated subprocess environment redirecting checkpoint writes away from tracked models/ and hardware/."""
     site_file = tmp_path / "sitecustomize.py"
     repo_root = REPO_ROOT.resolve().as_posix()
     tmp_dir = tmp_path.resolve().as_posix()
@@ -26,13 +26,13 @@ try:
     _orig = torch.save
     _repo_root = Path(r"{repo_root}").resolve()
     _models_dir = _repo_root / "models"
-    _pipelines_dir = _repo_root / "pipelines"
+    _hardware_dir = _repo_root / "hardware"
     _tmp_dir = Path(r"{tmp_dir}").resolve()
 
     def _safe_save(obj, f, *a, **k):
         try:
             target_p = Path(str(f)).resolve()
-            if target_p.is_relative_to(_models_dir) or target_p.is_relative_to(_pipelines_dir):
+            if target_p.is_relative_to(_models_dir) or target_p.is_relative_to(_hardware_dir):
                 dest = _tmp_dir / target_p.name
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 return _orig(obj, str(dest), *a, **k)
@@ -48,10 +48,10 @@ try:
         try:
             src_p = Path(str(src)).resolve()
             dst_p = Path(str(dst)).resolve()
-            if dst_p.is_relative_to(_models_dir) or dst_p.is_relative_to(_pipelines_dir):
+            if dst_p.is_relative_to(_models_dir) or dst_p.is_relative_to(_hardware_dir):
                 safe_dst = _tmp_dir / dst_p.name
                 safe_dst.parent.mkdir(parents=True, exist_ok=True)
-                if src_p.is_relative_to(_models_dir) or src_p.is_relative_to(_pipelines_dir):
+                if src_p.is_relative_to(_models_dir) or src_p.is_relative_to(_hardware_dir):
                     safe_src = _tmp_dir / src_p.name
                     if safe_src.exists():
                         return _orig_replace(str(safe_src), str(safe_dst), *a, **k)

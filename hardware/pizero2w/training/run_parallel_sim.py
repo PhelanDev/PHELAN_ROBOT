@@ -1,6 +1,6 @@
 ﻿"""Batched Parallel Simulation Runner & FPS Benchmark for MicroDuck 8-DOF (RPi Zero 2 W Stack).
 
-Thin parameterized wrapper delegating shared simulation logic to training.run_parallel_sim.
+Thin parameterized wrapper delegating shared simulation logic to sim.env.run_parallel_sim.
 """
 
 from collections import deque
@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from pipelines.pizero2w_stack.training.env_config import (
+from hardware.pizero2w.training.env_config import (
     MicroDuck8DoFConfig,
     _DEFAULT_CFG,
     DEFAULT_NOMINAL_QPOS,
@@ -30,7 +30,7 @@ from pipelines.pizero2w_stack.training.env_config import (
     quat_rotate_inverse,
     scale_actions,
 )
-from training.run_parallel_sim import (
+from sim.env.run_parallel_sim import (
     ParallelSimRunner as BaseRunner,
     run_benchmark as base_run_benchmark,
 )

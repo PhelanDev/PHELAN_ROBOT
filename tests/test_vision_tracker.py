@@ -1,4 +1,4 @@
-"""Unit tests for AI Vision Tracker & Visual Servoing (training/vision_tracker.py)."""
+"""Unit tests for AI Vision Tracker & Visual Servoing (sim/perception/vision_tracker.py)."""
 
 import math
 import os
@@ -10,7 +10,7 @@ import pytest
 # Ensure repo root in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from training.vision_tracker import (
+from sim.perception.vision_tracker import (
     TargetColor,
     ColorBlobTracker,
     VisualServoingHeadController,

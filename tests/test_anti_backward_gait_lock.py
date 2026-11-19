@@ -6,9 +6,9 @@ import pytest
 # Ensure repository root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from training.env_config import compute_rewards as root_compute_rewards, _DEFAULT_CFG as root_cfg
-from pipelines.rpi5_stack.training.env_config import compute_rewards as rpi5_compute_rewards, _DEFAULT_CFG as rpi5_cfg
-from pipelines.dual_esp32s3_stack.training.env_config import compute_rewards as esp32_compute_rewards, _DEFAULT_CFG as esp32_cfg
+from sim.env.env_config import compute_rewards as root_compute_rewards, _DEFAULT_CFG as root_cfg
+from hardware.rpi5.training.env_config import compute_rewards as rpi5_compute_rewards, _DEFAULT_CFG as rpi5_cfg
+from hardware.dual_esp32s3.training.env_config import compute_rewards as esp32_compute_rewards, _DEFAULT_CFG as esp32_cfg
 
 
 @pytest.mark.parametrize(
@@ -384,8 +384,8 @@ def test_standing_dwell_under_walk_command_yields_negative_reward():
     which scales down upright reward and drives per-step reward negative (< -0.20),
     breaking the stand-still reward trap.
     """
-    from training.run_parallel_sim import ParallelSimRunner
-    from training.env_config import compute_rewards, LocomotionMode
+    from sim.env.run_parallel_sim import ParallelSimRunner
+    from sim.env.env_config import compute_rewards, LocomotionMode
 
     # 1. 100 steps with actions = 0 and walk command [0.22, 0.0, 0.0]
     runner = ParallelSimRunner("robot/cyberduck_v2.xml", num_envs=1, stage=0)

@@ -80,7 +80,7 @@ def test_duck_cli_status():
 def test_status_requires_v2_checkpoint_metadata_and_both_esp32_headers(tmp_path, monkeypatch, capsys):
     import duck
     import torch
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
 
     monkeypatch.setattr(duck, "REPO_ROOT", tmp_path)
     onnx_path = tmp_path / "cyberduck_v2_policy.onnx"
@@ -109,7 +109,7 @@ def test_status_requires_v2_checkpoint_metadata_and_both_esp32_headers(tmp_path,
         assert "123 iterations" not in output
 
     torch.save(metadata, checkpoint)
-    deployment = tmp_path / "pipelines/dual_esp32s3_stack/deployment"
+    deployment = tmp_path / "hardware/dual_esp32s3/deployment"
     deployment.mkdir(parents=True)
     weights = deployment / "esp32_policy_weights.h"
     config = deployment / "esp32_quant_config.h"
@@ -153,8 +153,8 @@ def test_duck_cli_status_cyberduck_v2():
 
 def test_pi_deployment_profiles_share_canonical_v2_policy():
     from robot.robot_spec import DEFAULT_ONNX_PATH
-    from pipelines.rpi5_stack.deployment.infer_rpi5 import DEFAULT_MODEL_PATH as rpi5_policy
-    from pipelines.pizero2w_stack.deployment.infer_pizero2w import DEFAULT_MODEL_PATH as pi_zero_policy
+    from hardware.rpi5.deployment.infer_rpi5 import DEFAULT_MODEL_PATH as rpi5_policy
+    from hardware.pizero2w.deployment.infer_pizero2w import DEFAULT_MODEL_PATH as pi_zero_policy
 
     assert rpi5_policy == DEFAULT_ONNX_PATH
     assert pi_zero_policy == DEFAULT_ONNX_PATH
@@ -290,7 +290,7 @@ def test_duck_cli_export_target_routing_isolated(tmp_path, isolated_cli_env):
     duck_py = REPO_ROOT / "duck.py"
     import torch
     from scripts.train_ppo import ActorCritic
-    from training.policy_contract import observation_schema
+    from sim.env.policy_contract import observation_schema
     ckpt_path = tmp_path / "export.pt"
     model = ActorCritic(hidden_dim=16)
     checkpoint = dict(model_state_dict=model.state_dict(), model_name="cyberduck_v2.xml",
@@ -370,12 +370,12 @@ def test_export_rejects_non_v2_checkpoint_identity(tmp_path):
 def test_pizero2w_runner_walk_min_z_and_no_duplicate_info():
     """Verify ParallelSimRunner uses walk_min_z parameter/attribute and has no duplicate timeout loop."""
     import inspect
-    from pipelines.pizero2w_stack.training.run_parallel_sim import ParallelSimRunner
+    from hardware.pizero2w.training.run_parallel_sim import ParallelSimRunner
     sig = inspect.signature(ParallelSimRunner.__init__)
     assert "walk_min_z" in sig.parameters, "ParallelSimRunner.__init__ must have walk_min_z parameter"
     assert sig.parameters["walk_min_z"].default == 0.060
 
-    runner_src_path = REPO_ROOT / "pipelines" / "pizero2w_stack" / "training" / "run_parallel_sim.py"
+    runner_src_path = REPO_ROOT / "hardware" / "pizero2w" / "training" / "run_parallel_sim.py"
     src = runner_src_path.read_text(encoding="utf-8")
     assert "self.walk_min_z" in src, "ParallelSimRunner must store self.walk_min_z"
     assert "root_z < self.walk_min_z" in src or "root_z < getattr(self, 'walk_min_z'" in src, (

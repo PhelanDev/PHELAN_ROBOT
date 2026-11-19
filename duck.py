@@ -21,7 +21,7 @@ from robot.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME, M
 
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-from training.policy_contract import CHECKPOINT_PREFIXES, resolve_target_checkpoints
+from sim.env.policy_contract import CHECKPOINT_PREFIXES, resolve_target_checkpoints
 
 # Safe UTF-8 console output for Windows CLI
 if sys.platform == "win32":
@@ -56,7 +56,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     if best_ckpt.exists():
         try:
             import torch
-            from training.policy_contract import validate_model_identity, validate_observation_schema
+            from sim.env.policy_contract import validate_model_identity, validate_observation_schema
             data = torch.load(best_ckpt, map_location="cpu", weights_only=False)
             validate_model_identity(data, MODEL_NAME)
             schema = validate_observation_schema(data.get("observation_schema"))
@@ -91,7 +91,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     # 4. Hardware Deployment Targets
     onnx_file = DEFAULT_ONNX_PATH
-    esp32_h = REPO_ROOT / "pipelines" / "dual_esp32s3_stack" / "deployment" / "esp32_policy_weights.h"
+    esp32_h = REPO_ROOT / "hardware" / "dual_esp32s3" / "deployment" / "esp32_policy_weights.h"
     esp32_config = esp32_h.with_name("esp32_quant_config.h")
     import re
     esp32_ready = True

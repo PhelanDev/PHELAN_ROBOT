@@ -25,10 +25,10 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from robot.robot_spec import CHECKPOINT_PREFIX, MODEL_NAME, MODEL_PATH, NUM_ACTIONS, NUM_OBSERVATIONS
-from training.env_config import _DEFAULT_CFG, quat_to_yaw
-from training.policy_contract import validate_model_identity
-from training.run_parallel_sim import ParallelSimRunner, has_obstacle_contact, resolve_v2_model_path
-from training.nav_planner import LidarWaypointPlanner
+from sim.env.env_config import _DEFAULT_CFG, quat_to_yaw
+from sim.env.policy_contract import validate_model_identity
+from sim.env.run_parallel_sim import ParallelSimRunner, has_obstacle_contact, resolve_v2_model_path
+from sim.behaviors.nav_planner import LidarWaypointPlanner
 from scripts.export_policy import load_actor_from_checkpoint, PolicyOnnxWrapper
 
 __all__ = [
