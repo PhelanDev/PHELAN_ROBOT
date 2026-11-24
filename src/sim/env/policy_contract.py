@@ -34,8 +34,10 @@ def validate_model_identity(checkpoint, model_path):
         raise ValueError("Checkpoint model identity metadata conflicts")
 
 
-def observation_schema(obs_dim, embed_phase_clock, control_dt, period=0.8):
-    return validate_observation_schema(dict(version=1, obs_dim=int(obs_dim),
+def observation_schema(obs_dim, embed_phase_clock, control_dt, period=0.8, version=None):
+    eff_obs_dim = int(obs_dim)
+    eff_version = (2 if eff_obs_dim == 37 else 1) if version is None else int(version)
+    return validate_observation_schema(dict(version=eff_version, obs_dim=eff_obs_dim,
         embed_phase_clock=bool(embed_phase_clock), period=float(period),
         control_dt=float(control_dt), reset="episode_steps_zero", advance="after_action",
         zero_command="advance"))
@@ -44,8 +46,14 @@ def observation_schema(obs_dim, embed_phase_clock, control_dt, period=0.8):
 def validate_observation_schema(schema):
     if not isinstance(schema, dict):
         raise ValueError("observation_schema must be a mapping")
-    if (type(schema.get("version")) is not int or schema.get("version") != 1
-            or type(schema.get("obs_dim")) is not int or schema.get("obs_dim") not in (37, 42)
+    version = schema.get("version")
+    obs_dim = schema.get("obs_dim")
+    valid_pair = (
+        type(version) is int
+        and type(obs_dim) is int
+        and ((version == 2 and obs_dim == 37) or (version == 1 and obs_dim == 42))
+    )
+    if (not valid_pair
             or type(schema.get("embed_phase_clock")) is not bool
             or schema.get("reset") != "episode_steps_zero"
             or schema.get("advance") != "after_action" or schema.get("zero_command") != "advance"):

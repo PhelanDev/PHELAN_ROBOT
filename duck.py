@@ -42,11 +42,11 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     # 1. Model Architecture
     print("\n[1] BỘ NÃO AI (NEURAL NETWORK ARCHITECTURE)")
-    print("  • Mô hình triển khai: Actor MLP [42 -> 256 (ELU) -> 256 (ELU) -> 8]")
+    print("  • Mô hình triển khai: Actor MLP [37 -> 256 (ELU) -> 256 (ELU) -> 8]")
     print("  • Số nơ-ron Actor   : 520 nơ-ron (256 + 256 + 8 output servos)")
-    print("  • Số tham số Actor  : 78.856 weights & biases (78.864 gồm log_std)")
-    print("  • Mạng Critic (PPO) : 513 nơ-ron | 77.057 tham số")
-    print("  • Không gian quan sát: 42 chiều (IMU, 8 góc, 8 vận tốc, last action, Phase Clock, 5-ray LiDAR)")
+    print("  • Số tham số Actor  : 77.576 weights & biases (77.584 gồm log_std)")
+    print("  • Mạng Critic (PPO) : 513 nơ-ron [48 -> 256 -> 256 -> 1]")
+    print("  • Không gian quan sát: 37 chiều (IMU, 8 góc, 8 vận tốc, last action, Foot Contact + Phase Clock; brow ToF qua ActiveHeadScanner)")
 
     # 2. Checkpoints Status
     ckpt_dir = REPO_ROOT / "models" / "checkpoints"
@@ -61,8 +61,8 @@ def cmd_status(args: argparse.Namespace) -> int:
             data = torch.load(best_ckpt, map_location="cpu", weights_only=False)
             validate_model_identity(data, MODEL_NAME)
             schema = validate_observation_schema(data.get("observation_schema"))
-            if schema["obs_dim"] != 42 or data.get("obs_dim") != 42 or data.get("action_dim") != 8:
-                raise ValueError("Checkpoint V2 phải có 42 quan sát và 8 hành động")
+            if schema["obs_dim"] != 37 or schema["version"] != 2 or data.get("obs_dim") != 37 or data.get("action_dim") != 8:
+                raise ValueError("Checkpoint V2 phải có 37 quan sát (schema version 2) và 8 hành động")
             checkpoint_status = "[ĐÃ XÁC MINH METADATA V2]"
             stage = data.get("stage", 0)
             iters = data.get("iterations", 0)

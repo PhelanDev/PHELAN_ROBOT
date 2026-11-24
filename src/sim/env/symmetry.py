@@ -1,4 +1,4 @@
-"""Sagittal mirror symmetry transformations and losses for CyberDuck V2 (42D obs / 53D critic / 8D act)."""
+"""Sagittal mirror symmetry transformations and losses for CyberDuck V2 (37D/42D obs, 48D/53D critic, 8D act)."""
 
 from typing import Callable, Dict, Optional, Tuple, Union
 
@@ -34,6 +34,28 @@ OBS_MIRROR_SIGN_42: Tuple[float, ...] = (
     1.0, 1.0, 1.0, 1.0, 1.0,                        # lidar_ranges
 )
 
+OBS_MIRROR_PERM_37: Tuple[int, ...] = OBS_MIRROR_PERM_42[:37]
+OBS_MIRROR_SIGN_37: Tuple[float, ...] = OBS_MIRROR_SIGN_42[:37]
+
+CRITIC_MIRROR_PERM_48: Tuple[int, ...] = (
+    *OBS_MIRROR_PERM_37,
+    37, 38, 39,                                     # base_lin_vel [vx, vy, vz]
+    41, 40,                                         # contact_forces_z [left, right]
+    43, 42,                                         # terrain_height_at_feet [left, right]
+    44,                                             # nearest_obstacle_dist
+    45, 46,                                         # nearest_obstacle_rel_xy [dx, dy]
+    47,                                             # stage_norm
+)
+CRITIC_MIRROR_SIGN_48: Tuple[float, ...] = (
+    *OBS_MIRROR_SIGN_37,
+    1.0, -1.0, 1.0,                                 # base_lin_vel
+    1.0, 1.0,                                       # contact_forces_z
+    1.0, 1.0,                                       # terrain_height_at_feet
+    1.0,                                            # nearest_obstacle_dist
+    1.0, -1.0,                                      # nearest_obstacle_rel_xy
+    1.0,                                            # stage_norm
+)
+
 CRITIC_MIRROR_PERM_53: Tuple[int, ...] = (
     *OBS_MIRROR_PERM_42,
     42, 43, 44,                                     # base_lin_vel [vx, vy, vz]
@@ -55,7 +77,9 @@ CRITIC_MIRROR_SIGN_53: Tuple[float, ...] = (
 
 _NP_SPECS: Dict[int, Tuple[np.ndarray, np.ndarray]] = {
     8: (np.array(ACT_MIRROR_PERM_8, dtype=np.int64), np.array(ACT_MIRROR_SIGN_8, dtype=np.float32)),
+    37: (np.array(OBS_MIRROR_PERM_37, dtype=np.int64), np.array(OBS_MIRROR_SIGN_37, dtype=np.float32)),
     42: (np.array(OBS_MIRROR_PERM_42, dtype=np.int64), np.array(OBS_MIRROR_SIGN_42, dtype=np.float32)),
+    48: (np.array(CRITIC_MIRROR_PERM_48, dtype=np.int64), np.array(CRITIC_MIRROR_SIGN_48, dtype=np.float32)),
     53: (np.array(CRITIC_MIRROR_PERM_53, dtype=np.int64), np.array(CRITIC_MIRROR_SIGN_53, dtype=np.float32)),
 }
 
@@ -80,9 +104,25 @@ def mirror_actions_8(actions: ArrayOrTensor) -> ArrayOrTensor:
     return _apply_mirror(actions, 8)
 
 
+def mirror_obs(obs: ArrayOrTensor) -> ArrayOrTensor:
+    """Reflect 37D or 42D CyberDuck V2 actor observations across the sagittal (XZ) plane."""
+    dim = obs.shape[-1] if isinstance(obs, torch.Tensor) else np.asarray(obs).shape[-1]
+    if dim not in (37, 42):
+        raise ValueError(f"Expected actor observation dimension 37 or 42, got {dim}")
+    return _apply_mirror(obs, int(dim))
+
+
 def mirror_obs_42(obs: ArrayOrTensor) -> ArrayOrTensor:
     """Reflect 42D CyberDuck V2 actor observations across the sagittal (XZ) plane."""
     return _apply_mirror(obs, 42)
+
+
+def mirror_critic_obs(critic_obs: ArrayOrTensor) -> ArrayOrTensor:
+    """Reflect 48D or 53D CyberDuck V2 privileged critic observations across the sagittal plane."""
+    dim = critic_obs.shape[-1] if isinstance(critic_obs, torch.Tensor) else np.asarray(critic_obs).shape[-1]
+    if dim not in (48, 53):
+        raise ValueError(f"Expected critic observation dimension 48 or 53, got {dim}")
+    return _apply_mirror(critic_obs, int(dim))
 
 
 def mirror_critic_obs_53(critic_obs: ArrayOrTensor) -> ArrayOrTensor:
@@ -96,7 +136,7 @@ def compute_actor_symmetry_loss(
 ) -> torch.Tensor:
     """Compute sagittal mirror consistency loss MSE(pi(s), M_a(pi(M_s(s))))."""
     act_orig = actor_fn(obs_batch)
-    act_mirrored_obs = actor_fn(mirror_obs_42(obs_batch))
+    act_mirrored_obs = actor_fn(mirror_obs(obs_batch))
     return F.mse_loss(act_orig, mirror_actions_8(act_mirrored_obs))
 
 
@@ -108,7 +148,7 @@ def augment_symmetry_batch(
     """Double a batch of (obs, actions[, returns]) by appending sagittal mirror reflections."""
     obs_arr = np.asarray(obs, dtype=np.float32)
     act_arr = np.asarray(actions, dtype=np.float32)
-    aug_obs = np.concatenate([obs_arr, mirror_obs_42(obs_arr)], axis=0)
+    aug_obs = np.concatenate([obs_arr, mirror_obs(obs_arr)], axis=0)
     aug_act = np.concatenate([act_arr, mirror_actions_8(act_arr)], axis=0)
     if returns is None:
         return aug_obs, aug_act, None

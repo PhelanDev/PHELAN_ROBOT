@@ -110,7 +110,7 @@ def test_cyberduck_v2_sensor_suite_and_camera():
     """Verify that CyberDuck V2 contains the full sensor suite and head camera matching 8-DOF RL."""
     model = mujoco.MjModel.from_xml_path(MJCF_PATH)
 
-    # Check sensor count (21 standard + 5 lidar rangefinder = 26 sensors, 33 scalar sensordata)
+    # Check sensor count (21 standard + 1 brow head_tof rangefinder = 22 sensors, 29 scalar sensordata)
     sensor_names = [mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_SENSOR, i) for i in range(model.nsensor)]
     required_sensors = [
         "base_accel", "base_gyro", "base_quat",
@@ -121,9 +121,9 @@ def test_cyberduck_v2_sensor_suite_and_camera():
         "head_yaw_vel", "head_pitch_vel",
         "left_hip_roll_vel", "left_hip_pitch_vel", "left_knee_pitch_vel",
         "right_hip_roll_vel", "right_hip_pitch_vel", "right_knee_pitch_vel",
-        "lidar_ray_m30", "lidar_ray_m15", "lidar_ray_0", "lidar_ray_p15", "lidar_ray_p30"
+        "head_tof",
     ]
-    assert len(sensor_names) == 26, f"Expected 26 sensors, got {len(sensor_names)}"
+    assert len(sensor_names) == 22, f"Expected 22 sensors, got {len(sensor_names)}"
     for sname in required_sensors:
         assert sname in sensor_names, f"Missing required sensor {sname} in CyberDuck V2"
 
@@ -137,11 +137,11 @@ def test_cyberduck_v2_sensor_suite_and_camera():
     assert l_site != -1 and r_site != -1, "CyberDuck V2 missing foot touch sites"
 
 def test_cyberduck_v2_parallel_sim_integration():
-    """Verify CyberDuck V2 runs in ParallelSimRunner and outputs standard (num_envs, 42) observations."""
+    """Verify CyberDuck V2 runs in ParallelSimRunner and outputs standard (num_envs, 37) observations."""
     from sim.env.run_parallel_sim import ParallelSimRunner
     sim = ParallelSimRunner(num_envs=2, model_path=MJCF_PATH, decimation=1)
     obs = sim.get_observations()
-    assert obs.shape == (2, NUM_OBSERVATIONS), f"Expected obs shape (2, 42), got {obs.shape}"
+    assert obs.shape == (2, NUM_OBSERVATIONS), f"Expected obs shape (2, 37), got {obs.shape}"
 
     actions = np.zeros((2, 8), dtype=np.float32)
     next_obs, rewards, dones, infos = sim.step(actions)
@@ -158,8 +158,7 @@ def test_cyberduck_v2_sites_are_visible_and_functional():
 
     # Check that all sensory sites are visible (alpha > 0) and belong to visual site group 2
     sensory_site_names = [
-        "imu", "imu_site", "camera_site", "site_lidar_m30", "site_lidar_m15",
-        "site_lidar_0", "site_lidar_p15", "site_lidar_p30",
+        "imu", "imu_site", "camera_site", "site_head_tof",
         "left_foot_touch_site", "right_foot_touch_site"
     ]
     for sname in sensory_site_names:
@@ -169,15 +168,13 @@ def test_cyberduck_v2_sites_are_visible_and_functional():
         assert site_rgba[3] > 0.0, f"Site {sname} has zero alpha, making sensor indicator completely invisible!"
         assert model.site_group[site_id] == 2, f"Site {sname} must belong to group 2, got {model.site_group[site_id]}"
 
-    # Ensure LiDAR sites are located on helmet surface, not floating > 10mm outside
-    for lname in ["site_lidar_m30", "site_lidar_m15", "site_lidar_0", "site_lidar_p15", "site_lidar_p30"]:
-        lidar_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, lname)
-        pos_x = model.site_pos[lidar_id][0]
-        assert pos_x <= 0.028, f"LiDAR site {lname} is floating outside helmet: X={pos_x} > 0.028"
+    # Ensure brow ToF site is mounted on the head visor pocket (within CAD brow envelope)
+    tof_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, "site_head_tof")
+    assert 0.0 <= model.site_pos[tof_id][0] <= 0.060
 
-    # Verify sensordata is fully valid and finite (IMU accel, gyro, quat, foot touch, lidar)
+    # Verify sensordata is fully valid and finite (IMU accel, gyro, quat, foot touch, head_tof)
     assert not np.any(np.isnan(data.sensordata)), "Sensordata contains NaN values!"
-    assert len(data.sensordata) == 33, f"Expected 33 sensordata values, got {len(data.sensordata)}"
+    assert len(data.sensordata) == 29, f"Expected 29 sensordata values, got {len(data.sensordata)}"
 
 def test_cyberduck_v2_lighting_and_material_quality():
     """Verify that CyberDuck V2 visual config has headlight fill, high shadow quality, matte gray armor, and bronze accents."""
@@ -290,9 +287,8 @@ def test_cyberduck_v2_lightweight_collisions_curriculum_and_ground_clearance():
         assert sole_bottom >= -1e-4, f"{sole} bottom submerged: {sole_bottom:.5f} < -1e-4"
 
     # 5. Rangefinder cutoff == 2.0
-    for lname in ("lidar_ray_m30", "lidar_ray_m15", "lidar_ray_0", "lidar_ray_p15", "lidar_ray_p30"):
-        cutoff = model.sensor(lname).cutoff[0]
-        assert abs(cutoff - 2.0) < 1e-4, f"Rangefinder {lname} cutoff should be 2.0, got {cutoff}"
+    cutoff = model.sensor("head_tof").cutoff[0]
+    assert abs(cutoff - 2.0) < 1e-4, f"Rangefinder head_tof cutoff should be 2.0, got {cutoff}"
 
     # 6. Actuator forcerange standardized to [-1.0, 1.0]
     assert np.allclose(model.actuator_forcerange, [[-1.0, 1.0]] * model.nu), (
@@ -370,7 +366,7 @@ def test_v2_robot_only_mjcf_is_derived_and_has_no_scene_geometry():
     assert output == ROBOT_ONLY_MJCF_PATH
     model = mujoco.MjModel.from_xml_path(str(output))
     assert model.nu == NUM_ACTIONS
-    assert model.nsensor == 26
+    assert model.nsensor == 22
     assert model.body_subtreemass[1] == pytest.approx(TOTAL_MASS_KG, abs=1e-6)
     assert all(model.geom_bodyid[i] != 0 for i in range(model.ngeom))
     assert not any(

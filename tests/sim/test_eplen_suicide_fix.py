@@ -309,7 +309,7 @@ def test_initial_policy_rollout_eplen_and_valloss_stability():
     import torch
     from tools.train.train_ppo import ActorCritic, DEFAULT_MODEL_PATH
 
-    model = ActorCritic(obs_dim=42, action_dim=8)
+    model = ActorCritic(obs_dim=37, action_dim=8)
     std = torch.exp(model.log_std).detach().numpy()
     assert np.all(std <= 0.40), f"Initial action std should be <= 0.40 to prevent joint slamming, got {std}"
 

@@ -19,13 +19,8 @@ EXPECTED_JOINTS = {
     "right_knee_pitch": [0.0, 1.48],
 }
 
-EXPECTED_LIDAR_RAYS = [
-    "lidar_ray_m30",
-    "lidar_ray_m15",
-    "lidar_ray_0",
-    "lidar_ray_p15",
-    "lidar_ray_p30",
-]
+EXPECTED_LIDAR_RAYS = ["head_tof"]
+EXPECTED_TOF_SENSORS = EXPECTED_LIDAR_RAYS
 
 
 def assert_mjcf_structure_and_joints(xml_path: str, model_name: str) -> None:
@@ -66,6 +61,7 @@ def assert_mjcf_perception_suite(xml_path: str) -> None:
     assert len(touch_sensors) >= 2, "Expected at least 2 touch sensors for feet"
 
     rangefinders = {rf.attrib["name"]: rf for rf in sensor_elem.iter("rangefinder")}
+    assert "lidar_ray_0" not in rangefinders, "Legacy 5-ray LiDAR must be replaced by single brow head_tof"
     for ray_name in EXPECTED_LIDAR_RAYS:
         assert ray_name in rangefinders, f"Missing rangefinder sensor: {ray_name}"
         rf = rangefinders[ray_name]
@@ -75,11 +71,12 @@ def assert_mjcf_perception_suite(xml_path: str) -> None:
     sites = {s.attrib["name"]: s for s in root.iter("site")}
     for ray_name in EXPECTED_LIDAR_RAYS:
         site_name = rangefinders[ray_name].attrib.get("site")
-        assert site_name in sites, f"LiDAR site {site_name} not found in model"
+        assert site_name in sites, f"ToF site {site_name} not found in model"
         site = sites[site_name]
         zaxis = [float(x) for x in site.attrib.get("zaxis", "1 0 0").split()]
         angle_deg = math.degrees(math.atan2(zaxis[1], zaxis[0]))
         expected_deg = {
+            "head_tof": 0.0,
             "lidar_ray_m30": -30.0,
             "lidar_ray_m15": -15.0,
             "lidar_ray_0": 0.0,

@@ -99,7 +99,7 @@ class MicroDuck8DoFConfig:
 
     OBS_DIM: int = NUM_OBSERVATIONS
     ACTION_DIM: int = NUM_ACTIONS
-    LIDAR_RAYS: int = 5
+    LIDAR_RAYS: int = 0
     LIDAR_MIN_RANGE: float = 0.05
 
     JOINT_NAMES: List[str] = field(
@@ -1482,7 +1482,7 @@ def compute_rewards(
 # INT8 Quantization Utilities for Embedded Microcontrollers (ESP32-S3 PIE)
 # ==============================================================================
 
-# Physical maximum normalization bounds for 42-dimensional observation vector
+# Physical maximum normalization bounds for 37-dimensional observation vector
 DEFAULT_OBS_BOUNDS: np.ndarray = np.array(
     [
         # [0..2] Base angular velocity (rad/s, max ~6.0)
@@ -1497,10 +1497,8 @@ DEFAULT_OBS_BOUNDS: np.ndarray = np.array(
         6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0,
         # [25..32] Last actions (normalized target in [-1, 1])
         1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-        # [33..36] Foot contact sensors (binary 0 or 1)
+        # [33..36] Foot contact sensors + gait phase clock [-1, 1]
         1.0, 1.0, 1.0, 1.0,
-        # [37..41] 5-ray LiDAR rangefinder distances (m, max range 2.0m)
-        2.0, 2.0, 2.0, 2.0, 2.0,
     ],
     dtype=np.float32,
 )

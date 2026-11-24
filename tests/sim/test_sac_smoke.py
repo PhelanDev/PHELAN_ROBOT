@@ -16,7 +16,7 @@ from sim.env.run_parallel_sim import ParallelSimRunner
 
 
 def test_sac_update_step_and_checkpoint(tmp_path: Path):
-    obs_dim, act_dim = 42, 8
+    obs_dim, act_dim = 37, 8
     actor = SquashedGaussianActor(obs_dim, act_dim, hidden_dim=64)
     critic = TwinQCritic(obs_dim, act_dim, hidden_dim=64)
     target_critic = TwinQCritic(obs_dim, act_dim, hidden_dim=64)
@@ -198,7 +198,7 @@ def test_sac_checkpoint_roundtrip_consumers_and_esp32_reject(tmp_path: Path, hid
     from sim.env.policy_contract import observation_schema
 
     torch.manual_seed(7)
-    obs_dim, act_dim = 42, 8
+    obs_dim, act_dim = 37, 8
     actor = SquashedGaussianActor(obs_dim, act_dim, hidden_dim=hidden_dim).eval()
     log_alpha = torch.tensor([-0.5])
     ckpt_path = tmp_path / f"sac_{hidden_dim}.pt"

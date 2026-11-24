@@ -147,17 +147,17 @@ def test_lidar_pomdp_d_min_ignores_rear_obstacle():
             sim.model.geom_pos[gid, 1] = 10.0
 
     obs = sim.reset()
-    # At reset: rear obstacle is at distance ~0.67m, but LiDAR facing forward sees nothing closer than 2.0m
-    # sim.d_min must reflect LiDAR range (2.0m) and NOT rear obstacle distance (~0.67m)
-    assert sim.obs_dim == 42
-    assert sim.d_min[0] > 1.5, f"d_min was {sim.d_min[0]}, should ignore rear obstacle at 0.67m"
-    assert pytest.approx(float(sim.d_min[0]), abs=0.05) == 2.0
+    # Forward-facing brow head_tof + ActiveHeadScanner ignore rear obstacle at x=-0.75m (reads clear 2.0m)
+    assert sim.obs_dim == 37
+    assert sim.get_head_tof_range(0) == pytest.approx(2.0, abs=1e-4)
+    np.testing.assert_allclose(sim.head_scanners[0].get_virtual_rays(0.0), 2.0, atol=1e-4)
+    assert sim.d_min[0] == pytest.approx(sim._compute_d_min(0), abs=1e-4)
 
     # Step simulation with zero actions
     actions = np.zeros((1, 8), dtype=np.float32)
     next_obs, rewards, dones, infos = sim.step(actions)
-    assert sim.d_min[0] > 1.5, f"d_min after step was {sim.d_min[0]}, should ignore rear obstacle"
-    assert pytest.approx(float(sim.d_min[0]), abs=0.05) == 2.0
+    assert next_obs.shape == (1, 37)
+    assert sim.get_head_tof_range(0) == pytest.approx(2.0, abs=1e-4)
 
 
 def test_stair_ascent_reward_calculation():

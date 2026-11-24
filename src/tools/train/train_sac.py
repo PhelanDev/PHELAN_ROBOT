@@ -20,7 +20,7 @@ if _SRC_ROOT not in sys.path:
 from robot.robot_spec import CHECKPOINT_PREFIX, MODEL_NAME, MODEL_PATH, REPO_ROOT
 from sim.env.policy_contract import observation_schema, validate_model_identity
 from sim.env.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
-from sim.env.symmetry import compute_actor_symmetry_loss, mirror_actions_8, mirror_obs_42
+from sim.env.symmetry import compute_actor_symmetry_loss, mirror_actions_8, mirror_obs
 from tools.train.train_ppo import RunningMeanStd
 
 DEFAULT_SAVE_PATH = REPO_ROOT / "models" / "checkpoints" / f"{CHECKPOINT_PREFIX}_sac.pt"
@@ -155,12 +155,12 @@ def sac_update_step(
 ) -> Dict[str, float]:
     obs, act, rew, next_obs, done = batch
     rew, done = rew.view(-1, 1), done.view(-1, 1)
-    can_mirror = (obs.shape[-1] == 42 and act.shape[-1] == 8)
+    can_mirror = (obs.shape[-1] in (37, 42) and act.shape[-1] == 8)
     if augment_symmetry and can_mirror:
-        obs = torch.cat([obs, mirror_obs_42(obs)], dim=0)
+        obs = torch.cat([obs, mirror_obs(obs)], dim=0)
         act = torch.cat([act, mirror_actions_8(act)], dim=0)
         rew = torch.cat([rew, rew], dim=0)
-        next_obs = torch.cat([next_obs, mirror_obs_42(next_obs)], dim=0)
+        next_obs = torch.cat([next_obs, mirror_obs(next_obs)], dim=0)
         done = torch.cat([done, done], dim=0)
 
     discount = float(gamma) ** max(1, int(n_step))
@@ -334,8 +334,8 @@ def train_sac(
             if obs_rms is None:
                 return raw_obs
             if update_stats:
-                if augment_symmetry and obs_dim == 42:
-                    obs_rms.update(np.concatenate([raw_obs, mirror_obs_42(raw_obs)], axis=0))
+                if augment_symmetry and obs_dim in (37, 42):
+                    obs_rms.update(np.concatenate([raw_obs, mirror_obs(raw_obs)], axis=0))
                 else:
                     obs_rms.update(raw_obs)
             return obs_rms.normalize(raw_obs)

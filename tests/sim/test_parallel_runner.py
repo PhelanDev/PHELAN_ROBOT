@@ -129,9 +129,9 @@ def test_parallel_sim_stair_ascent_info():
     )
     try:
         runner.reset()
-        # Teleport env 0 into stair zone at elevated height (~30mm above 0.125m nominal baseline)
+        # Teleport env 0 into stair zone at elevated height above BASE_HEIGHT_M (0.202m)
         runner.datas[0].qpos[0] = 1.45  # x >= 1.35m
-        runner.datas[0].qpos[2] = 0.155  # z > 0.125m
+        runner.datas[0].qpos[2] = 0.232  # elevated onto stairs (+30mm above 0.202m baseline)
 
         actions = np.zeros((2, 8), dtype=np.float32)
         _, _, _, infos = runner.step(actions)
@@ -375,7 +375,7 @@ def test_parallel_sim_reset_nominal_stance():
         assert 0.05 <= qpos_joints[7] <= 0.25, f"Right knee expected ~0.15, got {qpos_joints[7]}"
         assert -0.25 <= qpos_joints[3] <= -0.05, f"Left hip expected ~-0.15, got {qpos_joints[3]}"
         assert -0.25 <= qpos_joints[6] <= -0.05, f"Right hip expected ~-0.15, got {qpos_joints[6]}"
-        assert 0.120 <= runner.datas[0].qpos[2] <= 0.135, f"CoM z expected ~0.128, got {runner.datas[0].qpos[2]}"
+        assert 0.195 <= runner.datas[0].qpos[2] <= 0.210, f"CoM z expected ~0.202, got {runner.datas[0].qpos[2]}"
     finally:
         runner.close()
 

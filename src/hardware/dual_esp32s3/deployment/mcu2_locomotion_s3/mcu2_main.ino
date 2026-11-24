@@ -66,15 +66,15 @@ HardwareSerial UartLink(MCU2_UART_NUM);
 // [33..36]: Foot contact states (4)
 // [37..41]: 5-Ray LiDAR rangefinder distances (5)
 #ifndef OBS_DIM
-#define OBS_DIM 42
+#define OBS_DIM 37
 #endif
-static_assert(OBS_DIM == 42, "MCU2 observation assembly requires OBS_DIM=42");
+static_assert(OBS_DIM == 37, "MCU2 observation assembly requires OBS_DIM=37");
 static_assert(POLICY_LAYER1_IN == OBS_DIM, "Policy input and observation buffer disagree");
 static_assert(POLICY_LAYER3_OUT == 8, "MCU2 requires eight policy actions");
 #ifndef POLICY_OBS_SCHEMA_VERSION
 #error "esp32_policy_weights.h missing observation schema metadata; re-export with scripts/export_policy.py"
 #endif
-static_assert(POLICY_OBS_SCHEMA_VERSION == 1, "MCU2 requires observation schema version 1");
+static_assert(POLICY_OBS_SCHEMA_VERSION == 2, "MCU2 requires observation schema version 2");
 static_assert(POLICY_CONTROL_DT > 0.0199f && POLICY_CONTROL_DT < 0.0201f, "MCU2 requires 50 Hz (control_dt=0.02s)");
 static_assert(POLICY_GAIT_PERIOD > 0.0f, "MCU2 requires positive gait period");
 static_assert(POLICY_CLOCK_ADVANCE_AFTER_ACTION == 1, "MCU2 requires advance=after_action clock schema");
@@ -488,7 +488,7 @@ void process_uart_packets() {
 }
 
 // ============================================================================
-// 42-Dimensional Observation Assembly & Policy Evaluation
+// 37-Dimensional Observation Assembly & Policy Evaluation
 // ============================================================================
 
 void read_foot_contacts(float *contact_out) {
@@ -569,9 +569,6 @@ void assemble_observation(float *obs_out) {
         obs_out[35] = 0.0f;
         obs_out[36] = 0.0f;
     }
-
-    // [37..41]: 5-Ray ToF LiDAR rangefinder distances from MCU 1 (5)
-    read_lidar_distances(&obs_out[37]);
 }
 
 void evaluate_locomotion_policy(const float *obs, float *target_angles_out) {

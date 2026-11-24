@@ -363,17 +363,17 @@ def test_mjcf_forward_axis_and_hip_pitch_kinematics():
     data.qpos[knee_qadr] = 0.0
     mujoco.mj_forward(model, data)
     rel_x_hip = data.xpos[foot_id][0] - data.xpos[base_id][0]
-    # V2: hip origin x=5mm, foot offset x=4mm, thigh=44mm, shin=36mm.
-    expected_hip_x = 0.005 + 0.004 * np.cos(-0.35) - (0.044 + 0.036) * np.sin(-0.35)
+    # V2 (MG996R CAD): hip origin x=0mm, foot offset x=4mm, thigh=60mm, shin=54mm.
+    expected_hip_x = 0.000 + 0.004 * np.cos(-0.35) - (0.060 + 0.054) * np.sin(-0.35)
     assert rel_x_hip == pytest.approx(expected_hip_x, abs=1e-9)
-    assert rel_x_hip > 0.009, "hip_pitch < 0 must advance the foot from its neutral x=9mm"
+    assert rel_x_hip > 0.004, "hip_pitch < 0 must advance the foot from its neutral x=4mm"
 
     # 3. knee_pitch = +0.50 retracts foot backward (-X)
     data.qpos[hip_qadr] = 0.0
     data.qpos[knee_qadr] = 0.50
     mujoco.mj_forward(model, data)
     rel_x_knee = data.xpos[foot_id][0] - data.xpos[base_id][0]
-    expected_knee_x = 0.005 + 0.004 * np.cos(0.50) - 0.036 * np.sin(0.50)
+    expected_knee_x = 0.000 + 0.004 * np.cos(0.50) - 0.054 * np.sin(0.50)
     assert rel_x_knee == pytest.approx(expected_knee_x, abs=1e-9)
     assert rel_x_knee < 0.0, "knee_pitch > 0 must fold the V2 foot behind the base (-X)"
 

@@ -117,12 +117,8 @@
           <camera name="head_camera" pos="0.040 0 0.022" fovy="60" xyaxes="0 -1 0 0 0 1" />
           <site name="camera_site" pos="0.026 0 0.024" size="0.002" rgba="0.0 0.95 1.0 0.95" group="2" />
 
-          <!-- 5-Ray ToF LiDAR Scanner: horizontal fan [-30°, -15°, 0°, +15°, +30°] mounted flush on visor brow -->
-          <site name="site_lidar_m30" pos="0.024 0.010 0.022" zaxis="0.866025 -0.5 0" size="0.002" rgba="0.0 0.95 1.0 0.95" group="2"/>
-          <site name="site_lidar_m15" pos="0.025 0.005 0.022" zaxis="0.965926 -0.258819 0" size="0.002" rgba="0.0 0.95 1.0 0.95" group="2"/>
-          <site name="site_lidar_0" pos="0.026 0.000 0.022" zaxis="1 0 0" size="0.002" rgba="0.0 0.95 1.0 0.95" group="2"/>
-          <site name="site_lidar_p15" pos="0.025 -0.005 0.022" zaxis="0.965926 0.258819 0" size="0.002" rgba="0.0 0.95 1.0 0.95" group="2"/>
-          <site name="site_lidar_p30" pos="0.024 -0.010 0.022" zaxis="0.866025 0.5 0" size="0.002" rgba="0.0 0.95 1.0 0.95" group="2"/>
+          <!-- Single brow VL53L0X ToF Rangefinder mounted on visor brow (scanned actively via head_yaw/head_pitch) -->
+          <site name="site_head_tof" pos="0.044 0.0115 0.0595" zaxis="1 0 0" size="0.002" rgba="0.0 0.95 1.0 0.95" group="2"/>
         </body>
       </body>
 
@@ -243,11 +239,7 @@
     <jointvel name="right_hip_pitch_vel" joint="right_hip_pitch" />
     <jointvel name="right_knee_pitch_vel" joint="right_knee_pitch" />
 
-    <!-- 5-Ray LiDAR rangefinder sensors for Obstacle Navigation -->
-    <rangefinder name="lidar_ray_m30" site="site_lidar_m30" cutoff="2.0"/>
-    <rangefinder name="lidar_ray_m15" site="site_lidar_m15" cutoff="2.0"/>
-    <rangefinder name="lidar_ray_0" site="site_lidar_0" cutoff="2.0"/>
-    <rangefinder name="lidar_ray_p15" site="site_lidar_p15" cutoff="2.0"/>
-    <rangefinder name="lidar_ray_p30" site="site_lidar_p30" cutoff="2.0"/>
+    <!-- Single brow ToF rangefinder for active head scanning obstacle avoidance -->
+    <rangefinder name="head_tof" site="site_head_tof" cutoff="2.0"/>
   </sensor>
 </mujoco>

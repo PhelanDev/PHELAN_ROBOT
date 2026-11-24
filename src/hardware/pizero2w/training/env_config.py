@@ -6,7 +6,7 @@ Thin parameterized wrapper delegating common training environment logic to sim.e
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
-from robot.robot_spec import TOTAL_MASS_KG
+from robot.robot_spec import NUM_OBSERVATIONS, TOTAL_MASS_KG
 
 from sim.env.env_config import (
     MicroDuck8DoFConfig as BaseConfig,
@@ -26,9 +26,9 @@ class MicroDuck8DoFConfig(BaseConfig):
     TARGET_MASS: float = TOTAL_MASS_KG  # Shared V2 model; runtime profile does not change physics.
     POLICY_DTYPE: str = "float32"
 
-    OBS_DIM: int = 42
+    OBS_DIM: int = NUM_OBSERVATIONS
     ACTION_DIM: int = 8
-    LIDAR_RAYS: int = 5
+    LIDAR_RAYS: int = 0
     LIDAR_MIN_RANGE: float = 0.05
     LIDAR_MAX_RANGE: float = 2.0
     OBSTACLE_THRESHOLD: float = 0.35  # meters
@@ -61,8 +61,7 @@ DEFAULT_OBS_BOUNDS: np.ndarray = np.array(
         1.57, 0.78, 0.44, 0.87, 1.48, 0.44, 0.87, 1.48,  # Joint angles (rad)
         6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0,  # Joint velocities (rad/s)
         1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,  # Previous normalized actions [-1, 1]
-        1.0, 1.0, 1.0, 1.0,  # Feet contact state indicators [0 or 1]
-        2.0, 2.0, 2.0, 2.0, 2.0,  # 5-ray LiDAR rangefinder distances (meters)
+        1.0, 1.0, 1.0, 1.0,  # Foot contact + phase clock [-1, 1]
     ],
     dtype=np.float32,
 )

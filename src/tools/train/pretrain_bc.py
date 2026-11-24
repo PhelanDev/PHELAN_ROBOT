@@ -24,8 +24,8 @@ from sim.env.run_parallel_sim import ParallelSimRunner
 from sim.env.symmetry import (
     augment_symmetry_batch,
     compute_actor_symmetry_loss,
-    mirror_critic_obs_53,
-    mirror_obs_42,
+    mirror_critic_obs,
+    mirror_obs,
 )
 
 
@@ -37,7 +37,7 @@ def _get_actor_in_dim(actor: nn.Module) -> int:
         return _get_actor_in_dim(actor.actor)
     if hasattr(actor, "__getitem__"):
         return _get_actor_in_dim(actor[0])
-    return 42
+    return NUM_OBSERVATIONS
 
 
 def _collect_rollouts(
@@ -146,7 +146,7 @@ def collect_teacher_demonstrations(
     teacher_actor.eval()
     in_dim = _get_actor_in_dim(teacher_actor)
     if runner.obs_dim != NUM_OBSERVATIONS or runner.action_dim != NUM_ACTIONS or in_dim != NUM_OBSERVATIONS:
-        raise ValueError("V2 teacher demonstrations require a 42-observation, 8-action policy")
+        raise ValueError(f"V2 teacher demonstrations require a {NUM_OBSERVATIONS}-observation, {NUM_ACTIONS}-action policy")
 
     def policy_fn(obs: np.ndarray, _step: int) -> np.ndarray:
         return _eval_actor_batch(teacher_actor, obs)
@@ -172,11 +172,11 @@ def collect_dagger_demonstrations(
     teacher_actor.eval()
     t_in_dim = _get_actor_in_dim(teacher_actor)
     if runner.obs_dim != NUM_OBSERVATIONS or runner.action_dim != NUM_ACTIONS or t_in_dim != NUM_OBSERVATIONS:
-        raise ValueError("V2 teacher demonstrations require a 42-observation, 8-action policy")
+        raise ValueError(f"V2 teacher demonstrations require a {NUM_OBSERVATIONS}-observation, {NUM_ACTIONS}-action policy")
     if student_actor is not None:
         student_actor.eval()
         if _get_actor_in_dim(student_actor) != NUM_OBSERVATIONS:
-            raise ValueError("V2 student demonstrations require a 42-observation, 8-action policy")
+            raise ValueError(f"V2 student demonstrations require a {NUM_OBSERVATIONS}-observation, {NUM_ACTIONS}-action policy")
     mix_beta = float(np.clip(beta, 0.0, 1.0))
 
     def policy_fn(obs: np.ndarray, _step: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -194,16 +194,16 @@ def collect_dagger_demonstrations(
 
 def _mirror_obs_by_dim(arr: np.ndarray) -> np.ndarray:
     dim = arr.shape[-1]
-    if dim == 42:
-        return mirror_obs_42(arr)
-    if dim == 53:
-        return mirror_critic_obs_53(arr)
+    if dim in (37, 42):
+        return mirror_obs(arr)
+    if dim in (48, 53):
+        return mirror_critic_obs(arr)
     raise ValueError(f"Unsupported symmetry mirror dimension {dim}")
 
 
 def train_behavior_cloning(
     obs: np.ndarray, actions: np.ndarray, returns: Optional[np.ndarray] = None,
-    obs_dim: int = 42, action_dim: int = 8, hidden_dim: int = 256,
+    obs_dim: int = NUM_OBSERVATIONS, action_dim: int = NUM_ACTIONS, hidden_dim: int = 256,
     epochs: int = 30, batch_size: int = 256, lr: float = 1e-3, device: str = "cpu",
     obs_rms: Optional[RunningMeanStd] = None,
     augment_symmetry: bool = True,
@@ -216,13 +216,13 @@ def train_behavior_cloning(
 ) -> Tuple[ActorCritic, List[float]]:
     """Train Actor (MSE) and Critic (SmoothL1) to avoid cold critic shock at PPO iteration 1."""
     if obs_dim != NUM_OBSERVATIONS or action_dim != NUM_ACTIONS:
-        raise ValueError("V2 behavior cloning requires 42 observations and 8 actions")
+        raise ValueError(f"V2 behavior cloning requires {NUM_OBSERVATIONS} observations and {NUM_ACTIONS} actions")
     obs_raw = np.asarray(obs, dtype=np.float32)
     act_raw = np.asarray(actions, dtype=np.float32)
     if obs_raw.ndim != 2 or obs_raw.shape[1] != NUM_OBSERVATIONS:
-        raise ValueError("V2 behavior cloning input must have shape [samples, 42]")
+        raise ValueError(f"V2 behavior cloning input must have shape [samples, {NUM_OBSERVATIONS}]")
     if act_raw.ndim != 2 or act_raw.shape[1] != NUM_ACTIONS:
-        raise ValueError("V2 behavior cloning actions must have shape [samples, 8]")
+        raise ValueError(f"V2 behavior cloning actions must have shape [samples, {NUM_ACTIONS}]")
 
     priv_raw = np.asarray(critic_obs, dtype=np.float32) if critic_obs is not None else None
     eff_critic_dim = (
@@ -327,7 +327,7 @@ def save_bc_checkpoint(
 ) -> Path:
     """Save ActorCritic weights into a PPO-compatible warm start checkpoint."""
     if obs_dim != NUM_OBSERVATIONS or action_dim != NUM_ACTIONS:
-        raise ValueError("V2 BC checkpoints require 42 observations and 8 actions")
+        raise ValueError(f"V2 BC checkpoints require {NUM_OBSERVATIONS} observations and {NUM_ACTIONS} actions")
     out_path = Path(path).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     eff_rms = obs_rms if obs_rms is not None else getattr(model, "_bc_obs_rms", None)

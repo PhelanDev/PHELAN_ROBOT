@@ -47,6 +47,7 @@ from sim.env.env_config import (
     small_angle_rotation_matrix,
 )
 from sim.env.terrain_curriculum import apply_stage, apply_stair_stage, STAIR_STAGES, randomize_pillars
+from sim.behaviors.active_head_scanner import ActiveHeadScanner
 from sim.behaviors.self_righting import FallClassifier, FallPredictor, SelfRightingController
 from sim.behaviors.nav_planner import LidarWaypointPlanner, NavPlannerConfig
 from robot.robot_spec import MODEL_PATH, MJCF_MODEL_NAME, REPO_ROOT, SRC_ROOT
@@ -118,6 +119,26 @@ def extract_filtered_lidar_ranges(
     if obs_dim == 42:
         return np.full(5, lidar_max, dtype=np.float32)
     return None
+
+
+def extract_filtered_head_tof_range(
+    model: Optional[mujoco.MjModel],
+    data: Any,
+    lidar_max: float = 2.0,
+    site_id: int = -1,
+    sensor_adr: int = 28,
+) -> float:
+    """Extract single brow head_tof rangefinder distance (m) with floor-hit filter."""
+    if sensor_adr < 0 or len(data.sensordata) <= sensor_adr:
+        return float(lidar_max)
+    raw = float(data.sensordata[sensor_adr])
+    if raw < 0.0 or raw >= lidar_max:
+        return float(lidar_max)
+    if site_id != -1 and hasattr(data, "site_xpos") and hasattr(data, "site_xmat"):
+        z_hit = float(data.site_xpos[site_id, 2]) + raw * float(data.site_xmat[site_id, 8])
+        if z_hit <= 0.012:
+            return float(lidar_max)
+    return float(raw)
 
 
 _SOLE_SAMPLE_SIGNS: np.ndarray = np.array(
@@ -333,16 +354,12 @@ class ParallelSimRunner:
             else None
         )
 
-        # Tracking state buffers
+        # Tracking state buffers (canonical V2 contract: 37D base, 47D with emotions, +11 critic)
+        self.base_obs_dim = int(self.cfg.OBS_DIM)
         if self.include_emotions:
-            self.base_obs_dim = 42 if self.cfg.OBS_DIM in (37, 42) else self.cfg.OBS_DIM
             self.obs_dim = self.base_obs_dim + NUM_EMOTIONS
-        elif len(self.datas[0].sensordata) >= 33 or self.cfg.OBS_DIM == 42:
-            self.base_obs_dim = 42
-            self.obs_dim = 42
         else:
-            self.base_obs_dim = self.cfg.OBS_DIM
-            self.obs_dim = self.cfg.OBS_DIM
+            self.obs_dim = self.base_obs_dim
         self.privileged_obs_dim = self.obs_dim + 11
         self.action_dim = self.cfg.ACTION_DIM
 
@@ -408,6 +425,15 @@ class ParallelSimRunner:
         self.lidar_site_ids = [
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, sname)
             for sname in ("site_lidar_m30", "site_lidar_m15", "site_lidar_0", "site_lidar_p15", "site_lidar_p30")
+        ]
+        self.head_tof_site_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "site_head_tof")
+        self.head_tof_sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "head_tof")
+        self.head_tof_sensor_adr = (
+            int(self.model.sensor_adr[self.head_tof_sensor_id]) if self.head_tof_sensor_id != -1 else -1
+        )
+        self.head_scanners = [
+            ActiveHeadScanner(max_range_m=float(getattr(self.cfg, "LIDAR_MAX_RANGE", 2.0)))
+            for _ in range(self.num_envs)
         ]
 
         self.prev_d_min = np.zeros(self.num_envs, dtype=np.float32)
@@ -632,6 +658,23 @@ class ParallelSimRunner:
             site_ids=self.lidar_site_ids,
         )
 
+    def get_head_tof_range(self, env_idx: int) -> float:
+        """Read filtered brow head_tof distance (m) and feed into ActiveHeadScanner."""
+        lidar_max = float(getattr(self.cfg, "LIDAR_MAX_RANGE", 2.0))
+        d = self.datas[env_idx]
+        rng_m = extract_filtered_head_tof_range(
+            self.model,
+            d,
+            lidar_max=lidar_max,
+            site_id=self.head_tof_site_id,
+            sensor_adr=self.head_tof_sensor_adr,
+        )
+        head_yaw = float(d.sensordata[12]) if len(d.sensordata) > 13 else 0.0
+        head_pitch = float(d.sensordata[13]) if len(d.sensordata) > 13 else 0.0
+        now_s = float(self.episode_steps[env_idx] * self.control_dt)
+        self.head_scanners[env_idx].update(head_yaw, head_pitch, rng_m, now_s)
+        return rng_m
+
     def update_nav_commands(
         self,
         env_indices: Optional[Union[List[int], np.ndarray, range]] = None,
@@ -639,7 +682,7 @@ class ParallelSimRunner:
     ) -> None:
         """Update self.commands for specified environments using LidarWaypointPlanner.
 
-        Extracts current robot pose (qpos[:2], qpos[3:7]) and 5 LiDAR rays.
+        Extracts current robot pose (qpos[:2], qpos[3:7]) and active head_tof / 5-ray LiDAR ranges.
         """
         if not getattr(self, "use_nav_planner", False) or getattr(self, "nav_planner", None) is None:
             return
@@ -655,16 +698,30 @@ class ParallelSimRunner:
             d = self.datas[env_idx]
             pos_xy = np.asarray(d.qpos[:2], dtype=np.float32)
             quat_wxyz = np.asarray(d.qpos[3:7], dtype=np.float32)
+            now_s = float(self.episode_steps[env_idx] * self.control_dt)
 
             if lidar_obs is not None:
                 lidar_arr = np.asarray(lidar_obs, dtype=np.float32)
                 if lidar_arr.ndim == 1:
-                    raw_ray = lidar_arr[-5:] if lidar_arr.shape[0] >= 5 else None
+                    if lidar_arr.shape[0] == 5 or lidar_arr.shape[0] >= 42:
+                        raw_ray = lidar_arr[-5:]
+                    else:
+                        self.get_head_tof_range(env_idx)
+                        raw_ray = self.head_scanners[env_idx].get_virtual_rays(now_s)
                 elif lidar_arr.ndim == 2:
                     k = idx_k if lidar_arr.shape[0] == len(indices) else env_idx
-                    raw_ray = lidar_arr[k, 37:42] if lidar_arr.shape[1] >= 42 else lidar_arr[k, :5]
+                    if lidar_arr.shape[1] >= 42:
+                        raw_ray = lidar_arr[k, 37:42]
+                    elif lidar_arr.shape[1] == 5:
+                        raw_ray = lidar_arr[k, :5]
+                    else:
+                        self.get_head_tof_range(env_idx)
+                        raw_ray = self.head_scanners[env_idx].get_virtual_rays(now_s)
                 else:
                     raw_ray = None
+            elif self.head_tof_sensor_adr >= 0:
+                self.get_head_tof_range(env_idx)
+                raw_ray = self.head_scanners[env_idx].get_virtual_rays(now_s)
             else:
                 raw_ray = self._get_lidar_ranges(env_idx)
 
@@ -843,6 +900,9 @@ class ParallelSimRunner:
             self.recovery_controllers[env_idx].reset()
         self.fall_predictors[env_idx].reset()
         self.limp_active[env_idx] = False
+        self.head_scanners[env_idx].reset()
+        if self.head_tof_sensor_adr >= 0:
+            self.get_head_tof_range(env_idx)
         if self.use_nav_planner:
             self.update_nav_commands(env_indices=[env_idx])
         obs = self._extract_obs(env_idx)
@@ -920,9 +980,8 @@ class ParallelSimRunner:
             dtype=np.float32,
         )
 
-        # 5-ray LiDAR rangefinder readings (sensordata indices 28:33) if available
-        # MuJoCo rangefinder returns -1.0 if no geom is hit within cutoff distance
-        lidar_ranges = self._get_lidar_ranges(env_idx)
+        # Legacy 5-ray LiDAR readings only when explicitly requested (OBS_DIM == 42)
+        lidar_ranges = self._get_lidar_ranges(env_idx) if self.base_obs_dim == 42 else None
 
         emotion_one_hot = (
             get_emotion_one_hot(self.current_emotions[env_idx])
@@ -946,7 +1005,7 @@ class ParallelSimRunner:
             joint_vel=joint_vel,
             last_actions=last_act,
             foot_contact=foot_contact,
-            lidar_ranges=lidar_ranges if self.base_obs_dim == 42 else None,
+            lidar_ranges=lidar_ranges,
             emotion_one_hot=emotion_one_hot,
             phase_clock=phase_clock,
         )

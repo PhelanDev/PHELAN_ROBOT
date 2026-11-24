@@ -62,9 +62,9 @@ from robot.robot_spec import MODEL_PATH
 def test_rpi5_env_config_dimensions():
     """Verify RPi5 configuration dataclass dimensions and constraints."""
     cfg = RPi5Config()
-    assert cfg.OBS_DIM == 42, f"Expected 42 dims for perception RL, got {cfg.OBS_DIM}"
+    assert cfg.OBS_DIM == 37, f"Expected 37 dims for V2 locomotion RL, got {cfg.OBS_DIM}"
     assert cfg.ACTION_DIM == 8
-    assert cfg.LIDAR_RAYS == 5
+    assert cfg.LIDAR_RAYS == 0
     assert cfg.STACK_NAME == "rpi5_stack"
     assert cfg.POLICY_DTYPE == "float32"
     assert len(cfg.JOINT_NAMES) == 8
@@ -76,9 +76,9 @@ def test_rpi5_env_config_dimensions():
 def test_esp32_env_config_dimensions():
     """Verify ESP32-S3 configuration dataclass dimensions and constraints."""
     cfg = ESP32Config()
-    assert cfg.OBS_DIM == 42, f"Expected 42 dims for perception RL, got {cfg.OBS_DIM}"
+    assert cfg.OBS_DIM == 37, f"Expected 37 dims for V2 locomotion RL, got {cfg.OBS_DIM}"
     assert cfg.ACTION_DIM == 8
-    assert cfg.LIDAR_RAYS == 5
+    assert cfg.LIDAR_RAYS == 0
     assert cfg.STACK_NAME == "dual_esp32s3_stack"
     assert cfg.POLICY_DTYPE == "int8"
     assert len(cfg.JOINT_NAMES) == 8
@@ -191,27 +191,27 @@ def test_esp32_int8_quantization_helpers():
     rng = np.random.default_rng(42)
 
     # 1. Observation quantization (float32 -> int8)
-    float_obs = rng.uniform(-1.0, 1.0, size=42).astype(np.float32)
+    float_obs = rng.uniform(-1.0, 1.0, size=37).astype(np.float32)
     int8_obs = quantize_obs_int8(float_obs, scale=127.0)
 
-    assert int8_obs.shape == (42,)
+    assert int8_obs.shape == (37,)
     assert int8_obs.dtype == np.int8
     assert np.all(int8_obs >= -128) and np.all(int8_obs <= 127)
 
     # 2. Batch quantization
-    batch_obs = rng.uniform(-2.0, 2.0, size=(10, 42)).astype(np.float32)
+    batch_obs = rng.uniform(-2.0, 2.0, size=(10, 37)).astype(np.float32)
     batch_int8 = quantize_obs_int8(batch_obs, scale=64.0)
-    assert batch_int8.shape == (10, 42)
+    assert batch_int8.shape == (10, 37)
     assert batch_int8.dtype == np.int8
 
     # 3. Verify physical normalization prevents clipping distortion / saturation
-    # e.g., joint_vel=3.0 rad/s vs 6.0 rad/s should not both saturate to 127
-    raw_obs_mid = np.zeros(42, dtype=np.float32)
-    raw_obs_max = np.zeros(42, dtype=np.float32)
+    # e.g., joint_vel=3.0 rad/s vs 6.0 rad/s and ang_vel=3.0 vs 6.0 should not both saturate to 127
+    raw_obs_mid = np.zeros(37, dtype=np.float32)
+    raw_obs_max = np.zeros(37, dtype=np.float32)
     raw_obs_mid[17] = 3.0  # joint_vel halfway to max 6.0
     raw_obs_max[17] = 6.0  # joint_vel at max 6.0
-    raw_obs_mid[37] = 1.0  # LiDAR ray halfway to max 2.0m
-    raw_obs_max[37] = 2.0  # LiDAR ray at max 2.0m
+    raw_obs_mid[0] = 3.0   # ang_vel halfway to max 6.0
+    raw_obs_max[0] = 6.0   # ang_vel at max 6.0
 
     q_mid = quantize_obs_int8(raw_obs_mid)
     q_max = quantize_obs_int8(raw_obs_max)
@@ -222,15 +222,14 @@ def test_esp32_int8_quantization_helpers():
     assert 60 <= q_mid[17] <= 66
     assert 125 <= q_max[17] <= 127
 
-    # LiDAR 1.0m vs 2.0m
-    assert q_mid[37] < q_max[37], f"Expected q_mid[37] < q_max[37], got {q_mid[37]} vs {q_max[37]}"
-    assert 60 <= q_mid[37] <= 66
-    assert 125 <= q_max[37] <= 127
+    assert q_mid[0] < q_max[0], f"Expected q_mid[0] < q_max[0], got {q_mid[0]} vs {q_max[0]}"
+    assert 60 <= q_mid[0] <= 66
+    assert 125 <= q_max[0] <= 127
 
     # 4. Dequantization of observation
     recovered_mid = dequantize_obs_int8(q_mid)
     assert pytest.approx(recovered_mid[17], abs=0.1) == 3.0
-    assert pytest.approx(recovered_mid[37], abs=0.1) == 1.0
+    assert pytest.approx(recovered_mid[0], abs=0.1) == 3.0
 
     # 5. Action dequantization (int8 -> float32)
     int8_actions = np.array([-127, -64, 0, 64, 127, 32, -32, 0], dtype=np.int8)
@@ -243,9 +242,9 @@ def test_esp32_int8_quantization_helpers():
     assert pytest.approx(float_actions[4], abs=0.01) == 1.0
 
     # 6. C header generation
-    header_str = generate_esp32_quant_header(scale_obs=127.0, scale_act=127.0)
+    header_str = generate_esp32_quant_header(scale_obs=127.0, scale_act=127.0, obs_dim=37)
     assert "#ifndef ESP32_QUANT_CONFIG_H" in header_str
-    assert "#define OBS_DIM 42" in header_str
+    assert "#define OBS_DIM 37" in header_str
     assert "#define ACTION_DIM 8" in header_str
     assert "#define OBS_SCALE 127.0" in header_str
     assert "#define ACT_SCALE 127.0" in header_str
@@ -255,16 +254,16 @@ def test_esp32_int8_quantization_helpers():
     with tempfile.NamedTemporaryFile(suffix=".h", delete=False) as tmp:
         tmp_path = tmp.name
     try:
-        generate_esp32_quant_header(output_path=tmp_path)
+        generate_esp32_quant_header(output_path=tmp_path, obs_dim=37)
         content = Path(tmp_path).read_text(encoding="utf-8")
-        assert "#define OBS_DIM 42" in content
+        assert "#define OBS_DIM 37" in content
         assert "OBS_MAX_BOUNDS" in content
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
 
 def test_rpi5_parallel_sim_runner():
-    """Verify ParallelSimRunner with RPi5 MJCF model and 42-dim observation space."""
+    """Verify ParallelSimRunner with RPi5 MJCF model and 37-dim observation space."""
     rpi5_model_path = MODEL_PATH
     runner = RPi5ParallelSimRunner(
         model_path=rpi5_model_path,
@@ -273,23 +272,21 @@ def test_rpi5_parallel_sim_runner():
     )
     try:
         assert runner.num_envs == 4
-        assert runner.obs_dim == 42
+        assert runner.obs_dim == 37
         assert runner.action_dim == 8
 
         obs = runner.reset()
-        assert obs.shape == (4, 42)
+        assert obs.shape == (4, 37)
         assert np.all(np.isfinite(obs))
-        # Ensure foot contacts are binarized (0.0 / 1.0) and padded indices are 0.0
+        # Ensure foot contacts are binarized (0.0 / 1.0) and phase clock is [sin(0)=0, cos(0)=1]
         assert np.all((obs[:, 33:35] == 0.0) | (obs[:, 33:35] == 1.0))
         np.testing.assert_allclose(obs[:, 35:37], np.tile([0.0, 1.0], (4, 1)))
-        # Ensure LiDAR readings are positive distances (cutoff=2.0)
-        assert np.all(obs[:, 37:42] >= 0.0)
 
         # Step environments
         actions = np.zeros((4, 8), dtype=np.float32)
         next_obs, rewards, dones, infos = runner.step(actions)
 
-        assert next_obs.shape == (4, 42)
+        assert next_obs.shape == (4, 37)
         assert rewards.shape == (4,)
         assert dones.shape == (4,)
         assert len(infos) == 4
@@ -300,7 +297,7 @@ def test_rpi5_parallel_sim_runner():
 
 
 def test_esp32_parallel_sim_runner():
-    """Verify ParallelSimRunner with Dual ESP32-S3 MJCF model and 42-dim observation space."""
+    """Verify ParallelSimRunner with Dual ESP32-S3 MJCF model and 37-dim observation space."""
     esp32_model_path = MODEL_PATH
     runner = ESP32ParallelSimRunner(
         model_path=esp32_model_path,
@@ -309,20 +306,19 @@ def test_esp32_parallel_sim_runner():
     )
     try:
         assert runner.num_envs == 4
-        assert runner.obs_dim == 42
+        assert runner.obs_dim == 37
         assert runner.action_dim == 8
 
         obs = runner.reset()
-        assert obs.shape == (4, 42)
+        assert obs.shape == (4, 37)
         assert np.all(np.isfinite(obs))
         assert np.all((obs[:, 33:35] == 0.0) | (obs[:, 33:35] == 1.0))
         np.testing.assert_allclose(obs[:, 35:37], np.tile([0.0, 1.0], (4, 1)))
-        assert np.all(obs[:, 37:42] >= 0.0)
 
         actions = np.random.uniform(-0.5, 0.5, size=(4, 8)).astype(np.float32)
         next_obs, rewards, dones, infos = runner.step(actions)
 
-        assert next_obs.shape == (4, 42)
+        assert next_obs.shape == (4, 37)
         assert rewards.shape == (4,)
         assert dones.shape == (4,)
         assert len(infos) == 4
@@ -406,8 +402,8 @@ def test_rpi5_truncation_randomization_aligned_obs():
         assert dones[2] == True
         assert runner.episode_steps[2] == 0  # auto-reset
         assert infos[2].get("timeout") == True
-        # Aligned next_obs check (42 dims)
-        assert next_obs.shape == (4, 42)
+        # Aligned next_obs check (37 dims)
+        assert next_obs.shape == (4, 37)
         expected_reset_obs = runner._extract_obs(2)
         np.testing.assert_allclose(next_obs[2], expected_reset_obs, atol=1e-5)
     finally:
@@ -449,8 +445,8 @@ def test_esp32_truncation_randomization_aligned_obs():
         assert dones[1] == True
         assert runner.episode_steps[1] == 0  # auto-reset
         assert infos[1].get("timeout") == True
-        # Aligned next_obs check (42 dims)
-        assert next_obs.shape == (4, 42)
+        # Aligned next_obs check (37 dims)
+        assert next_obs.shape == (4, 37)
         expected_reset_obs = runner._extract_obs(1)
         np.testing.assert_allclose(next_obs[1], expected_reset_obs, atol=1e-5)
     finally:
@@ -460,54 +456,54 @@ def test_esp32_truncation_randomization_aligned_obs():
 def test_evaluate_models_sim_checkpoint_loading_and_architecture_inference(tmp_path):
     """Verify tools/train/evaluate_models_sim.py load_actor loads with weights_only=False
 
-    and dynamically infers obs_dim, hidden_dim, and action_dim from checkpoint.
+    and validates canonical V2 37D observation dimension.
     """
     import torch
     import torch.nn as nn
     from tools.train.evaluate_models_sim import load_actor
 
-    # 1. Create a 37-dim custom actor checkpoint
-    dummy_actor_37 = nn.Sequential(
-        nn.Linear(37, 128),
+    # 1. Create a retired 42-dim actor checkpoint (must be rejected)
+    dummy_actor_42 = nn.Sequential(
+        nn.Linear(42, 128),
         nn.ELU(),
         nn.Linear(128, 128),
         nn.ELU(),
         nn.Linear(128, 8),
     )
-    ckpt_37 = {
-        "actor_state_dict": dummy_actor_37.state_dict(),
-        "obs_dim": 37,
+    ckpt_42 = {
+        "actor_state_dict": dummy_actor_42.state_dict(),
+        "obs_dim": 42,
         "action_dim": 8,
         "hidden_dim": 128,
         "stage": 1,
         "model_name": "cyberduck_v2.xml",
     }
-    p37 = tmp_path / "dummy_37.pt"
-    torch.save(ckpt_37, p37)
+    p42 = tmp_path / "dummy_42.pt"
+    torch.save(ckpt_42, p42)
 
-    with pytest.raises(ValueError, match="42 observations"):
-        load_actor(p37)
+    with pytest.raises(ValueError, match="37 observations"):
+        load_actor(p42)
 
-    # 2. Create a 42-dim custom actor checkpoint
-    dummy_actor_42 = nn.Sequential(
-        nn.Linear(42, 256),
+    # 2. Create a 37-dim custom actor checkpoint
+    dummy_actor_37 = nn.Sequential(
+        nn.Linear(37, 256),
         nn.ELU(),
         nn.Linear(256, 256),
         nn.ELU(),
         nn.Linear(256, 8),
     )
-    ckpt_42 = {
-        "actor_state_dict": dummy_actor_42.state_dict(),
-        "obs_dim": 42,
+    ckpt_37 = {
+        "actor_state_dict": dummy_actor_37.state_dict(),
+        "obs_dim": 37,
         "action_dim": 8,
         "hidden_dim": 256,
         "stage": 0,
         "model_name": "cyberduck_v2.xml",
     }
-    p42 = tmp_path / "dummy_42.pt"
-    torch.save(ckpt_42, p42)
+    p37 = tmp_path / "dummy_37.pt"
+    torch.save(ckpt_37, p37)
 
-    loaded_42 = load_actor(p42)
-    assert hasattr(loaded_42, "obs_dim") and loaded_42.obs_dim == 42
-    out_42 = loaded_42(torch.zeros(3, 42))
-    assert out_42.shape == (3, 8)
+    loaded_37 = load_actor(p37)
+    assert hasattr(loaded_37, "obs_dim") and loaded_37.obs_dim == 37
+    out_37 = loaded_37(torch.zeros(3, 37))
+    assert out_37.shape == (3, 8)

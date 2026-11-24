@@ -36,8 +36,8 @@ def test_pizero2w_mujoco_compilation_and_mass_budget():
         MJCF_PATH,
         min_mass=TOTAL_MASS_KG - 1e-6,
         max_mass=TOTAL_MASS_KG + 1e-6,
-        base_mass_min=0.36 - 1e-6,
-        base_mass_max=0.36 + 1e-6,
+        base_mass_min=0.578958 - 1e-6,
+        base_mass_max=0.578958 + 1e-6,
         n_steps=50,
     )
 
@@ -48,8 +48,8 @@ def test_pizero2w_urdf_structure_and_inertials():
         robot_name="cyberduck_v2",
         min_total_mass=TOTAL_MASS_KG - 1e-6,
         max_total_mass=TOTAL_MASS_KG + 1e-6,
-        min_base_mass=0.36 - 1e-6,
-        max_base_mass=0.36 + 1e-6,
+        min_base_mass=0.578958 - 1e-6,
+        max_base_mass=0.578958 + 1e-6,
     )
 
 
@@ -79,9 +79,8 @@ def test_pizero2w_infer_script_import_and_mock():
         joint_vel=[0.0] * 8,
         last_actions=[0.0] * 8,
         foot_contact=[1.0, 1.0, 0.0, 0.0],
-        lidar_ranges=[1.5] * 5,
     )
-    assert obs.shape == (42,)
+    assert obs.shape == (37,)
 
     engine = PiZero2WInferenceEngine(model_path=None, mock=True, freq=50.0)
     assert engine.mock is True
@@ -104,7 +103,7 @@ def test_pizero2w_infer_cli(tmp_path):
     from tools.train.train_ppo import ActorCritic
     from tools.robot.export_policy import export_onnx
     policy = ActorCritic(hidden_dim=16)
-    policy.observation_schema = observation_schema(42, False, 0.02)
+    policy.observation_schema = observation_schema(37, False, 0.02)
     model_path = export_onnx(policy, tmp_path / "pizero_test.onnx")
 
     for mock_flag in ["--mock", "--mock-pca"]:

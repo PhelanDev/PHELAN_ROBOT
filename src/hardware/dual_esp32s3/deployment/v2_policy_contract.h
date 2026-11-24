@@ -16,6 +16,9 @@ constexpr bool cyberduck_v2_model_name_matches(const char* actual, const char* e
 }
 static_assert(cyberduck_v2_model_name_matches(POLICY_MODEL_NAME, "cyberduck_v2.xml"), "MCU2 policy model identity must be cyberduck_v2.xml");
 static_assert(cyberduck_v2_model_name_matches(QUANT_MODEL_NAME, "cyberduck_v2.xml"), "MCU2 quantization config model identity must be cyberduck_v2.xml");
+static_assert(POLICY_LAYER1_IN == 37, "MCU2 policy contract requires 37 observations");
+static_assert(OBS_DIM == 37, "MCU2 quantization config requires OBS_DIM=37");
+static_assert(POLICY_OBS_SCHEMA_VERSION == 2, "MCU2 policy contract requires observation schema version 2");
 #endif
 
 #endif  // CYBERDUCK_V2_POLICY_CONTRACT_H

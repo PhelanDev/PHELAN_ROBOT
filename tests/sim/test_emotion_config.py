@@ -301,7 +301,7 @@ def test_compute_rewards_emotion_tracking():
 
 
 def test_parallel_sim_runner_include_emotions():
-    """Verify ParallelSimRunner with include_emotions=True produces 52-dim observations."""
+    """Verify ParallelSimRunner with include_emotions=True produces 47-dim observations (37D + 10)."""
     runner = ParallelSimRunner(
         model_path="src/robot/cyberduck_v2.xml",
         num_envs=4,
@@ -310,18 +310,18 @@ def test_parallel_sim_runner_include_emotions():
     )
     try:
         assert runner.include_emotions is True
-        assert runner.obs_dim == 52
+        assert runner.obs_dim == 47
         assert runner.current_emotions.shape == (4,)
         assert runner.current_emotions.dtype == np.int32
 
         # Reset observations shape
         obs = runner.reset()
-        assert obs.shape == (4, 52)
+        assert obs.shape == (4, 47)
 
         # Step observations shape and info
         actions = np.zeros((4, runner.action_dim), dtype=np.float32)
         next_obs, rewards, dones, infos = runner.step(actions)
-        assert next_obs.shape == (4, 52)
+        assert next_obs.shape == (4, 47)
         assert len(infos) == 4
         assert "emotion_tracking" in infos[0]
 
@@ -344,9 +344,9 @@ def test_parallel_sim_runner_include_emotions():
                 decimation=5,
                 include_emotions=True,
             )
-            assert runner_rpi5.obs_dim == 52
+            assert runner_rpi5.obs_dim == 47
             obs_rpi5 = runner_rpi5.reset()
-            assert obs_rpi5.shape == (2, 52)
+            assert obs_rpi5.shape == (2, 47)
             if hasattr(runner_rpi5, "executor") and runner_rpi5.executor:
                 runner_rpi5.executor.shutdown(wait=False)
     finally:

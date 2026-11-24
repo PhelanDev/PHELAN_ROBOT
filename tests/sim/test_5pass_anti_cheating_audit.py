@@ -1043,14 +1043,14 @@ def test_audit_15_six_part_locomotion_overhaul():
             data=data,
             cmd_vel=runner_sync.commands[0],
             last_actions=runner_sync.last_actions[0],
-            obs_dim=42,
+            obs_dim=37,
             episode_step=7,
             control_dt=runner_sync.control_dt,
         )
 
-        assert sim_obs.shape == viewer_obs.shape == (42,), "V2 observation dimensions must be (42,)"
+        assert sim_obs.shape == viewer_obs.shape == (37,), "V2 observation dimensions must be (37,)"
         assert np.allclose(sim_obs, viewer_obs, atol=1e-5), "Observation mismatch between ParallelSimRunner and interactive_viewer"
-        np.testing.assert_allclose(viewer_obs[37:42], runner_sync._get_lidar_ranges(0), atol=1e-6)
+        assert np.isfinite(runner_sync.get_head_tof_range(0))
         assert np.isclose(sim_obs[35], viewer_obs[35], atol=1e-5)
         assert np.isclose(sim_obs[36], viewer_obs[36], atol=1e-5)
         assert not (np.isclose(sim_obs[35], 0.0, atol=1e-4) and np.isclose(sim_obs[36], 0.0, atol=1e-4))

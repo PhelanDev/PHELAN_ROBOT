@@ -164,7 +164,7 @@ def test_runner_compute_d_min_filters_submerged_pillars():
         randomize_pillars=False,
     )
     try:
-        assert runner.obs_dim == 42
+        assert runner.obs_dim == 37
         # Step once with active obstacles so d_min, prev_d_min are populated with positive distances
         actions = np.zeros((2, runner.action_dim), dtype=np.float32)
         obs, rewards, dones, infos = runner.step(actions)

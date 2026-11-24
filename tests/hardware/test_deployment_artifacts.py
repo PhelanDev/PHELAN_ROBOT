@@ -22,12 +22,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 
-def test_audit_esp32_rejects_37_before_creating_artifacts(tmp_path):
+def test_audit_esp32_rejects_42_before_creating_artifacts(tmp_path):
     from tools.train.train_ppo import ActorCritic
     from tools.robot.export_policy import export_esp32_headers
     output = tmp_path / "new"
-    with pytest.raises(ValueError, match="42"):
-        export_esp32_headers(ActorCritic(obs_dim=37, hidden_dim=16), output / "w.h", output / "c.h")
+    with pytest.raises(ValueError, match="37"):
+        export_esp32_headers(ActorCritic(obs_dim=42, hidden_dim=16), output / "w.h", output / "c.h")
     assert not output.exists()
 
 
@@ -38,7 +38,7 @@ def test_esp32_export_requires_verified_v2_identity(tmp_path, model_name):
     from sim.env.policy_contract import observation_schema
 
     actor = ActorCritic(hidden_dim=16)
-    actor.observation_schema = observation_schema(42, True, 0.02)
+    actor.observation_schema = observation_schema(37, True, 0.02)
     if model_name is not None:
         actor.model_name = model_name
     output = tmp_path / "unverified_export"
@@ -58,7 +58,7 @@ def test_esp32_firmware_v2_identity_contract(tmp_path, mutation):
 
     actor = ActorCritic(hidden_dim=16)
     actor.model_name = "cyberduck_v2.xml"
-    actor.observation_schema = observation_schema(42, True, 0.02)
+    actor.observation_schema = observation_schema(37, True, 0.02)
     weights, config = export_esp32_headers(actor, tmp_path / "weights.h", tmp_path / "config.h")
     assert '#define POLICY_MODEL_NAME "cyberduck_v2.xml"' in weights.read_text(encoding="utf-8")
     assert '#define QUANT_MODEL_NAME "cyberduck_v2.xml"' in config.read_text(encoding="utf-8")
@@ -78,7 +78,7 @@ def test_esp32_firmware_v2_identity_contract(tmp_path, mutation):
     source.write_text(
         '#include "config.h"\n#include "weights.h"\n'
         + f'#include "{contract.as_posix()}"\n'
-        + 'int main(){int8_t obs[42]={}, actions[8]={}; evaluate_policy_int8(obs,actions); return 0;}\n',
+        + 'int main(){int8_t obs[37]={}, actions[8]={}; evaluate_policy_int8(obs,actions); return 0;}\n',
         encoding="utf-8",
     )
     executable = tmp_path / "identity.exe"
@@ -91,7 +91,7 @@ def test_esp32_firmware_v2_identity_contract(tmp_path, mutation):
         assert "CyberDuck V2" in result.stderr or "cyberduck_v2.xml" in result.stderr
 
 
-@pytest.mark.parametrize("obs_dim,layer_input,passes", [(42, 42, True), (37, 37, False), (42, 37, False)])
+@pytest.mark.parametrize("obs_dim,layer_input,passes", [(37, 37, True), (42, 42, False), (37, 42, False)])
 def test_audit_firmware_guards_and_assembly_canary(tmp_path, obs_dim, layer_input, passes):
     import re
     from tools.robot.export_policy import export_esp32_headers
@@ -103,7 +103,7 @@ def test_audit_firmware_guards_and_assembly_canary(tmp_path, obs_dim, layer_inpu
     function = firmware[firmware.index("void assemble_observation("):firmware.index("void evaluate_locomotion_policy(")]
     policy = ActorCritic(hidden_dim=16)
     policy.model_name = "cyberduck_v2.xml"
-    policy.observation_schema = observation_schema(42, True, 0.02)
+    policy.observation_schema = observation_schema(37, True, 0.02)
     weights, config = export_esp32_headers(policy, tmp_path / "weights.h", tmp_path / "config.h")
     source = '#include <cmath>\n#include <cstdint>\n#include <cassert>\n#include "config.h"\n#include "weights.h"\n'
     source += f'#undef OBS_DIM\n#define OBS_DIM {obs_dim}\n#undef POLICY_LAYER1_IN\n#define POLICY_LAYER1_IN {layer_input}\n'
@@ -120,7 +120,6 @@ int main(){struct {float obs[OBS_DIM]; float canary[5];} buffer;
 for(float& f:buffer.canary) f=12345;
 assemble_observation(buffer.obs);
 for(float f:buffer.canary) assert(f==12345);
-for(int i=37;i<42;i++)assert(buffer.obs[i]==1.5f);
 return 0;}
 '''
     cpp = tmp_path / "assembly.cpp"
@@ -191,7 +190,7 @@ def test_rpi5_infer_script_import_and_mock():
     clamped_pwm = angle_to_pwm(5.0, -np.pi / 2, np.pi / 2, min_pulse_us=500, max_pulse_us=2500)
     assert clamped_pwm == 2500
 
-    # 2. Test pack_rpi5_observation
+    # 2. Test pack_rpi5_observation (37D actor contract)
     obs = pack_rpi5_observation(
         base_ang_vel=[0.0, 0.0, 0.0],
         proj_grav=[0.0, 0.0, -1.0],
@@ -200,9 +199,8 @@ def test_rpi5_infer_script_import_and_mock():
         joint_vel=[0.0] * 8,
         last_actions=[0.0] * 8,
         foot_contact=[1.0, 1.0, 0.0, 0.0],
-        lidar_ranges=[1.0, 1.0, 1.0, 1.0, 1.0],
     )
-    assert obs.shape == (42,), f"Expected shape (42,), got {obs.shape}"
+    assert obs.shape == (37,), f"Expected shape (37,), got {obs.shape}"
     assert obs.dtype == np.float32
 
     # 3. Test RPi5InferenceEngine in mock mode
@@ -211,7 +209,7 @@ def test_rpi5_infer_script_import_and_mock():
     assert engine.last_raw_actions.shape == (8,)
     assert np.all(engine.last_raw_actions == 0.0)
 
-    raw_obs = np.zeros(42, dtype=np.float32)
+    raw_obs = np.zeros(37, dtype=np.float32)
     targets, pwms = engine.step(raw_obs)
 
     assert targets.shape == (8,)
@@ -220,7 +218,7 @@ def test_rpi5_infer_script_import_and_mock():
     assert np.all(engine.last_raw_actions >= -1.0) and np.all(engine.last_raw_actions <= 1.0)
 
     # Verify rate limiting between consecutive steps
-    large_delta_obs = np.ones(42, dtype=np.float32)
+    large_delta_obs = np.ones(37, dtype=np.float32)
     next_targets, _ = engine.step(large_delta_obs)
     max_step_delta = 6.0 * (1.0 / 50.0) + 1e-4  # max_vel * dt
     actual_max_delta = np.max(np.abs(next_targets - targets))
@@ -235,16 +233,16 @@ def test_rpi5_infer_onnx_model_execution(tmp_path):
     from onnx import helper, TensorProto
     from hardware.rpi5.deployment.infer_rpi5 import RPi5InferenceEngine
 
-    # Build a tiny dummy ONNX model: output = MatMul(obs, W) where W is 42x8
-    input_tensor = helper.make_tensor_value_info("obs", TensorProto.FLOAT, [1, 42])
+    # Build a tiny dummy ONNX model: output = MatMul(obs, W) where W is 37x8
+    input_tensor = helper.make_tensor_value_info("obs", TensorProto.FLOAT, [1, 37])
     output_tensor = helper.make_tensor_value_info("actions", TensorProto.FLOAT, [1, 8])
 
-    weights = np.zeros((42, 8), dtype=np.float32)
+    weights = np.zeros((37, 8), dtype=np.float32)
     weights[0, 0] = 0.5  # Simple coupling
     weight_init = helper.make_tensor(
         name="W",
         data_type=TensorProto.FLOAT,
-        dims=[42, 8],
+        dims=[37, 8],
         vals=weights.flatten().tolist(),
     )
 
@@ -256,12 +254,12 @@ def test_rpi5_infer_onnx_model_execution(tmp_path):
     model_file = tmp_path / "dummy_policy.onnx"
     import json
     from sim.env.policy_contract import observation_schema
-    onnx.helper.set_model_props(model, {"observation_schema": json.dumps(observation_schema(42, False, 0.02))})
+    onnx.helper.set_model_props(model, {"observation_schema": json.dumps(observation_schema(37, False, 0.02))})
     onnx.save(model, str(model_file))
 
     # Initialize engine with the ONNX model
     engine = RPi5InferenceEngine(model_path=str(model_file), mock=True, freq=50.0)
-    obs = np.zeros(42, dtype=np.float32)
+    obs = np.zeros(37, dtype=np.float32)
     obs[0] = 1.0  # Should trigger action[0] = 0.5
 
     targets, pwms = engine.step(obs)
@@ -279,11 +277,11 @@ def test_rpi5_infer_cli(tmp_path):
     import json
     from sim.env.policy_contract import observation_schema
     schema_file = tmp_path / "verified-test-schema.json"
-    schema_file.write_text(json.dumps(observation_schema(42, False, 0.02)), encoding="utf-8")
+    schema_file.write_text(json.dumps(observation_schema(37, False, 0.02)), encoding="utf-8")
     from tools.train.train_ppo import ActorCritic
     from tools.robot.export_policy import export_onnx
     policy = ActorCritic(hidden_dim=16)
-    policy.observation_schema = observation_schema(42, False, 0.02)
+    policy.observation_schema = observation_schema(37, False, 0.02)
     model_path = export_onnx(policy, tmp_path / "rpi_test.onnx")
 
     for mock_flag in ["--mock", "--mock-pca"]:
@@ -514,7 +512,7 @@ def test_mcu2_locomotion_sketch():
     assert "esp32_policy_weights.h" in content
     # IMU, observation, control frequency
     assert "mpu" in content.lower() or "imu" in content.lower()
-    assert "OBS_DIM" in content and "42" in content, "MCU 2 must assemble 42-dim observation"
+    assert "OBS_DIM" in content and "37" in content, "MCU 2 must assemble 37-dim observation"
     assert "50" in content or "20" in content, "MCU 2 must run 50Hz (20ms) loop"
     assert "mg996r" in content.lower() or "servo" in content.lower() or "pwm" in content.lower()
     # Gravity sign inversion & low-pass filtering
@@ -619,7 +617,7 @@ int main() {{
     assert(std::fabs(s_filt_grav[1] - 0.0f) < 1e-4);
     assert(std::fabs(s_filt_grav[2] - (-1.0f)) < 1e-4);
 
-    // 2. Build 42-dimensional observation vector
+    // 2. Build 37-dimensional observation vector
     float obs[OBS_DIM] = {{0.0f}};
     obs[3] = s_filt_grav[0];
     obs[4] = s_filt_grav[1];
@@ -627,9 +625,6 @@ int main() {{
     obs[6] = 0.2f;           // vx = 0.2 m/s
     obs[33] = 1.0f;          // foot contact L
     obs[34] = 1.0f;          // foot contact R
-    for (int i = 0; i < 5; ++i) {{
-        obs[37 + i] = 1.5f;  // 1.5m LiDAR clear
-    }}
 
     // Quantize observation to INT8
     int8_t obs_int8[OBS_DIM];
@@ -1157,7 +1152,7 @@ int main() {{
     # 2. Check RPi5 nominal action scaling (action = 0.0 -> DEFAULT_NOMINAL_QPOS)
     engine_rpi5 = RPi5InferenceEngine(mock=True)
     engine_rpi5.predict_action = lambda obs: np.zeros(8, dtype=np.float32)
-    targets_rpi5, _ = engine_rpi5.step(np.zeros(42, dtype=np.float32))
+    targets_rpi5, _ = engine_rpi5.step(np.zeros(37, dtype=np.float32))
     assert np.allclose(targets_rpi5, DEFAULT_NOMINAL_QPOS, atol=1e-4), (
         f"RPi5 action 0 did not map to DEFAULT_NOMINAL_QPOS: {targets_rpi5} vs {DEFAULT_NOMINAL_QPOS}"
     )
@@ -1165,7 +1160,7 @@ int main() {{
     # 3. Check PiZero2W nominal action scaling (action = 0.0 -> DEFAULT_NOMINAL_QPOS)
     engine_pizero = PiZero2WInferenceEngine(mock=True)
     engine_pizero.predict_action = lambda obs: np.zeros(8, dtype=np.float32)
-    targets_pizero, _ = engine_pizero.step(np.zeros(42, dtype=np.float32))
+    targets_pizero, _ = engine_pizero.step(np.zeros(37, dtype=np.float32))
     assert np.allclose(targets_pizero, DEFAULT_NOMINAL_QPOS, atol=1e-4), (
         f"PiZero2W action 0 did not map to DEFAULT_NOMINAL_QPOS: {targets_pizero} vs {DEFAULT_NOMINAL_QPOS}"
     )
@@ -1191,11 +1186,11 @@ def test_esp32_int8_export_matches_float32_inference(tmp_path):
     torch.manual_seed(42)
     np.random.seed(42)
 
-    obs_dim = 42
+    obs_dim = 37
     action_dim = 8
     model = ActorCritic(obs_dim=obs_dim, action_dim=action_dim)
     model.model_name = "cyberduck_v2.xml"
-    model.observation_schema = observation_schema(42, False, 0.02)
+    model.observation_schema = observation_schema(37, False, 0.02)
     torch.nn.init.orthogonal_(model.actor[-1].weight, gain=0.2)
     model.eval()
 
@@ -1265,7 +1260,6 @@ def test_esp32_int8_export_matches_float32_inference(tmp_path):
     walk_obs[17:25] = [0.1, -0.1, 0.2, -0.2, 0.3, -0.3, 0.1, -0.1]  # joint vel
     walk_obs[25:33] = [0.0] * 8         # last actions
     walk_obs[33:37] = [1.0, 1.0, 0.0, 0.0] # foot contact
-    walk_obs[37:42] = [1.2, 1.5, 0.8, 1.1, 1.4] # lidar
     batch_obs.append(walk_obs)
 
     # Random observations spanning physical bounds
@@ -1544,8 +1538,8 @@ def test_export_policy_obs_norm_and_asymmetric_critic_parity(tmp_path):
     torch.manual_seed(42)
     np.random.seed(42)
 
-    obs_dim = 42
-    critic_obs_dim = 52
+    obs_dim = 37
+    critic_obs_dim = 48
     action_dim = 8
     hidden_dim = 256
 
@@ -1682,7 +1676,7 @@ def test_mcu2_separate_packet_timestamps_and_independent_expiry(tmp_path):
     """F1: Heartbeat/color must not refresh command/LiDAR freshness; velocity must not refresh LiDAR; CRC error refreshes nothing."""
     header_path = REPO_ROOT / "src" / "hardware" / "dual_esp32s3" / "deployment" / "uart_packet_protocol.h"
     mcu2_src = (REPO_ROOT / "src/hardware/dual_esp32s3/deployment/mcu2_locomotion_s3/mcu2_main.ino").read_text(encoding="utf-8")
-    proc_fn = mcu2_src[mcu2_src.index("void process_uart_packets()"):mcu2_src.index("// ============================================================================\n// 42-Dimensional")]
+    proc_fn = mcu2_src[mcu2_src.index("void process_uart_packets()"):mcu2_src.index("// ============================================================================\n// 37-Dimensional")]
     lidar_fn = mcu2_src[mcu2_src.index("void read_lidar_distances("):mcu2_src.index("void assemble_observation(")]
     # Extract watchdog logic from loop() or helper
     assert "g_last_cmd_pkt_time" in mcu2_src and "g_last_lidar_pkt_time" in mcu2_src, (
@@ -1902,7 +1896,7 @@ def test_esp32_schema_clock_parity_and_rejection(tmp_path, embed_clock, moving):
     # 1. Unsupported control_dt and missing schema must fail BEFORE creating directory/files
     bad_dir = tmp_path / "bad_export"
     bad_model = ActorCritic(hidden_dim=16)
-    bad_model.observation_schema = observation_schema(42, True, 0.01)  # 100 Hz unsupported by 50 Hz MCU2
+    bad_model.observation_schema = observation_schema(37, True, 0.01)  # 100 Hz unsupported by 50 Hz MCU2
     with pytest.raises(ValueError, match="50|control_dt|0.02|ESP32"):
         export_esp32_headers(bad_model, bad_dir / "w.h", bad_dir / "c.h")
     assert not bad_dir.exists()
@@ -1925,7 +1919,7 @@ def test_esp32_schema_clock_parity_and_rejection(tmp_path, embed_clock, moving):
     try:
         model = ActorCritic(hidden_dim=16)
         model.model_name = "cyberduck_v2.xml"
-        schema = observation_schema(42, embed_clock, runner.control_dt, period=0.8)
+        schema = observation_schema(37, embed_clock, runner.control_dt, period=0.8)
         model.observation_schema = schema
         weights_h, config_h = export_esp32_headers(model, tmp_path / "weights.h", tmp_path / "config.h")
 

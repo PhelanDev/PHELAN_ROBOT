@@ -41,13 +41,13 @@ def test_nonfinite_obs_or_policy_output_holds_previous_targets(monkeypatch):
     engine.last_targets = safe_pose.copy()
     engine.last_raw_actions = np.full(8, 0.1, dtype=np.float32)
 
-    bad_obs = np.zeros(42, dtype=np.float32)
+    bad_obs = np.zeros(37, dtype=np.float32)
     bad_obs[4] = np.nan
     targets1, _ = engine.step(bad_obs)
     np.testing.assert_allclose(targets1, safe_pose)
     assert engine.nonfinite_action_drops == 1
 
-    good_obs = np.zeros(42, dtype=np.float32)
+    good_obs = np.zeros(37, dtype=np.float32)
     monkeypatch.setattr(
         engine,
         "predict_action",
@@ -76,7 +76,7 @@ def test_deadman_timeout_zeroes_velocity_twist_without_going_limp():
 
 def test_limp_fall_and_standup_policy_hotswap_lifecycle(tmp_path):
     """Verify pre-impact fall predictor switches ONNX session to standup policy and recovers to walk."""
-    schema = observation_schema(42, True, 0.02)
+    schema = observation_schema(37, True, 0.02)
 
     walk_model = ActorCritic(hidden_dim=16, squash_actions=True)
     walk_model.model_name = "cyberduck_v2.xml"
@@ -107,7 +107,7 @@ def test_limp_fall_and_standup_policy_hotswap_lifecycle(tmp_path):
 
     upright_g = np.array([0.0, 0.0, -0.98], dtype=np.float32)
     zero_w = np.zeros(3, dtype=np.float32)
-    obs = np.zeros(42, dtype=np.float32)
+    obs = np.zeros(37, dtype=np.float32)
 
     # Arm predictor during 10 upright control ticks
     for _ in range(10):
@@ -176,7 +176,7 @@ def test_limp_fall_without_standup_policy_disables_all_servo_pwm_outputs(monkeyp
         return np.zeros(8, dtype=np.float32)
 
     monkeypatch.setattr(engine, "predict_action", _forbid_predict)
-    targets, pwms = engine.step(np.zeros(42, dtype=np.float32))
+    targets, pwms = engine.step(np.zeros(37, dtype=np.float32))
     assert called is False
     assert pwms.tolist() == [0] * 8
     assert engine.servo_controller.channel_pwms[:8] == [0] * 8
@@ -211,7 +211,7 @@ def test_vl53l0x_i2c_reader_valid_and_fault_zeroes_hardware_loop_velocity(monkey
 
     walk_model = ActorCritic(hidden_dim=16, squash_actions=True)
     walk_model.model_name = "cyberduck_v2.xml"
-    walk_model.observation_schema = observation_schema(42, True, 0.02)
+    walk_model.observation_schema = observation_schema(37, True, 0.02)
     walk_onnx = export_onnx(walk_model, tmp_path / "walk_tof_gate.onnx")
 
     fail_tof = {"flag": False}

@@ -19,7 +19,7 @@ from sim.env.env_config import (
 
 def test_env_config_dimensions():
     cfg = MicroDuck8DoFConfig()
-    assert cfg.OBS_DIM == 42
+    assert cfg.OBS_DIM == 37
     assert cfg.ACTION_DIM == 8
     assert len(cfg.JOINT_NAMES) == 8
     assert cfg.TORQUE_LIMIT == 1.0

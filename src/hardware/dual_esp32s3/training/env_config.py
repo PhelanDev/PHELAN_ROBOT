@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
-from robot.robot_spec import TOTAL_MASS_KG
+from robot.robot_spec import NUM_OBSERVATIONS, TOTAL_MASS_KG
 
 from sim.env.env_config import (
     MicroDuck8DoFConfig as BaseConfig,
@@ -33,9 +33,9 @@ class MicroDuck8DoFConfig(BaseConfig):
     TARGET_MASS: float = TOTAL_MASS_KG  # Shared V2 model; runtime profile does not change physics.
     POLICY_DTYPE: str = "int8"  # Quantized for ESP32-S3 PIE vector instructions
 
-    OBS_DIM: int = 42
+    OBS_DIM: int = NUM_OBSERVATIONS
     ACTION_DIM: int = 8
-    LIDAR_RAYS: int = 5
+    LIDAR_RAYS: int = 0
     LIDAR_MIN_RANGE: float = 0.05
     LIDAR_MAX_RANGE: float = 2.0
     OBSTACLE_THRESHOLD: float = 0.35  # meters

@@ -115,7 +115,7 @@ def test_audit_nonfinite_gradient_rejected_before_update(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("field,bad", [("observation_schema", None), ("terrain_mode", "stairs"),
-    ("obs_dim", 37), ("squash_actions", "yes")])
+    ("obs_dim", 42), ("squash_actions", "yes")])
 def test_audit_resume_validates_contract_before_writes(tmp_path, field, bad):
     from tools.train.train_ppo import train_ppo
     path = tmp_path / "contract_ppo.pt"
@@ -135,24 +135,24 @@ def test_actor_critic_architecture_and_forward():
     """Verify ActorCritic neural architecture, dimensions, activations, and parameter gradients."""
     from tools.train.train_ppo import ActorCritic
 
-    obs_dim = 42
+    obs_dim = 37
     action_dim = 8
     hidden_dim = 256
 
     model = ActorCritic(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim)
 
     # 1. Check module attributes
-    assert model.obs_dim == 42
+    assert model.obs_dim == 37
     assert model.action_dim == 8
     assert isinstance(model.log_std, torch.nn.Parameter)
     assert model.log_std.shape == (8,)
     assert model.log_std.requires_grad is True
 
     # 2. Check layer dimensions and ELU activations
-    # Actor: Linear(42, 256) -> ELU -> Linear(256, 256) -> ELU -> Linear(256, 8)
+    # Actor: Linear(37, 256) -> ELU -> Linear(256, 256) -> ELU -> Linear(256, 8)
     assert len(model.actor) == 5
     assert isinstance(model.actor[0], torch.nn.Linear)
-    assert model.actor[0].in_features == 42
+    assert model.actor[0].in_features == 37
     assert model.actor[0].out_features == 256
     assert isinstance(model.actor[1], torch.nn.ELU)
     assert isinstance(model.actor[2], torch.nn.Linear)
@@ -163,10 +163,10 @@ def test_actor_critic_architecture_and_forward():
     assert model.actor[4].in_features == 256
     assert model.actor[4].out_features == 8
 
-    # Critic: Linear(42, 256) -> ELU -> Linear(256, 256) -> ELU -> Linear(256, 1)
+    # Critic: Linear(37, 256) -> ELU -> Linear(256, 256) -> ELU -> Linear(256, 1)
     assert len(model.critic) == 5
     assert isinstance(model.critic[0], torch.nn.Linear)
-    assert model.critic[0].in_features == 42
+    assert model.critic[0].in_features == 37
     assert model.critic[0].out_features == 256
     assert isinstance(model.critic[1], torch.nn.ELU)
     assert isinstance(model.critic[2], torch.nn.Linear)
@@ -178,7 +178,7 @@ def test_actor_critic_architecture_and_forward():
     assert model.critic[4].out_features == 1
 
     # 3. Single observation forward pass
-    single_obs = torch.randn(1, 42)
+    single_obs = torch.randn(1, 37)
     action_mean = model.forward_actor(single_obs)
     val = model.forward_critic(single_obs)
     assert action_mean.shape == (1, 8)
@@ -186,7 +186,7 @@ def test_actor_critic_architecture_and_forward():
 
     # 4. Batched forward pass and get_action_and_value
     batch_size = 16
-    batch_obs = torch.randn(batch_size, 42)
+    batch_obs = torch.randn(batch_size, 37)
     actions, log_probs, entropy, values = model.get_action_and_value(batch_obs)
 
     assert actions.shape == (batch_size, 8)
@@ -270,14 +270,14 @@ def test_ppo_training_dry_run_api(tmp_path):
     ckpt = torch.load(str(checkpoint_path), map_location="cpu", weights_only=False)
     assert "model_state_dict" in ckpt
     assert "optimizer_state_dict" in ckpt
-    assert ckpt["obs_dim"] == 42
+    assert ckpt["obs_dim"] == 37
     assert ckpt["action_dim"] == 8
     assert ckpt["hidden_dim"] == 256
 
     # Test restoring model from checkpoint
-    restored_model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256, critic_obs_dim=ckpt.get("critic_obs_dim", 42))
+    restored_model = ActorCritic(obs_dim=37, action_dim=8, hidden_dim=256, critic_obs_dim=ckpt.get("critic_obs_dim", 37))
     restored_model.load_state_dict(ckpt["model_state_dict"])
-    dummy_obs = torch.zeros(1, 42)
+    dummy_obs = torch.zeros(1, 37)
     act = restored_model.forward_actor(dummy_obs)
     assert act.shape == (1, 8)
 
@@ -357,7 +357,7 @@ def test_duck_cli_train_dry_run(isolated_cli_env, tmp_path):
 
 
 def test_export_policy_onnx_and_onnxruntime(tmp_path):
-    """Verify ONNX model export for Raspberry Pi 5 with input 'obs' [1, 42], output 'actions' [1, 8]."""
+    """Verify ONNX model export for Raspberry Pi 5 with input 'obs' [1, 37], output 'actions' [1, 8]."""
     import onnx
     import onnxruntime as ort
     from tools.train.train_ppo import ActorCritic
@@ -365,7 +365,7 @@ def test_export_policy_onnx_and_onnxruntime(tmp_path):
 
     # Create model
     torch.manual_seed(42)
-    model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256)
+    model = ActorCritic(obs_dim=37, action_dim=8, hidden_dim=256)
     model.eval()
 
     onnx_path = tmp_path / "microduck_rpi5_policy.onnx"
@@ -387,7 +387,7 @@ def test_export_policy_onnx_and_onnxruntime(tmp_path):
 
     # 3. Execute with onnxruntime
     session = ort.InferenceSession(str(onnx_path))
-    test_obs = np.random.randn(1, 42).astype(np.float32)
+    test_obs = np.random.randn(1, 37).astype(np.float32)
     ort_outputs = session.run(["actions"], {"obs": test_obs})
     ort_actions = ort_outputs[0]
 
@@ -400,7 +400,7 @@ def test_export_policy_onnx_and_onnxruntime(tmp_path):
     np.testing.assert_allclose(ort_actions, pt_actions, atol=1e-5, rtol=1e-5)
 
     # 5. Batched evaluation test
-    batch_obs = np.random.randn(5, 42).astype(np.float32)
+    batch_obs = np.random.randn(5, 37).astype(np.float32)
     batch_ort_actions = session.run(["actions"], {"obs": batch_obs})[0]
     assert batch_ort_actions.shape == (5, 8)
 
@@ -412,8 +412,8 @@ def test_export_esp32_c_headers_syntax_and_compilation(tmp_path):
     from sim.env.policy_contract import observation_schema
 
     torch.manual_seed(42)
-    model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256)
-    model.observation_schema = observation_schema(42, True, 0.02)
+    model = ActorCritic(obs_dim=37, action_dim=8, hidden_dim=256)
+    model.observation_schema = observation_schema(37, True, 0.02)
     model.model_name = "cyberduck_v2.xml"
     model.model_path = "src/robot/cyberduck_v2.xml"
 
@@ -436,7 +436,7 @@ def test_export_esp32_c_headers_syntax_and_compilation(tmp_path):
 
     # Check config content
     assert "#ifndef ESP32_QUANT_CONFIG_H" in config_content
-    assert "#define OBS_DIM 42" in config_content
+    assert "#define OBS_DIM 37" in config_content
     assert "#define ACTION_DIM 8" in config_content
     assert "OBS_MAX_BOUNDS" in config_content
 
@@ -460,9 +460,9 @@ def test_export_esp32_c_headers_syntax_and_compilation(tmp_path):
 #include "{weights_header_path.as_posix()}"
 
 int main() {{
-    assert(OBS_DIM == 42);
+    assert(OBS_DIM == 37);
     assert(ACTION_DIM == 8);
-    assert(POLICY_LAYER1_IN == 42);
+    assert(POLICY_LAYER1_IN == 37);
     assert(POLICY_LAYER1_OUT == 256);
     assert(POLICY_LAYER2_IN == 256);
     assert(POLICY_LAYER2_OUT == 256);
@@ -470,7 +470,7 @@ int main() {{
     assert(POLICY_LAYER3_OUT == 8);
 
     // Test zero observation inference
-    int8_t zero_obs[42] = {{0}};
+    int8_t zero_obs[37] = {{0}};
     int8_t actions[8] = {{0}};
     evaluate_policy_int8(zero_obs, actions);
 
@@ -479,8 +479,8 @@ int main() {{
     }}
 
     // Test non-zero observation
-    int8_t test_obs[42];
-    for (int i = 0; i < 42; ++i) {{
+    int8_t test_obs[37];
+    for (int i = 0; i < 37; ++i) {{
         test_obs[i] = (int8_t)((i % 20) - 10);
     }}
     evaluate_policy_int8(test_obs, actions);
@@ -689,11 +689,11 @@ def test_actor_critic_clamps_extreme_loaded_log_std_in_forward():
     """Extreme log_std values must clamp std to [exp(min_log_std), exp(max_log_std)] without breaking normal grads."""
     from tools.train.train_ppo import ActorCritic
 
-    model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256)
+    model = ActorCritic(obs_dim=37, action_dim=8, hidden_dim=256)
     assert model.min_log_std == pytest.approx(-3.0)
     assert model.max_log_std == pytest.approx(0.0)
 
-    obs = torch.zeros(4, 42)
+    obs = torch.zeros(4, 37)
     with torch.no_grad():
         model.log_std.fill_(5.0)
     _, _, entropy_hi, _ = model.get_action_and_value(obs)
@@ -737,9 +737,9 @@ def test_critic_value_loss_updates_across_large_return_gap(monkeypatch, tmp_path
         best_save_path=str(tmp_path / "critic_best.pt"),
     )
     ckpt = torch.load(str(save_p), map_location="cpu", weights_only=False)
-    restored = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256, critic_obs_dim=ckpt.get("critic_obs_dim", 42))
+    restored = ActorCritic(obs_dim=37, action_dim=8, hidden_dim=256, critic_obs_dim=ckpt.get("critic_obs_dim", 37))
     restored.load_state_dict(ckpt["model_state_dict"])
-    dummy_crit_obs = torch.zeros(1, ckpt.get("critic_obs_dim", 42))
+    dummy_crit_obs = torch.zeros(1, ckpt.get("critic_obs_dim", 37))
     assert float(restored.forward_critic(dummy_crit_obs).item()) > 0.5
 
 
@@ -1222,21 +1222,21 @@ def test_running_mean_std_statistics_no_nan_and_clipping():
     """RunningMeanStd online Welford updates, variance convergence, no NaN, and clipping bounds."""
     from tools.train.train_ppo import RunningMeanStd
 
-    rms = RunningMeanStd(shape=42, clip=5.0)
+    rms = RunningMeanStd(shape=37, clip=5.0)
     rng = np.random.default_rng(123)
 
     # 1. Update with distinct non-standard distribution
-    true_mean = np.linspace(-3.0, 5.0, 42)
-    true_std = np.linspace(0.5, 3.0, 42)
+    true_mean = np.linspace(-3.0, 5.0, 37)
+    true_std = np.linspace(0.5, 3.0, 37)
     for _ in range(50):
-        batch = rng.normal(loc=true_mean, scale=true_std, size=(64, 42))
+        batch = rng.normal(loc=true_mean, scale=true_std, size=(64, 37))
         rms.update(batch)
 
     assert np.allclose(rms.mean, true_mean, atol=0.25)
     assert np.allclose(rms.var, true_std ** 2, atol=0.5)
 
     # 2. Check normalization shifts to ~0 mean and ~1 variance
-    test_batch = rng.normal(loc=true_mean, scale=true_std, size=(256, 42))
+    test_batch = rng.normal(loc=true_mean, scale=true_std, size=(256, 37))
     norm_np = rms.normalize(test_batch)
     assert np.all(np.isfinite(norm_np))
     assert np.all(norm_np >= -5.0) and np.all(norm_np <= 5.0)
@@ -1244,14 +1244,14 @@ def test_running_mean_std_statistics_no_nan_and_clipping():
     assert np.allclose(np.var(norm_np, axis=0), 1.0, atol=0.35)
 
     # 3. Check PyTorch tensor normalization and extreme value clipping
-    test_tensor = torch.full((10, 42), 1000.0, dtype=torch.float32)
+    test_tensor = torch.full((10, 37), 1000.0, dtype=torch.float32)
     norm_tensor = rms.normalize(test_tensor)
     assert isinstance(norm_tensor, torch.Tensor)
     assert torch.all(norm_tensor == 5.0)
 
     # 4. State dict roundtrip
     sd = rms.state_dict()
-    rms_loaded = RunningMeanStd(shape=42, clip=5.0)
+    rms_loaded = RunningMeanStd(shape=37, clip=5.0)
     rms_loaded.load_state_dict(sd)
     assert np.allclose(rms_loaded.mean, rms.mean)
     assert np.allclose(rms_loaded.var, rms.var)
@@ -1303,8 +1303,8 @@ def test_asymmetric_critic_actor_critic_forward_and_checkpoint():
     """ActorCritic supports asymmetric critic_obs_dim != obs_dim with clean forward and state_dict."""
     from tools.train.train_ppo import ActorCritic
 
-    obs_dim = 42
-    critic_obs_dim = 53
+    obs_dim = 37
+    critic_obs_dim = 48
     ac = ActorCritic(obs_dim=obs_dim, action_dim=8, hidden_dim=256, critic_obs_dim=critic_obs_dim)
     assert ac.obs_dim == obs_dim
     assert ac.critic_obs_dim == critic_obs_dim
@@ -1334,19 +1334,19 @@ def test_asymmetric_critic_actor_critic_forward_and_checkpoint():
 
 
 def test_legacy_42dim_checkpoint_transfer_to_asymmetric_critic(tmp_path):
-    """Legacy 42-dim critic checkpoint transfers cleanly into 53-dim asymmetric critic model."""
+    """Symmetric 37-dim critic checkpoint transfers cleanly into 48-dim asymmetric critic model."""
     from tools.train.train_ppo import ActorCritic, train_ppo
 
-    # 1. Create a legacy checkpoint where both actor and critic have obs_dim=42
-    legacy_model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256, critic_obs_dim=42)
-    legacy_ckpt_path = tmp_path / "legacy_42dim_ckpt.pt"
+    # 1. Create a legacy checkpoint where both actor and critic have obs_dim=37
+    legacy_model = ActorCritic(obs_dim=37, action_dim=8, hidden_dim=256, critic_obs_dim=37)
+    legacy_ckpt_path = tmp_path / "legacy_37dim_sym_ckpt.pt"
     legacy_payload = {
         "model_name": "cyberduck_v2.xml",
         "model_path": "src/robot/cyberduck_v2.xml",
         "model_state_dict": legacy_model.state_dict(),
         "actor_state_dict": legacy_model.actor.state_dict(),
         "critic_state_dict": legacy_model.critic.state_dict(),
-        "obs_dim": 42,
+        "obs_dim": 37,
         "action_dim": 8,
         "hidden_dim": 256,
         "stage": 0,
@@ -1355,7 +1355,7 @@ def test_legacy_42dim_checkpoint_transfer_to_asymmetric_critic(tmp_path):
     }
     torch.save(legacy_payload, str(legacy_ckpt_path))
 
-    # 2. Load legacy checkpoint into train_ppo with cyberduck_v2 runner (privileged_obs_dim=53)
+    # 2. Load legacy checkpoint into train_ppo with cyberduck_v2 runner (privileged_obs_dim=48)
     save_path = tmp_path / "asym_trained.pt"
     best_save_path = tmp_path / "asym_best.pt"
     res = train_ppo(
@@ -1374,8 +1374,8 @@ def test_legacy_42dim_checkpoint_transfer_to_asymmetric_critic(tmp_path):
     assert res["success"] is True
     assert save_path.exists()
     saved_ckpt = torch.load(str(save_path), map_location="cpu", weights_only=False)
-    assert saved_ckpt["obs_dim"] == 42
-    assert saved_ckpt["critic_obs_dim"] == 53
+    assert saved_ckpt["obs_dim"] == 37
+    assert saved_ckpt["critic_obs_dim"] == 48
     assert "obs_rms" in saved_ckpt
     assert "critic_obs_rms" in saved_ckpt
 
@@ -1426,8 +1426,8 @@ def test_evaluate_deterministic_rollout_returns_metrics_and_logs(tmp_path, capsy
         train_ppo,
     )
 
-    model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=64, critic_obs_dim=53)
-    obs_rms = RunningMeanStd(shape=42, clip=10.0)
+    model = ActorCritic(obs_dim=37, action_dim=8, hidden_dim=64, critic_obs_dim=48)
+    obs_rms = RunningMeanStd(shape=37, clip=10.0)
     det_dist_x, det_rew = evaluate_deterministic_rollout(
         model=model,
         obs_rms=obs_rms,
@@ -1573,8 +1573,8 @@ def test_get_privileged_obs_vectorized_subsets_and_eval_runner_reuse(tmp_path):
         stage=0,
         terrain_mode="hurdles",
     )
-    model = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=64, critic_obs_dim=53)
-    obs_rms = RunningMeanStd(shape=42, clip=10.0)
+    model = ActorCritic(obs_dim=37, action_dim=8, hidden_dim=64, critic_obs_dim=48)
+    obs_rms = RunningMeanStd(shape=37, clip=10.0)
     try:
         det_dist_x, det_rew = evaluate_deterministic_rollout(
             model=model,
@@ -1606,7 +1606,7 @@ def test_transfer_preserves_squash_actions_and_pre_optimizer_parity(monkeypatch,
     from tools.train.train_ppo import ActorCritic, RunningMeanStd
     from sim.env.policy_contract import observation_schema
 
-    obs_dim, act_dim, hidden_dim = 42, 8, 256
+    obs_dim, act_dim, hidden_dim = 37, 8, 256
     src = ActorCritic(obs_dim=obs_dim, action_dim=act_dim, hidden_dim=hidden_dim, squash_actions=source_squash)
     with torch.no_grad():
         for p in src.actor.parameters():
@@ -1619,7 +1619,7 @@ def test_transfer_preserves_squash_actions_and_pre_optimizer_parity(monkeypatch,
         "actor_state_dict": src.actor.state_dict(),
         "critic_state_dict": src.critic.state_dict(),
         "obs_dim": obs_dim,
-        "critic_obs_dim": 53,
+        "critic_obs_dim": 48,
         "action_dim": act_dim,
         "hidden_dim": hidden_dim,
         "model_path": "src/robot/cyberduck_v2.xml",
@@ -1668,26 +1668,26 @@ def test_transfer_bc_and_legacy_squash_metadata_and_invalid_rejected(tmp_path):
     from tools.train.train_ppo import ActorCritic, train_ppo
     from sim.env.policy_contract import observation_schema
 
-    obs = np.random.randn(20, 42).astype(np.float32)
+    obs = np.random.randn(20, 37).astype(np.float32)
     acts = np.random.uniform(-0.5, 0.5, size=(20, 8)).astype(np.float32)
-    bc_model, _ = train_behavior_cloning(obs, acts, obs_dim=42, action_dim=8, epochs=1, batch_size=20)
+    bc_model, _ = train_behavior_cloning(obs, acts, obs_dim=37, action_dim=8, epochs=1, batch_size=20)
     bc_path = tmp_path / "bc_explicit.pt"
-    save_bc_checkpoint(bc_path, bc_model, obs_dim=42, action_dim=8)
+    save_bc_checkpoint(bc_path, bc_model, obs_dim=37, action_dim=8)
     bc_ckpt = torch.load(bc_path, map_location="cpu", weights_only=False)
     assert bc_ckpt.get("squash_actions") is False
 
     # Legacy checkpoint missing squash_actions must reject implicit transfer (avoid silent tanh distortion)
-    legacy = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=256, critic_obs_dim=53)
+    legacy = ActorCritic(obs_dim=37, action_dim=8, hidden_dim=256, critic_obs_dim=48)
     legacy_path = tmp_path / "legacy_no_squash.pt"
     torch.save({
         "model_name": "cyberduck_v2.xml",
         "model_path": "src/robot/cyberduck_v2.xml",
         "model_state_dict": legacy.state_dict(),
-        "obs_dim": 42,
-        "critic_obs_dim": 53,
+        "obs_dim": 37,
+        "critic_obs_dim": 48,
         "action_dim": 8,
         "hidden_dim": 256,
-        "observation_schema": observation_schema(42, True, 0.02),
+        "observation_schema": observation_schema(37, True, 0.02),
     }, legacy_path)
     out_fail = tmp_path / "should_not_exist.pt"
     with pytest.raises(ValueError, match="squash"):

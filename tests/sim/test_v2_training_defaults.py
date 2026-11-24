@@ -22,13 +22,13 @@ def test_default_runner_is_v2_with_canonical_observations():
     assert cfg.STACK_NAME == "cyberduck_v2"
     assert cfg.TARGET_MASS == pytest.approx(TOTAL_MASS_KG)
     assert cfg.JOINT_NAMES == list(JOINT_ORDER)
-    assert (cfg.OBS_DIM, cfg.ACTION_DIM) == (42, 8)
+    assert (cfg.OBS_DIM, cfg.ACTION_DIM) == (37, 8)
     runner = ParallelSimRunner(num_envs=1, num_threads=1)
     try:
         assert runner.model_path == MODEL_PATH.resolve()
         assert runner.embed_phase_clock is True
         obs, rewards, _, _ = runner.step(np.zeros((1, 8), dtype=np.float32))
-        assert obs.shape == (1, 42)
+        assert obs.shape == (1, 37)
         assert np.isfinite(obs).all() and np.isfinite(rewards).all()
     finally:
         runner.close()
@@ -74,24 +74,24 @@ def test_viewer_accepts_relocated_v2_identity_and_rejects_observation_adaptation
     checkpoint = tmp_path / "weights.pt"
     torch.save({"model_path": r"Z:\former-machine\robot\cyberduck_v2.xml", "model_name": MODEL_NAME}, checkpoint)
     assert Path(resolve_viewer_model_path(policy_path=checkpoint)) == MODEL_PATH.resolve()
-    with pytest.raises(ValueError, match="42"):
-        policy_step(nn.Linear(42, 8), np.zeros(37, dtype=np.float32))
-    with pytest.raises(ValueError, match="mismatch"):
+    with pytest.raises(ValueError, match="37"):
         policy_step(nn.Linear(37, 8), np.zeros(42, dtype=np.float32))
+    with pytest.raises(ValueError, match="mismatch"):
+        policy_step(nn.Linear(42, 8), np.zeros(37, dtype=np.float32))
 
 
 def test_bc_writes_v2_metadata_and_teacher37_fails(tmp_path):
     checkpoint = tmp_path / "bc.pt"
-    save_bc_checkpoint(checkpoint, ActorCritic(hidden_dim=16), 42, 8, hidden_dim=16)
+    save_bc_checkpoint(checkpoint, ActorCritic(hidden_dim=16), 37, 8, hidden_dim=16)
     payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
     assert payload["model_name"] == MODEL_NAME
     assert Path(payload["model_path"]) == MODEL_PATH
-    assert payload["observation_schema"]["obs_dim"] == 42
+    assert payload["observation_schema"]["obs_dim"] == 37
     assert payload["observation_schema"]["embed_phase_clock"] is True
     runner = ParallelSimRunner(num_envs=1, num_threads=1)
     try:
-        with pytest.raises(ValueError, match="42-observation"):
-            collect_teacher_demonstrations(runner, nn.Linear(37, 8), num_steps=1)
+        with pytest.raises(ValueError, match="37-observation"):
+            collect_teacher_demonstrations(runner, nn.Linear(42, 8), num_steps=1)
     finally:
         runner.close()
 
@@ -110,6 +110,6 @@ def test_trainers_save_canonical_v2_identity_for_copied_mjcf(tmp_path):
         payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
         assert payload["model_name"] == MODEL_NAME
         assert Path(payload["model_path"]) == MODEL_PATH
-        assert (payload["obs_dim"], payload["action_dim"]) == (42, 8)
+        assert (payload["obs_dim"], payload["action_dim"]) == (37, 8)
         assert Path(resolve_viewer_model_path(policy_path=checkpoint)) == MODEL_PATH.resolve()
-        assert load_actor(checkpoint).obs_dim == 42
+        assert load_actor(checkpoint).obs_dim == 37

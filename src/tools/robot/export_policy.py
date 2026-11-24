@@ -28,7 +28,7 @@ from hardware.dual_esp32s3.training.env_config import (
     generate_esp32_quant_header,
 )
 from tools.train.train_ppo import ActorCritic
-from robot.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME, REPO_ROOT
+from robot.robot_spec import CHECKPOINT_PREFIX, DEFAULT_ONNX_PATH, MODEL_NAME, NUM_ACTIONS, NUM_OBSERVATIONS, REPO_ROOT
 
 DEFAULT_CHECKPOINT_PATH = REPO_ROOT / "models" / "checkpoints" / f"{CHECKPOINT_PREFIX}_ppo.pt"
 DEFAULT_PIZERO2W_ONNX_PATH = DEFAULT_ONNX_PATH
@@ -79,8 +79,8 @@ def prepare_target_exports(checkpoints, legacy_model_name=None, schema_override=
                 raise ValueError("observation_schema override only applies to legacy checkpoints")
             checkpoint["observation_schema"] = validate_observation_schema(schema_override)
         actor = load_actor_from_checkpoint(checkpoint)
-        if actor[0].in_features != 42 or actor[4].out_features != 8:
-            raise ValueError(f"{target} export requires 42 observations and 8 actions")
+        if actor[0].in_features != NUM_OBSERVATIONS or actor[4].out_features != NUM_ACTIONS:
+            raise ValueError(f"{target} export requires {NUM_OBSERVATIONS} observations and {NUM_ACTIONS} actions")
         if target == "esp32":
             _validate_esp32_actor_arch(actor)
             _resolve_esp32_schema(actor, None)
@@ -103,8 +103,8 @@ def _resolve_esp32_schema(actor: nn.Module, legacy_observation_schema: Optional[
         schema = validate_observation_schema(legacy_observation_schema)
     else:
         raise ValueError("Legacy policy has no observation_schema; provide an explicit verified legacy schema")
-    if schema["obs_dim"] != 42:
-        raise ValueError("ESP32 observation_schema requires 42 observations")
+    if schema["obs_dim"] != NUM_OBSERVATIONS or schema["version"] != 2:
+        raise ValueError(f"ESP32 observation_schema requires {NUM_OBSERVATIONS} observations (schema version 2)")
     if not math.isclose(schema["control_dt"], 0.02, rel_tol=1e-7, abs_tol=1e-10):
         raise ValueError("Unsupported ESP32 observation_schema control_dt; firmware requires 50 Hz (0.02s)")
     return schema
@@ -238,8 +238,8 @@ def _build_sac_sequential(state: dict, ckpt: Optional[dict] = None) -> nn.Sequen
 
 def load_actor_from_checkpoint(
     checkpoint_or_model: Union[str, Path, nn.Module, dict],
-    obs_dim: int = 42,
-    action_dim: int = 8,
+    obs_dim: int = NUM_OBSERVATIONS,
+    action_dim: int = NUM_ACTIONS,
     hidden_dim: int = 256,
 ) -> nn.Module:
     """Load Actor network from checkpoint file or dict, folding obs_rms if present."""
@@ -371,7 +371,7 @@ def export_onnx(
     wrapper.eval()
 
     # Determine input observation dimension dynamically from actor's first linear layer
-    obs_dim = 42
+    obs_dim = NUM_OBSERVATIONS
     for m in actor.modules():
         if hasattr(m, "in_features"):
             obs_dim = int(m.in_features)
@@ -455,8 +455,8 @@ def export_esp32_headers(
 
     w3 = actor[4].weight.detach().cpu().numpy().astype(np.float32)  # [8, 256]
     b3 = actor[4].bias.detach().cpu().numpy().astype(np.float32)    # [8]
-    if obs_dim != 42 or w3.shape[0] != 8:
-        raise ValueError("Unsupported ESP32 policy dimensions; expected 42 observations and 8 actions")
+    if obs_dim != NUM_OBSERVATIONS or w3.shape[0] != NUM_ACTIONS:
+        raise ValueError(f"Unsupported ESP32 policy dimensions; expected {NUM_OBSERVATIONS} observations and {NUM_ACTIONS} actions")
     schema = _resolve_esp32_schema(actor, legacy_observation_schema=legacy_observation_schema)
     _validate_v2_actor_identity(actor, required=True)
 

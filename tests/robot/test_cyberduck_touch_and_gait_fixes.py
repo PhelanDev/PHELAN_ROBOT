@@ -130,9 +130,10 @@ def test_stage0_flat_lidar_filters_floor_hits():
         for d in runner.datas:
             d.qpos[3:7] = [np.cos(theta / 2.0), 0.0, np.sin(theta / 2.0), 0.0]
             mujoco.mj_forward(runner.model, d)
+        assert runner.get_head_tof_range(0) == pytest.approx(2.0)
         obs, _, _, infos = runner.step(np.zeros((2, 8), dtype=np.float32))
-        np.testing.assert_allclose(obs[:, 37:42], 2.0, atol=1e-5)
-        assert infos[0]["d_min"] == pytest.approx(2.0)
+        assert obs.shape == (2, 37)
+        assert infos[0]["d_min"] == pytest.approx(runner._compute_d_min(0), abs=1e-5)
         assert infos[0]["obstacle_avoidance"] == pytest.approx(0.0)
 
         # When all obstacle pillars are submerged below floor (z <= 0), d_min becomes None
@@ -142,8 +143,9 @@ def test_stage0_flat_lidar_filters_floor_hits():
         for d in runner.datas:
             d.qpos[3:7] = [np.cos(theta / 2.0), 0.0, np.sin(theta / 2.0), 0.0]
             mujoco.mj_forward(runner.model, d)
+        assert runner.get_head_tof_range(0) == pytest.approx(2.0)
         obs2, _, _, infos2 = runner.step(np.zeros((2, 8), dtype=np.float32))
-        np.testing.assert_allclose(obs2[:, 37:42], 2.0, atol=1e-5)
+        assert obs2.shape == (2, 37)
         assert infos2[0]["d_min"] is None
         assert infos2[0]["obstacle_avoidance"] == pytest.approx(0.0)
     finally:

@@ -89,13 +89,13 @@ def test_status_requires_v2_checkpoint_metadata_and_both_esp32_headers(tmp_path,
     monkeypatch.setattr(duck.subprocess, "check_output", lambda *args, **kwargs: "test")
     checkpoint = tmp_path / "models/checkpoints/cyberduck_v2_best.pt"
     checkpoint.parent.mkdir(parents=True)
-    metadata = dict(model_name="cyberduck_v2.xml", obs_dim=42, action_dim=8,
-                    observation_schema=observation_schema(42, False, 0.02), stage=99, iterations=123)
+    metadata = dict(model_name="cyberduck_v2.xml", obs_dim=37, action_dim=8,
+                    observation_schema=observation_schema(37, False, 0.02), stage=99, iterations=123)
     invalid_metadata = (
         {k: v for k, v in metadata.items() if k != "model_name"},
         {k: v for k, v in metadata.items() if k != "observation_schema"},
-        dict(metadata, observation_schema=observation_schema(37, False, 0.02)),
-        dict(metadata, obs_dim=37),
+        dict(metadata, observation_schema=observation_schema(42, False, 0.02)),
+        dict(metadata, obs_dim=42),
         dict(metadata, action_dim=9),
         dict(metadata, model_name="microduck_8dof.xml"),
     )
@@ -294,7 +294,7 @@ def test_duck_cli_export_target_routing_isolated(tmp_path, isolated_cli_env):
     ckpt_path = tmp_path / "export.pt"
     model = ActorCritic(hidden_dim=16)
     checkpoint = dict(model_state_dict=model.state_dict(), model_name="cyberduck_v2.xml",
-        observation_schema=observation_schema(42, True, 0.02))
+        observation_schema=observation_schema(37, True, 0.02))
     torch.save(checkpoint, ckpt_path)
 
     # Test rpi5 export to tmp_path

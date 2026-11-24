@@ -622,7 +622,7 @@ def _attach_viewer_policy_schema(policy: Any, obs_width: int, legacy_observation
 
 def load_viewer_policy(
     policy_path: Union[str, Path],
-    obs_dim: int = 42,
+    obs_dim: int = NUM_OBSERVATIONS,
     action_dim: int = 8,
     legacy_observation_schema: Optional[Dict[str, Any]] = None,
     require_schema: bool = False,
@@ -780,7 +780,7 @@ def _step_viewer_policy_control(
         data,
         cmd_vel=cmd_vel,
         last_actions=last_actions,
-        obs_dim=schema["obs_dim"] if schema is not None else 42,
+        obs_dim=schema["obs_dim"] if schema is not None else NUM_OBSERVATIONS,
         episode_step=episode_step,
         control_dt=control_dt,
         observation_schema=schema,

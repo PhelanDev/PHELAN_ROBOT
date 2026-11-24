@@ -27,8 +27,10 @@ from sim.env.env_config import (
     scale_actions,
     clip_action_rates,
 )
+from sim.behaviors.active_head_scanner import ActiveHeadScanner
 from sim.behaviors.self_righting import FallPredictor
-from robot.robot_spec import DEFAULT_ONNX_PATH, MODEL_NAME
+from hardware.oled_eyes import EyeRenderer, SSD1309Display
+from robot.robot_spec import DEFAULT_ONNX_PATH, MODEL_NAME, NUM_OBSERVATIONS
 
 # Optional hardware libraries
 try:
@@ -73,10 +75,11 @@ def pack_rpi_observation(
     joint_vel: Union[List[float], np.ndarray],
     last_actions: Union[List[float], np.ndarray],
     foot_contact: Union[List[float], np.ndarray],
-    lidar_ranges: Union[List[float], np.ndarray],
+    lidar_ranges: Optional[Union[List[float], np.ndarray]] = None,
     phase_clock: Optional[np.ndarray] = None,
 ) -> np.ndarray:
-    """Pack raw sensory signals into standard 42-dimensional observation vector."""
+    """Pack raw sensory signals into V2 37-dimensional actor observation vector."""
+    del lidar_ranges  # Brow ToF scan feeds ActiveHeadScanner / nav planner, not actor obs.
     return compute_observations(
         base_ang_vel=np.asarray(base_ang_vel, dtype=np.float32),
         proj_grav=np.asarray(proj_grav, dtype=np.float32),
@@ -85,7 +88,7 @@ def pack_rpi_observation(
         joint_vel=np.asarray(joint_vel, dtype=np.float32),
         last_actions=np.asarray(last_actions, dtype=np.float32),
         foot_contact=np.asarray(foot_contact, dtype=np.float32),
-        lidar_ranges=np.asarray(lidar_ranges, dtype=np.float32),
+        lidar_ranges=None,
         phase_clock=phase_clock,
     )
 
@@ -487,7 +490,7 @@ class BaseRPiInferenceEngine:
         allow_mock_fallback: bool = False,
     ):
         self.engine_name = engine_name
-        self.cfg = MicroDuck8DoFConfig(OBS_DIM=42)
+        self.cfg = MicroDuck8DoFConfig(OBS_DIM=NUM_OBSERVATIONS)
         self.freq = float(freq)
         if not np.isfinite(self.freq) or self.freq <= 0:
             raise ValueError("Control frequency must be finite and positive")
@@ -505,6 +508,9 @@ class BaseRPiInferenceEngine:
         self.fall_predictor = FallPredictor()
         self.safety_mode = "initializing"
         self.nonfinite_action_drops = 0
+        self.head_scanner = ActiveHeadScanner()
+        self.eye_renderer = EyeRenderer()
+        self.oled_display = SSD1309Display(mock=self.mock)
 
         # Servo controller setup
         if self.mock:
@@ -600,8 +606,8 @@ class BaseRPiInferenceEngine:
             )
         except (TypeError, json.JSONDecodeError) as exc:
             raise ValueError("Invalid policy observation_schema") from exc
-        if schema["obs_dim"] != 42 or session.get_inputs()[0].shape[-1] != 42:
-            raise ValueError("RPi observation_schema requires 42 observations")
+        if schema["obs_dim"] != NUM_OBSERVATIONS or schema["version"] != 2 or session.get_inputs()[0].shape[-1] != NUM_OBSERVATIONS:
+            raise ValueError(f"RPi observation_schema requires {NUM_OBSERVATIONS} observations (version 2)")
         if not np.isclose(schema["control_dt"], self.dt, rtol=1e-7, atol=1e-10):
             raise ValueError("Policy observation_schema control_dt does not match runtime frequency")
         print(f"[{self.engine_name}] Loaded {label} ONNX policy model from {model_path}")
@@ -782,7 +788,7 @@ class BaseRPiInferenceEngine:
                 self.update_safety_state(base_ang_vel, proj_grav)
                 imu_stale = bool(getattr(self.imu_reader, "is_stale", False))
                 self.last_imu_stale = imu_stale
-                # Read foot contact and LiDAR perception hooks
+                # Read foot contact and brow ToF perception hooks
                 foot_contact = self.read_foot_contact()
                 lidar_ranges = self.read_lidar_ranges()
                 lidar_valid = True if self.mock else bool(getattr(self.tof_reader, "is_valid", False))
@@ -808,7 +814,15 @@ class BaseRPiInferenceEngine:
                 prev_q = current_q.copy()
                 self.prev_q = prev_q.copy()
 
-                # Generate observation
+                if len(lidar_ranges) >= 3:
+                    self.head_scanner.update(
+                        head_yaw_rad=float(current_q[0]),
+                        head_pitch_rad=float(current_q[1]),
+                        tof_range_m=float(lidar_ranges[2]),
+                        now_s=time.monotonic(),
+                    )
+
+                # Generate observation (37D actor contract)
                 obs = pack_rpi_observation(
                     base_ang_vel=base_ang_vel,
                     proj_grav=proj_grav,
@@ -817,7 +831,6 @@ class BaseRPiInferenceEngine:
                     joint_vel=joint_vel,
                     last_actions=self.last_raw_actions,
                     foot_contact=foot_contact,
-                    lidar_ranges=lidar_ranges,
                     phase_clock=self.phase_clock(),
                 )
 

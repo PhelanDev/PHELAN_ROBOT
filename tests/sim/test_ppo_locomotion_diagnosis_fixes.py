@@ -260,7 +260,7 @@ def test_deterministic_evaluation_counts_terminal_step_and_restores_state():
     torch.testing.assert_close(torch.get_rng_state(), torch_rng)
 
 
-def policy_checkpoint(squash=True, obs_dim=42, hidden_dim=32):
+def policy_checkpoint(squash=True, obs_dim=37, hidden_dim=32):
     from tools.train.train_ppo import ActorCritic, RunningMeanStd
     model = ActorCritic(obs_dim=obs_dim, action_dim=8, hidden_dim=hidden_dim, squash_actions=squash)
     rms = RunningMeanStd(obs_dim, clip=2.0)
@@ -272,9 +272,9 @@ def policy_checkpoint(squash=True, obs_dim=42, hidden_dim=32):
     return model, rms, ckpt
 
 
-@pytest.mark.parametrize('bad', [None, {}, {'mean': np.zeros(41)}, {'mean': np.zeros(43)},
-    {'mean': np.zeros((1, 42))}, {'mean': np.full(42, np.nan)}, {'var': -np.ones(42)},
-    {'var': np.full(42, np.inf)}, {'epsilon': -1}, {'min_std': 0}, {'clip': np.nan}, {'count': -1}])
+@pytest.mark.parametrize('bad', [None, {}, {'mean': np.zeros(36)}, {'mean': np.zeros(38)},
+    {'mean': np.zeros((1, 37))}, {'mean': np.full(37, np.nan)}, {'var': -np.ones(37)},
+    {'var': np.full(37, np.inf)}, {'epsilon': -1}, {'min_std': 0}, {'clip': np.nan}, {'count': -1}])
 def test_rms_invalid_rejected_without_mutation(tmp_path, bad):
     from tools.robot.export_policy import apply_obs_norm_to_actor
     from tools.robot.interactive_viewer import load_viewer_policy
@@ -305,7 +305,7 @@ def test_viewer_onnx_normalization_transform_parity(tmp_path, squash):
     policy = load_viewer_policy(path)
     onnx = export_onnx(path, tmp_path/'policy.onnx')
     session = ort.InferenceSession(str(onnx), providers=['CPUExecutionProvider'])
-    for raw in (np.zeros(42, dtype=np.float32), np.linspace(-100, 100, 42, dtype=np.float32)):
+    for raw in (np.zeros(37, dtype=np.float32), np.linspace(-100, 100, 37, dtype=np.float32)):
         with torch.no_grad():
             expected = model.forward_actor(torch.as_tensor(rms.normalize(raw), dtype=torch.float32)).numpy()
         np.testing.assert_allclose(policy_step(policy, raw), np.clip(expected, -1, 1), atol=2e-6)
@@ -354,7 +354,7 @@ def test_generated_c_applies_output_transform_before_quantization(tmp_path, squa
     from sim.env.policy_contract import observation_schema
     model = ActorCritic(hidden_dim=256, squash_actions=squash)
     model.model_name = 'cyberduck_v2.xml'
-    model.observation_schema = observation_schema(42, False, 0.02)
+    model.observation_schema = observation_schema(37, False, 0.02)
     with torch.no_grad():
         for p in model.actor.parameters():
             p.zero_()
@@ -363,14 +363,14 @@ def test_generated_c_applies_output_transform_before_quantization(tmp_path, squa
     weights, config = export_esp32_headers(model, tmp_path/'weights.h', tmp_path/'config.h')
     source = tmp_path/'run.cpp'
     source.write_text('#include <cstdio>\n#include "config.h"\n#include "weights.h"\n'
-                      'int main(){int8_t obs[42]={0}, a[8]; evaluate_policy_int8(obs,a);'
+                      'int main(){int8_t obs[37]={0}, a[8]; evaluate_policy_int8(obs,a);'
                       'for(int i=0;i<8;i++) printf("%d ", (int)a[i]);}\n')
     result = subprocess.run(['g++', '-std=c++17', str(source), '-o', str(tmp_path/'run.exe')], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     result = subprocess.run([str(tmp_path/'run.exe')], capture_output=True, text=True, check=True)
     actual = np.fromstring(result.stdout, sep=' ')
     with torch.no_grad():
-        expected = model.forward_actor(torch.zeros(1, 42)).numpy()[0]
+        expected = model.forward_actor(torch.zeros(1, 37)).numpy()[0]
     expected = np.clip(np.round(expected * 127), -128, 127)
     np.testing.assert_allclose(actual, expected, atol=1)
 
@@ -398,7 +398,7 @@ def test_deterministic_evaluation_repeats_same_episode_seeds():
     from sim.env.run_parallel_sim import ParallelSimRunner
     model = ActorCritic(squash_actions=True)
     runner = ParallelSimRunner('src/robot/cyberduck_v2.xml', num_envs=1)
-    rms = RunningMeanStd(42)
+    rms = RunningMeanStd(37)
     try:
         kwargs = dict(model=model, obs_rms=rms, model_path=runner.model_path, stage=0,
                       eval_runner=runner, max_steps=5)
@@ -416,7 +416,7 @@ def test_shared_checkpoint_consumers_keep_normalization_and_squash(tmp_path):
     model, rms, ckpt = policy_checkpoint()
     path = tmp_path/'policy.pt'
     torch.save(ckpt, path)
-    raw = np.full((1, 42), 50, dtype=np.float32)
+    raw = np.full((1, 37), 50, dtype=np.float32)
     with torch.no_grad():
         expected = model.forward_actor(torch.as_tensor(rms.normalize(raw), dtype=torch.float32)).numpy()
         actual = load_actor(path)(torch.from_numpy(raw)).numpy()
@@ -427,14 +427,14 @@ def test_shared_checkpoint_consumers_keep_normalization_and_squash(tmp_path):
     def collect(runner, policy_fn, steps, gamma):
         return policy_fn(raw, 0)
     with patch.object(bc, '_collect_rollouts', collect):
-        runner = SimpleNamespace(obs_dim=42, action_dim=8)
+        runner = SimpleNamespace(obs_dim=37, action_dim=8)
         teacher_actions = collect_teacher_demonstrations(runner, load_actor_from_checkpoint(path), num_steps=1)
     np.testing.assert_allclose(teacher_actions, expected, atol=2e-6)
 
 
 def test_viewer_rejects_invalid_actor_dimensions_and_corrupt_hot_reload(tmp_path, capsys):
     from tools.robot.interactive_viewer import load_viewer_policy, _maybe_hot_reload_policy
-    _, _, ckpt = policy_checkpoint(obs_dim=41)
+    _, _, ckpt = policy_checkpoint(obs_dim=36)
     path = tmp_path/'policy.pt'
     torch.save(ckpt, path)
     with pytest.raises(ValueError, match='dimensions'):
@@ -457,7 +457,7 @@ def test_direct_module_onnx_transform_and_export_model_metadata(tmp_path):
     with torch.no_grad():
         model.actor[-1].bias.fill_(2)
     path = export_onnx(model, tmp_path/'direct.onnx')
-    raw = np.zeros((1, 42), dtype=np.float32)
+    raw = np.zeros((1, 37), dtype=np.float32)
     session = ort.InferenceSession(str(path), providers=['CPUExecutionProvider'])
     with torch.no_grad():
         expected = model.forward_actor(torch.from_numpy(raw)).numpy()

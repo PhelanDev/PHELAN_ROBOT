@@ -17,7 +17,8 @@ def test_audit_schema_roundtrip_and_rpi_clock_parity(tmp_path, moving):
     from hardware.rpi_infer_core import BaseRPiInferenceEngine, pack_rpi_observation
     from sim.env.run_parallel_sim import ParallelSimRunner
     model, _ = make_policy()
-    model.observation_schema = observation_schema(42, True, 0.006)
+    model.observation_schema = observation_schema(37, True, 0.006)
+    assert model.observation_schema["version"] == 2
     output = export_onnx(model, tmp_path / "clock.onnx")
     engine = BaseRPiInferenceEngine(str(output), mock=True, freq=1 / 0.006)
     runner = ParallelSimRunner(model_path="src/robot/cyberduck_v2.xml",
@@ -33,7 +34,7 @@ def test_audit_schema_roundtrip_and_rpi_clock_parity(tmp_path, moving):
             contact = [float(sensor[10] > 0.1), float(sensor[11] > 0.1), 0, 0]
             actual = pack_rpi_observation(sensor[3:6], gravity, runner.commands[0],
                 sensor[12:20], sensor[20:28], engine.last_raw_actions, contact,
-                runner._get_lidar_ranges(0), phase_clock=engine.phase_clock())
+                phase_clock=engine.phase_clock())
             np.testing.assert_allclose(actual, expected, atol=1e-7)
             import torch
             with torch.no_grad():
@@ -58,17 +59,17 @@ def test_audit_rpi_legacy_requires_explicit_schema(tmp_path):
     with pytest.raises(ValueError, match="schema|legacy"):
         BaseRPiInferenceEngine(str(output), mock=True)
     engine = BaseRPiInferenceEngine(str(output), mock=True,
-        legacy_observation_schema=observation_schema(42, False, 0.02))
+        legacy_observation_schema=observation_schema(37, False, 0.02))
     assert engine.phase_clock() is None
 
 
 @pytest.mark.parametrize("change", [{"period": 0}, {"control_dt": float("nan")},
-    {"embed_phase_clock": "true"}, {"reset": "stop_when_still"}, {"version": 2}, {"obs_dim": 37}])
+    {"embed_phase_clock": "true"}, {"reset": "stop_when_still"}, {"version": 1}, {"obs_dim": 42}])
 def test_audit_malformed_schema_rejected_before_export(tmp_path, change):
     from sim.env.policy_contract import observation_schema
     from tools.robot.export_policy import export_onnx
     model, _ = make_policy()
-    model.observation_schema = dict(observation_schema(42, True, 0.02), **change)
+    model.observation_schema = dict(observation_schema(37, True, 0.02), **change)
     with pytest.raises(ValueError, match="schema"):
         export_onnx(model, tmp_path / "invalid.onnx")
     assert not (tmp_path / "invalid.onnx").exists()
@@ -89,7 +90,7 @@ def test_audit_both_pi_wrappers_run_metadata_policy(tmp_path):
     from hardware.rpi5.deployment.infer_rpi5 import RPi5InferenceEngine
     from hardware.pizero2w.deployment.infer_pizero2w import PiZero2WInferenceEngine
     model, _ = make_policy()
-    model.observation_schema = observation_schema(42, True, 0.02)
+    model.observation_schema = observation_schema(37, True, 0.02)
     output = export_onnx(model, tmp_path / "policy.onnx")
     for wrapper in (RPi5InferenceEngine, PiZero2WInferenceEngine):
         engine = wrapper(str(output), mock=True)
@@ -98,9 +99,9 @@ def test_audit_both_pi_wrappers_run_metadata_policy(tmp_path):
 
 
 def make_policy():
-    model = ActorCritic(hidden_dim=16, squash_actions=True)
+    model = ActorCritic(obs_dim=37, hidden_dim=16, squash_actions=True)
     model.model_name = "cyberduck_v2.xml"
-    rms = RunningMeanStd(42, clip=0.25)
+    rms = RunningMeanStd(37, clip=0.25)
     rms.mean[:] = 0.1
     rms.var[:] = 1.0
     return model, rms
@@ -110,7 +111,7 @@ def run_generated_policy(tmp_path, weights, config, observation):
     source = tmp_path / "consumer.cpp"
     source.write_text(
         '#include <cstdio>\n#include "' + config.name + '"\n#include "' + weights.name + '"\n'
-        'int main(){ int8_t obs[42]={' + ','.join(map(str, observation)) + '};'
+        'int main(){ int8_t obs[37]={' + ','.join(map(str, observation)) + '};'
         'int8_t action[8]; evaluate_policy_int8(obs,action);'
         'for(int i=0;i<8;i++) printf("%d ", (int)action[i]);}\n',
         encoding="utf-8",
@@ -136,9 +137,9 @@ def test_generated_policy_preserves_clipped_rms_and_actual_hidden_width(tmp_path
         model.actor[4].weight[:, 0] = 2.0
     checkpoint = dict(model_state_dict=model.state_dict(), squash_actions=True, obs_rms=rms.state_dict(),
                       model_name="cyberduck_v2.xml",
-                      observation_schema=observation_schema(42, False, 0.02))
+                      observation_schema=observation_schema(37, False, 0.02))
     weights, config = export_esp32_headers(checkpoint, tmp_path / "weights.h", tmp_path / "config.h")
-    observation = np.zeros(42, dtype=np.int8)
+    observation = np.zeros(37, dtype=np.int8)
     observation[0] = 120
     actual = run_generated_policy(tmp_path, weights, config, observation)
     # Compare at the dequantized input to isolate normalization/output transforms
@@ -159,7 +160,7 @@ def test_direct_module_export_carries_advertised_rms_and_model_metadata(tmp_path
     model.model_path = "src/robot/cyberduck_v2.xml"
     model.model_name = "cyberduck_v2.xml"
     output = export_onnx(model, tmp_path / "unrelated.onnx")
-    raw = np.full((1, 42), 20.0, dtype=np.float32)
+    raw = np.full((1, 37), 20.0, dtype=np.float32)
     session = ort.InferenceSession(str(output), providers=["CPUExecutionProvider"])
     with torch.no_grad():
         expected = model.forward_actor(torch.from_numpy(rms.normalize(raw))).numpy()
@@ -168,7 +169,7 @@ def test_direct_module_export_carries_advertised_rms_and_model_metadata(tmp_path
 
 
 @pytest.mark.parametrize("change", [
-    {"mean": ["0"] * 42}, {"var": [True] * 42}, {"epsilon": [0.001]},
+    {"mean": ["0"] * 37}, {"var": [True] * 37}, {"epsilon": [0.001]},
     {"min_std": "0.1"}, {"clip": True}, {"count": "10"},
 ])
 def test_rms_rejects_non_numeric_or_non_scalar_advertised_fields(change):
@@ -226,7 +227,7 @@ def test_viewer_schema_clock_and_layout_parity_with_runner(tmp_path, embed_clock
     from tools.robot.export_policy import export_onnx
     from tools.robot.interactive_viewer import extract_viewer_observation, run_simulation_headless
 
-    obs_dim = 42
+    obs_dim = 37
     decimation = max(1, int(round(control_dt / 0.002)))
     model = ActorCritic(obs_dim=obs_dim, hidden_dim=16, squash_actions=True)
     schema = observation_schema(obs_dim, embed_clock, control_dt, period=0.8)
@@ -288,26 +289,32 @@ def test_viewer_schema_clock_and_layout_parity_with_runner(tmp_path, embed_clock
         assert metrics["completed_steps"] >= 3
 
 
-def test_viewer_rejects_retired_37_observation_layout(tmp_path):
+def test_consumers_reject_retired_42_observation_layout(tmp_path):
+    from hardware.rpi_infer_core import BaseRPiInferenceEngine
     from sim.env.policy_contract import observation_schema
     from sim.env.run_parallel_sim import ParallelSimRunner
-    from tools.robot.export_policy import export_onnx
+    from tools.robot.export_policy import export_esp32_headers, export_onnx
     from tools.robot.interactive_viewer import extract_viewer_observation, load_viewer_policy
 
-    schema = observation_schema(37, True, 0.02)
-    model = ActorCritic(obs_dim=37, hidden_dim=16)
+    schema = observation_schema(42, True, 0.02)
+    assert schema["version"] == 1
+    model = ActorCritic(obs_dim=42, hidden_dim=16)
     checkpoint = tmp_path / "retired_layout.pt"
     torch.save(dict(model_state_dict=model.state_dict(), model_name="cyberduck_v2.xml",
                     observation_schema=schema), checkpoint)
     exported = export_onnx(checkpoint, tmp_path / "retired_layout.onnx")
     for policy_path in (checkpoint, exported):
-        with pytest.raises(ValueError, match="dimensions|42 observations"):
+        with pytest.raises(ValueError, match="dimensions|37 observations"):
             load_viewer_policy(policy_path)
+    with pytest.raises(ValueError, match="37 observations|version 2"):
+        BaseRPiInferenceEngine(str(exported), mock=True)
+    with pytest.raises(ValueError, match="37"):
+        export_esp32_headers(checkpoint, tmp_path / "w.h", tmp_path / "c.h")
 
     runner = ParallelSimRunner(model_path="src/robot/cyberduck_v2.xml", num_envs=1)
     try:
-        with pytest.raises(ValueError, match="42 observations, got 37"):
-            extract_viewer_observation(runner.model, runner.datas[0], obs_dim=37,
+        with pytest.raises(ValueError, match="37 observations, got 42"):
+            extract_viewer_observation(runner.model, runner.datas[0], obs_dim=42,
                                       observation_schema=schema)
     finally:
         runner.close()
@@ -319,9 +326,9 @@ def test_viewer_rejects_legacy_policy_without_explicit_schema(tmp_path):
     from tools.robot.export_policy import export_onnx
     from tools.robot.interactive_viewer import run_simulation_headless
 
-    model = ActorCritic(obs_dim=42, hidden_dim=16, squash_actions=True)
+    model = ActorCritic(obs_dim=37, hidden_dim=16, squash_actions=True)
     legacy_pt = tmp_path / "legacy_no_schema.pt"
-    torch.save({"model_state_dict": model.state_dict(), "obs_dim": 42, "action_dim": 8,
+    torch.save({"model_state_dict": model.state_dict(), "obs_dim": 37, "action_dim": 8,
                 "hidden_dim": 16, "model_name": "cyberduck_v2.xml"}, legacy_pt)
     legacy_onnx = export_onnx(legacy_pt, tmp_path / "legacy_no_schema.onnx")
 
@@ -340,7 +347,7 @@ def test_viewer_rejects_legacy_policy_without_explicit_schema(tmp_path):
         policy_path=legacy_onnx,
         duration=0.04,
         dt=0.002,
-        legacy_observation_schema=observation_schema(42, False, 0.02),
+        legacy_observation_schema=observation_schema(37, False, 0.02),
     )
     assert metrics["completed_steps"] > 0
 
@@ -353,14 +360,14 @@ def test_export_esp32_headers_compile_clean_with_integer_period_and_dt(tmp_path)
     from sim.env.policy_contract import observation_schema
     from tools.robot.export_policy import export_esp32_headers
 
-    model = ActorCritic(obs_dim=42, hidden_dim=16, squash_actions=True)
+    model = ActorCritic(obs_dim=37, hidden_dim=16, squash_actions=True)
     ckpt = tmp_path / "int_dt_period.pt"
-    schema = dict(observation_schema(42, True, 0.02))
+    schema = dict(observation_schema(37, True, 0.02))
     schema["period"] = 1.0
     torch.save(
         {
             "model_state_dict": model.state_dict(),
-            "obs_dim": 42,
+            "obs_dim": 37,
             "action_dim": 8,
             "hidden_dim": 16,
             "squash_actions": True,

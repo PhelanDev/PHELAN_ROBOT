@@ -105,14 +105,14 @@ def test_bc_pretrain_decreases_loss_and_loads_into_ppo(tmp_path: Path):
     finally:
         runner.close()
 
-    assert obs_arr.shape[1] == 42 and act_arr.shape == (len(obs_arr), 8) and ret_arr.shape == (len(obs_arr),)
+    assert obs_arr.shape[1] == 37 and act_arr.shape == (len(obs_arr), 8) and ret_arr.shape == (len(obs_arr),)
     assert np.all((act_arr >= -1.0) & (act_arr <= 1.0))
 
-    model, losses = train_behavior_cloning(obs_arr, act_arr, returns=ret_arr, obs_dim=42, action_dim=8, epochs=10, batch_size=32)
+    model, losses = train_behavior_cloning(obs_arr, act_arr, returns=ret_arr, obs_dim=37, action_dim=8, epochs=10, batch_size=32)
     assert losses[-1] < losses[0]
 
     bc_ckpt = tmp_path / "bc_init.pt"
-    save_bc_checkpoint(bc_ckpt, model, obs_dim=42, action_dim=8, hidden_dim=256)
+    save_bc_checkpoint(bc_ckpt, model, obs_dim=37, action_dim=8, hidden_dim=256)
     ppo_ckpt = tmp_path / "ppo_after_bc.pt"
 
     result = train_ppo(
@@ -137,8 +137,8 @@ def test_collect_teacher_demonstrations_rejects_retired_v1_dim_slicing():
 
     runner = ParallelSimRunner(model_path="src/robot/cyberduck_v2.xml", num_envs=2, num_threads=1, stage=0)
     try:
-        teacher = nn.Linear(37, 8)
-        with pytest.raises(ValueError, match="42-observation"):
+        teacher = nn.Linear(42, 8)
+        with pytest.raises(ValueError, match="37-observation"):
             collect_teacher_demonstrations(runner, teacher, num_steps=15)
     finally:
         runner.close()
@@ -166,18 +166,18 @@ def test_save_bc_checkpoint_includes_obs_rms(tmp_path: Path):
     from tools.train.train_ppo import train_ppo
 
     np.random.seed(42)
-    obs = np.random.randn(80, 42).astype(np.float32) + 2.0
+    obs = np.random.randn(80, 37).astype(np.float32) + 2.0
     acts = np.random.uniform(-0.5, 0.5, size=(80, 8)).astype(np.float32)
 
     model, losses = train_behavior_cloning(
-        obs, acts, obs_dim=42, action_dim=8, epochs=3, batch_size=32
+        obs, acts, obs_dim=37, action_dim=8, epochs=3, batch_size=32
     )
     assert hasattr(model, "_bc_obs_rms"), "train_behavior_cloning must attach _bc_obs_rms to model"
     assert model._bc_obs_rms is not None
     assert model._bc_obs_rms.count > 0
 
     ckpt_path = tmp_path / "bc_with_rms.pt"
-    save_bc_checkpoint(ckpt_path, model, obs_dim=42, action_dim=8)
+    save_bc_checkpoint(ckpt_path, model, obs_dim=37, action_dim=8)
 
     ckpt = torch.load(str(ckpt_path), map_location="cpu", weights_only=False)
     assert "obs_rms" in ckpt, "Checkpoint must contain 'obs_rms'"
@@ -188,7 +188,7 @@ def test_save_bc_checkpoint_includes_obs_rms(tmp_path: Path):
     # Verify load_actor_from_checkpoint folds obs_rms without error
     actor = load_actor_from_checkpoint(ckpt_path)
     assert actor is not None
-    test_obs = torch.randn(1, 42)
+    test_obs = torch.randn(1, 37)
     out_act = actor(test_obs)
     assert out_act.shape == (1, 8)
 

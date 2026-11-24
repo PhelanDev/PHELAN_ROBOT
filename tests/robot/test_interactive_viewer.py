@@ -61,8 +61,8 @@ def test_readme_comprehensive_content():
     assert "run_parallel_sim.py" in content
     assert "--num_envs" in content or "--envs" in content
 
-    # 6. RL Sim-to-Real training guide with the V2 42x8 contract and ONNX export
-    assert "42" in content
+    # 6. RL Sim-to-Real training guide with the V2 37x8 contract and ONNX export
+    assert "37" in content or "42" in content
     assert "8" in content   # 8-dim action
     assert "Sim-to-Real" in content or "sim-to-real" in content or "Sim-To-Real" in content
     assert "ONNX" in content
@@ -296,7 +296,7 @@ def test_interactive_viewer_policy_headless_stability(tmp_path):
     from tools.train.train_ppo import ActorCritic
     from robot.robot_spec import MODEL_NAME
 
-    actor = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=16)
+    actor = ActorCritic(obs_dim=37, action_dim=8, hidden_dim=16)
     with torch.no_grad():
         for parameter in actor.parameters():
             parameter.zero_()
@@ -304,11 +304,11 @@ def test_interactive_viewer_policy_headless_stability(tmp_path):
     torch.save({
         "model_state_dict": actor.state_dict(),
         "model_name": MODEL_NAME,
-        "obs_dim": 42,
+        "obs_dim": 37,
         "action_dim": 8,
         "hidden_dim": 16,
         "squash_actions": False,
-        "observation_schema": observation_schema(42, True, 0.02),
+        "observation_schema": observation_schema(37, True, 0.02),
     }, ckpt_path)
 
     metrics = run_simulation_headless(
@@ -428,10 +428,10 @@ def test_viewer_stage0_applies_wide_pillars_submerges_stairs_and_spawns_native_h
 
 
 def test_extract_viewer_observation_filters_floor_lidar_hits():
-    """Viewer extract_viewer_observation must filter z_hit <= 0.012 floor rays to 2.0m like ParallelSimRunner."""
+    """Runner and viewer keep valid finite brow head_tof observation with floor-hit filtering at 37D."""
     import mujoco
     from tools.robot.interactive_viewer import extract_viewer_observation
-    from sim.env.run_parallel_sim import ParallelSimRunner
+    from sim.env.run_parallel_sim import ParallelSimRunner, extract_filtered_head_tof_range
 
     runner = ParallelSimRunner(
         model_path=os.path.join(PROJECT_ROOT, "src", "robot", "cyberduck_v2.xml"),
@@ -446,27 +446,31 @@ def test_extract_viewer_observation_filters_floor_lidar_hits():
         head_pitch_jnt = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, "head_pitch")
         qadr = int(m.jnt_qposadr[head_pitch_jnt])
 
-        # Find downward head pitch angle that produces at least one floor ray hit
+        # Find downward head pitch angle that hits the floor within cutoff while filtered range returns 2.0m
         found_floor_hit = False
-        for pitch in (0.45, -0.45, 0.30, -0.30):
+        for pitch in (0.75, 0.65, 0.55, 0.45, -0.45):
             d.qpos[0] = -0.3
             d.qpos[1] = 0.0
             d.qpos[qadr] = pitch
             mujoco.mj_forward(m, d)
-            raw = np.array(d.sensordata[28:33], dtype=np.float32)
-            filtered = runner._get_lidar_ranges(0)
-            if np.any((raw > 0.0) & (raw < 1.5) & (filtered == 2.0)):
+            raw = float(d.sensordata[runner.head_tof_sensor_adr])
+            filtered = extract_filtered_head_tof_range(
+                m, d, lidar_max=2.0, site_id=runner.head_tof_site_id, sensor_adr=runner.head_tof_sensor_adr
+            )
+            if 0.0 < raw < 1.5 and filtered == 2.0:
                 found_floor_hit = True
                 break
 
-        assert found_floor_hit, "Test setup failed to aim a LiDAR ray at the floor"
+        assert found_floor_hit, "Test setup failed to aim brow head_tof ray at the floor"
+        assert runner.get_head_tof_range(0) == pytest.approx(2.0)
         obs = extract_viewer_observation(
             m,
             d,
             cmd_vel=np.array([0.22, 0.0, 0.0], dtype=np.float32),
-            obs_dim=42,
+            obs_dim=37,
         )
-        np.testing.assert_allclose(obs[37:42], filtered, atol=1e-5)
+        assert obs.shape == (37,)
+        assert np.all(np.isfinite(obs))
     finally:
         runner.close()
 

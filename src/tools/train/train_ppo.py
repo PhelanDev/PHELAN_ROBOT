@@ -28,8 +28,8 @@ if str(SRC_ROOT) not in sys.path:
 from sim.env.env_config import MicroDuck8DoFConfig, _DEFAULT_CFG
 from sim.env.policy_contract import validate_model_identity
 from sim.env.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
-from sim.env.symmetry import compute_actor_symmetry_loss, mirror_critic_obs_53, mirror_obs_42
-from robot.robot_spec import MODEL_PATH, MODEL_NAME, CHECKPOINT_PREFIX, REPO_ROOT
+from sim.env.symmetry import compute_actor_symmetry_loss, mirror_critic_obs, mirror_obs
+from robot.robot_spec import MODEL_PATH, MODEL_NAME, CHECKPOINT_PREFIX, NUM_ACTIONS, NUM_OBSERVATIONS, REPO_ROOT
 from sim.env.terrain_curriculum import (
     STAGES,
     STAIR_STAGES,
@@ -161,8 +161,8 @@ class ActorCritic(nn.Module):
 
     def __init__(
         self,
-        obs_dim: int = 42,
-        action_dim: int = 8,
+        obs_dim: int = NUM_OBSERVATIONS,
+        action_dim: int = NUM_ACTIONS,
         hidden_dim: int = 256,
         init_noise_std: float = 0.20,
         min_log_std: float = -3.0,
@@ -762,12 +762,12 @@ def train_ppo(
     use_sym = float(symmetry_coef) > 0.0
 
     def update_rms_pair(raw_obs: np.ndarray, raw_critic: np.ndarray) -> None:
-        if use_sym and obs_dim == 42:
-            obs_rms.update(np.concatenate([raw_obs, mirror_obs_42(raw_obs)], axis=0))
+        if use_sym and obs_dim in (37, 42):
+            obs_rms.update(np.concatenate([raw_obs, mirror_obs(raw_obs)], axis=0))
         else:
             obs_rms.update(raw_obs)
-        if use_sym and critic_obs_dim == 53:
-            critic_obs_rms.update(np.concatenate([raw_critic, mirror_critic_obs_53(raw_critic)], axis=0))
+        if use_sym and critic_obs_dim in (48, 53):
+            critic_obs_rms.update(np.concatenate([raw_critic, mirror_critic_obs(raw_critic)], axis=0))
         else:
             critic_obs_rms.update(raw_critic)
 
@@ -1244,7 +1244,7 @@ def train_ppo(
                     entropy_mean = entropy.mean()
                     sym_loss = (
                         compute_actor_symmetry_loss(model.forward_actor, b_obs[mb_inds])
-                        if (use_sym and obs_dim == 42)
+                        if (use_sym and obs_dim in (37, 42))
                         else policy_loss.new_zeros(())
                     )
                     total_loss = (

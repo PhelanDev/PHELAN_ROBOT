@@ -16,34 +16,38 @@ def test_symmetry_involution_and_kinematic_consistency():
     from sim.env.symmetry import (
         ACT_MIRROR_PERM_8,
         ACT_MIRROR_SIGN_8,
+        CRITIC_MIRROR_PERM_48,
+        OBS_MIRROR_PERM_37,
         augment_symmetry_batch,
         compute_actor_symmetry_loss,
         mirror_actions_8,
-        mirror_critic_obs_53,
-        mirror_obs_42,
+        mirror_critic_obs,
+        mirror_obs,
     )
 
     assert len(ACT_MIRROR_PERM_8) == 8
     assert len(ACT_MIRROR_SIGN_8) == 8
+    assert len(OBS_MIRROR_PERM_37) == 37
+    assert len(CRITIC_MIRROR_PERM_48) == 48
 
     rng = np.random.default_rng(123)
     # NumPy 1D and 2D involution
-    for shape_obs, shape_act, shape_crit in [((42,), (8,), (53,)), ((6, 42), (6, 8), (6, 53))]:
+    for shape_obs, shape_act, shape_crit in [((37,), (8,), (48,)), ((6, 37), (6, 8), (6, 48))]:
         obs_np = rng.standard_normal(shape_obs, dtype=np.float32)
         act_np = rng.standard_normal(shape_act, dtype=np.float32)
         crit_np = rng.standard_normal(shape_crit, dtype=np.float32)
 
-        np.testing.assert_allclose(mirror_obs_42(mirror_obs_42(obs_np)), obs_np, atol=1e-6)
+        np.testing.assert_allclose(mirror_obs(mirror_obs(obs_np)), obs_np, atol=1e-6)
         np.testing.assert_allclose(mirror_actions_8(mirror_actions_8(act_np)), act_np, atol=1e-6)
-        np.testing.assert_allclose(mirror_critic_obs_53(mirror_critic_obs_53(crit_np)), crit_np, atol=1e-6)
+        np.testing.assert_allclose(mirror_critic_obs(mirror_critic_obs(crit_np)), crit_np, atol=1e-6)
 
         obs_t = torch.from_numpy(obs_np.copy())
         act_t = torch.from_numpy(act_np.copy())
         crit_t = torch.from_numpy(crit_np.copy())
 
-        torch.testing.assert_close(mirror_obs_42(mirror_obs_42(obs_t)), obs_t)
+        torch.testing.assert_close(mirror_obs(mirror_obs(obs_t)), obs_t)
         torch.testing.assert_close(mirror_actions_8(mirror_actions_8(act_t)), act_t)
-        torch.testing.assert_close(mirror_critic_obs_53(mirror_critic_obs_53(crit_t)), crit_t)
+        torch.testing.assert_close(mirror_critic_obs(mirror_critic_obs(crit_t)), crit_t)
 
     # Kinematic consistency with BipedalGaitGenerator.compute_walk(t, freq=1.25)
     # Period T = 0.8s -> half period = 0.4s swaps left/right and flips yaw/roll
@@ -55,11 +59,11 @@ def test_symmetry_involution_and_kinematic_consistency():
 
     # Verify symmetry loss scalar & gradient flow
     actor = torch.nn.Sequential(
-        torch.nn.Linear(42, 32),
+        torch.nn.Linear(37, 32),
         torch.nn.ELU(),
         torch.nn.Linear(32, 8),
     )
-    obs_batch = torch.randn(10, 42)
+    obs_batch = torch.randn(10, 37)
     sym_loss = compute_actor_symmetry_loss(actor, obs_batch)
     assert sym_loss.ndim == 0
     assert torch.isfinite(sym_loss) and float(sym_loss.item()) > 0.0
@@ -69,11 +73,11 @@ def test_symmetry_involution_and_kinematic_consistency():
 
     # Verify augment_symmetry_batch
     o_aug, a_aug, r_aug = augment_symmetry_batch(
-        np.ones((4, 42), dtype=np.float32),
+        np.ones((4, 37), dtype=np.float32),
         np.ones((4, 8), dtype=np.float32),
         np.arange(4, dtype=np.float32),
     )
-    assert o_aug.shape == (8, 42)
+    assert o_aug.shape == (8, 37)
     assert a_aug.shape == (8, 8)
     assert r_aug.shape == (8,)
     np.testing.assert_allclose(r_aug[:4], r_aug[4:])
@@ -211,11 +215,11 @@ def test_audit_f08_benchmark_captures_terminal_fall_tilt_and_torque(monkeypatch)
 
         monkeypatch.setattr(runner, "_step_subrange", force_terminal_fall)
 
-        dummy_actor = torch.nn.Sequential(torch.nn.Linear(42, 8))
+        dummy_actor = torch.nn.Sequential(torch.nn.Linear(37, 8))
         with torch.no_grad():
             for p in dummy_actor.parameters():
                 p.zero_()
-        dummy_actor.obs_dim = 42
+        dummy_actor.obs_dim = 37
 
         metrics = run_benchmark_scenario(
             runner,
@@ -234,13 +238,13 @@ def test_audit_f08_benchmark_captures_terminal_fall_tilt_and_torque(monkeypatch)
 
 def test_bc_symmetry_augmentation_and_dagger_teacher_collection():
     from sim.env.run_parallel_sim import ParallelSimRunner
-    from sim.env.symmetry import compute_actor_symmetry_loss, mirror_obs_42
+    from sim.env.symmetry import compute_actor_symmetry_loss
     from tools.train.pretrain_bc import collect_dagger_demonstrations, train_behavior_cloning
     from tools.train.train_ppo import ActorCritic
 
     torch.manual_seed(0)
-    teacher = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=32, squash_actions=True).eval()
-    student = ActorCritic(obs_dim=42, action_dim=8, hidden_dim=32, squash_actions=True).eval()
+    teacher = ActorCritic(obs_dim=37, action_dim=8, hidden_dim=32, squash_actions=True).eval()
+    student = ActorCritic(obs_dim=37, action_dim=8, hidden_dim=32, squash_actions=True).eval()
 
     runner = ParallelSimRunner(model_path="src/robot/cyberduck_v2.xml", num_envs=2, num_threads=1, stage=0)
     try:
@@ -254,7 +258,7 @@ def test_bc_symmetry_augmentation_and_dagger_teacher_collection():
     finally:
         runner.close()
 
-    assert obs_arr.ndim == 2 and obs_arr.shape[1] == 42
+    assert obs_arr.ndim == 2 and obs_arr.shape[1] == 37
     assert act_arr.shape == (len(obs_arr), 8)
     assert ret_arr.shape == (len(obs_arr),)
     with torch.no_grad():
@@ -265,7 +269,7 @@ def test_bc_symmetry_augmentation_and_dagger_teacher_collection():
         obs_arr,
         act_arr,
         returns=ret_arr,
-        obs_dim=42,
+        obs_dim=37,
         action_dim=8,
         hidden_dim=64,
         epochs=8,
@@ -306,7 +310,8 @@ def test_ppo_symmetry_loss_and_action_delay(tmp_path: Path):
     assert save_path.exists()
     ckpt = torch.load(str(save_path), map_location="cpu", weights_only=False)
     assert ckpt["model_name"] == "cyberduck_v2.xml"
-    assert ckpt["observation_schema"]["obs_dim"] == 42
+    assert ckpt["observation_schema"]["obs_dim"] == 37
+    assert ckpt["observation_schema"]["version"] == 2
 
 
 def test_fast_sac_elu_nstep_symmetry_warmstart_and_esp32_export(tmp_path: Path):
@@ -323,11 +328,11 @@ def test_fast_sac_elu_nstep_symmetry_warmstart_and_esp32_export(tmp_path: Path):
     from tools.train.train_sac import SquashedGaussianActor, save_sac_checkpoint, train_sac
 
     rng = np.random.default_rng(9)
-    obs_init = rng.standard_normal((32, 42), dtype=np.float32)
+    obs_init = rng.standard_normal((32, 37), dtype=np.float32)
     act_init = rng.uniform(-0.5, 0.5, size=(32, 8)).astype(np.float32)
-    bc_model, _ = train_behavior_cloning(obs_init, act_init, obs_dim=42, action_dim=8, hidden_dim=64, epochs=2, batch_size=16)
+    bc_model, _ = train_behavior_cloning(obs_init, act_init, obs_dim=37, action_dim=8, hidden_dim=64, epochs=2, batch_size=16)
     bc_ckpt = tmp_path / "bc_seed.pt"
-    save_bc_checkpoint(bc_ckpt, bc_model, obs_dim=42, action_dim=8, hidden_dim=64)
+    save_bc_checkpoint(bc_ckpt, bc_model, obs_dim=37, action_dim=8, hidden_dim=64)
 
     sac_ckpt = tmp_path / "cyberduck_v2_sac_elu.pt"
     out_path = train_sac(
@@ -357,7 +362,7 @@ def test_fast_sac_elu_nstep_symmetry_warmstart_and_esp32_export(tmp_path: Path):
     loaded_actor = load_actor_from_checkpoint(out_path).eval()
     onnx_path = export_onnx(out_path, tmp_path / "sac_elu.onnx")
     sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
-    probe = np.linspace(-0.5, 0.5, 42, dtype=np.float32)[None, :]
+    probe = np.linspace(-0.5, 0.5, 37, dtype=np.float32)[None, :]
     with torch.no_grad():
         expected = policy_actor_forward(loaded_actor, torch.from_numpy(probe)).numpy()
     np.testing.assert_allclose(sess.run(None, {"obs": probe})[0], expected, atol=1e-5)
@@ -366,14 +371,14 @@ def test_fast_sac_elu_nstep_symmetry_warmstart_and_esp32_export(tmp_path: Path):
     prepared = prepare_target_exports({"esp32": out_path})
     assert "esp32" in prepared
     weights_h, config_h = export_esp32_headers(out_path, tmp_path / "weights.h", tmp_path / "config.h")
-    obs_i8 = np.zeros(42, dtype=np.int8)
+    obs_i8 = np.zeros(37, dtype=np.int8)
     obs_i8[0] = 60
     obs_i8[3] = 20
     obs_i8[5] = -120
     cpp_src = tmp_path / "verify_elu_sac.cpp"
     cpp_src.write_text(
         '#include <cstdio>\n#include "' + config_h.name + '"\n#include "' + weights_h.name + '"\n'
-        'int main(){ int8_t obs[42]={' + ",".join(map(str, obs_i8)) + '};'
+        'int main(){ int8_t obs[37]={' + ",".join(map(str, obs_i8)) + '};'
         'int8_t action[8]; evaluate_policy_int8(obs, action);'
         'for(int i=0;i<8;i++) printf("%d ", (int)action[i]); }\n',
         encoding="utf-8",
@@ -388,9 +393,9 @@ def test_fast_sac_elu_nstep_symmetry_warmstart_and_esp32_export(tmp_path: Path):
     np.testing.assert_allclose(c_act, np.round(py_act * 127.0), atol=3)
 
     # 3. Ensure ReLU SAC remains explicitly rejected for ESP32 INT8
-    relu_actor = SquashedGaussianActor(42, 8, hidden_dim=64, activation="relu")
+    relu_actor = SquashedGaussianActor(37, 8, hidden_dim=64, activation="relu")
     relu_ckpt = tmp_path / "sac_relu.pt"
-    save_sac_checkpoint(relu_ckpt, relu_actor, torch.zeros(1), 42, 8, hidden_dim=64, model_path="src/robot/cyberduck_v2.xml", observation_schema=ckpt["observation_schema"])
+    save_sac_checkpoint(relu_ckpt, relu_actor, torch.zeros(1), 37, 8, hidden_dim=64, model_path="src/robot/cyberduck_v2.xml", observation_schema=ckpt["observation_schema"])
     with pytest.raises(ValueError, match="SAC|ELU|unsupported"):
         export_esp32_headers(relu_ckpt, tmp_path / "bad_w.h", tmp_path / "bad_c.h")
 
