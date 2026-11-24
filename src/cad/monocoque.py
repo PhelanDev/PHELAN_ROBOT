@@ -288,7 +288,9 @@ def trunk_front():
     part += imu_shelf & inner_clip
 
     # Lightened power shelves for UBEC (+Y) and capacitor (-Y) fused cleanly into chest flanks.
-    ubec_shelf = box((26, 40, 2.0), (-10.2, 46, 1.5)) - box((16, 32, 6), (-10, 42, 1.5))
+    ubec_shelf = (box((26, 40, 2.0), (-10.2, 46, 1.5))
+                  - box((16, 32, 6), (-10, 42, 1.5))
+                  - box((12, 8.2, 6), (-20.0, 42, 1.5)))
     cap_shelf = box((10, 48, 2.0), (-8.4, -49, 3.3)) - box((6, 30, 6), (-8.4, -42, 3.3))
     part += (ubec_shelf + cap_shelf) & inner_clip
 
@@ -415,8 +417,8 @@ def hip_clevis():
 
     part += ml_hr * horn_hub_cap(wall=2.55, skirt_depth=0.0)
     part += ml_hr * idler_hub_cap(IDLER_SEAT_TOP - 8.5, tip_offset=8.2, wall=2.55)
-    # Open-bottom 9.5 mm wire exit slot through rear pod & rear_strap keeping >=2.8 mm wall above slot roof.
-    part -= box((16.0, 9.5, 21.0), (-37.0, 11.25, -45.2))
+    # Open-bottom 9.5 mm wire exit slot clearing Z=-34.0 servo stub cleanly while keeping >=2.8 mm roof.
+    part -= box((16.0, 9.5, 22.0), (-37.0, 11.25, -44.8))
     return checked('hip_clevis', part)
 
 
@@ -591,10 +593,11 @@ def integrated_foot():
         Plane.XY.offset(-0.5) * Pos(4.0, 0.0) * RectangleRounded(71.0, 35.8, 13.0),
         Plane.XY.offset( 3.2) * Pos(6.0, 0.0) * RectangleRounded(64.0, 33.5, 12.0),
     ], ruled=False)
-    boot_out -= extrude(Plane.XY.offset(-5.5) * Pos(4.0, 0.0) * RectangleRounded(62.0, 27.0, 10.0), 3.6)
-    boot_out -= extrude(Plane.XY.offset(-2.5) * Pos(15.5, 0.0) * RectangleRounded(25.0, 17.5, 6.0), 3.8)
-    boot_out -= extrude(Plane.XY.offset(-5.5) * Pos(-17.0, 0.0) * RectangleRounded(9.0, 14.5, 3.0), 3.6)
-    boot_out -= box((31.0, 26.8, 8.0), (-2.0, 0.0, 4.0))
+    boot_out -= extrude(Plane.XY.offset(-5.5) * Pos(4.0, 0.0) * RectangleRounded(62.5, 27.4, 9.8), 3.45)
+    boot_out -= extrude(Plane.XY.offset(-5.5) * Pos(25.0, 0.0) * RectangleRounded(18.8, 17.0, 5.8), 6.65)
+    boot_out -= extrude(Plane.XY.offset(-5.5) * Pos(19.8, 0.0) * RectangleRounded(8.4, 25.0, 3.8), 6.65)
+    boot_out -= extrude(Plane.XY.offset(-5.5) * Pos(-17.0, 0.0) * RectangleRounded(9.0, 15.0, 3.0), 3.45)
+    boot_out -= extrude(Plane.XY.offset(0.0) * Pos(-2.0, 0.0) * RectangleRounded(31.0, 26.8, 4.7), 8.0)
     for sign in (-1, 1):
         cheek = loft([
             Plane.XY.offset(-1.0) * Pos(-2.0, sign * 15.3) * RectangleRounded(27.0, 3.6, 1.5),
