@@ -142,7 +142,7 @@ và quy tắc reset. Clock tăng sau mỗi action, cả khi command bằng zero.
 Runtime Pi rejects policies without the V2 schema. Do not infer clock rules from tensor size. JSON schema for the V2 policy clock at 50 Hz:
 
 ```json
-{"version":1,"obs_dim":42,"embed_phase_clock":true,"period":0.8,"control_dt":0.02,"reset":"episode_steps_zero","advance":"after_action","zero_command":"advance"}
+{"version":2,"obs_dim":37,"embed_phase_clock":true,"period":0.8,"control_dt":0.02,"reset":"episode_steps_zero","advance":"after_action","zero_command":"advance"}
 ```
 
 Tests công khai nằm trong `tests/`. Trên clean checkout, cài các dependency Python
@@ -223,6 +223,13 @@ Mesh và articulation đủ để bắt đầu kiểm tra import. Khung gá MG99
 - **Đã làm:** Thêm dự báo ngã giải tích `FallPredictor` + hạ độ cứng `Limp-Fall` trong [self_righting.py](src/sim/behaviors/self_righting.py) và [run_parallel_sim.py](src/sim/env/run_parallel_sim.py); bổ sung bucket lấy mẫu lệnh đứng yên/xoay tại chỗ `zero_cmd_prob`/`turn_in_place_prob`, chuyển tư thế mượt `compute_slewed_posture_target`, `multiplicative_posture_reward`, phạt lệch đầu EMA 1 giây (`head_ema_penalty`), phạt vượt ngưỡng hành động (`action_over_limit_penalty`), sụt áp pin động, nhiễu cảm biến chỉ áp dụng lên Actor (`encoder_bias_rad`, `imu_mount_max_rad`, `delay_joint_vel_obs`) kèm làm sạch NaN cho Critic/GAE trong [env_config.py](src/sim/env/env_config.py), [run_parallel_sim.py](src/sim/env/run_parallel_sim.py), [train_ppo.py](src/tools/train/train_ppo.py); bổ sung `imu_ready`, giữ tư thế khi gặp `NaN`/`Inf`, Deadman zero twist và hot-swap `standup` ONNX trong [rpi_infer_core.py](src/hardware/rpi_infer_core.py).
 - **Kiểm chứng:** `python -m pytest tests/robot tests/sim tests/hardware -q -p no:cacheprovider` đạt `607 passed, 44 warnings` (gồm `tests/sim/test_microduck_sim2real_upgrades.py` và `tests/hardware/test_microduck_safety_runtime.py`); `python duck.py verify --skip-tests` thoát `0`.
 - **Bước tiếp theo:** Xử lý F01–F04 phần cứng còn lại, hoàn thiện cơ khí MG996R trong `src/cad/` và chạy train PPO với `--zero-cmd-prob 0.15 --turn-in-place-prob 0.15 --curriculum-smoothness --max-action-delay 2` trước khi xuất policy và tạo neo V2.
+
+### Khắc phục toàn hệ thống, nghiệm thu CAD MG996R và chuẩn hóa hợp đồng 37D ngày 2026-11-24
+
+- **Đang dừng ở đâu:** Nhánh `wip/v2-full-remediation` tại `5317b516`, hoàn tất toàn bộ 4 giai đoạn khắc phục hệ thống; `src/robot/cyberduck_v2.xml` đồng bộ từ CAD MG996R với khối lượng `1.262072 kg`, cao cơ sở `0.202 m`, đùi `0.060 m`, cẳng `0.054 m`, hợp đồng `37` quan sát actor `schema version 2` và `48` quan sát critic ở `50 Hz`, kèm `models/cyberduck_v2_policy.onnx` và bộ header INT8 ESP32-S3 mẫu `37D`; chưa gắn tag neo `.pt` V2 chính thức.
+- **Đã thử và sửa:** Khắc phục các lỗi audit thuật toán và an toàn phần cứng ở Phase 1 và Phase 2 gồm Markov DR, chuẩn hóa critic `48D` và DAgger RMS, fail-closed I2C/PCA9685/ToF/IMU, tự đứng dậy không trợ lực; nghiệm thu lắp ráp và bề dày thành DfAM cho 28 chi tiết in 3D ở Phase 3 đạt `0` giao cắt, `0` chi tiết thành mỏng ở `512` mẫu và `release_ready=True`; bổ sung `ActiveHeadScanner`, `EyeRenderer`, `SSD1309Display` và chuyển đồng bộ toàn chuỗi sim, train, export, RPi và Dual ESP32-S3 sang hợp đồng `37D` cùng cảm biến trán `head_tof`.
+- **Kiểm chứng:** `python -m pytest tests/robot tests/sim tests/hardware -q -p no:cacheprovider` đạt `628 passed`, `.\.venv_cad\Scripts\python.exe -m pytest tests/cad --run-slow -q -p no:cacheprovider` đạt `193 passed`, `python duck.py train --dry-run` và `python duck.py verify` đều thoát `0`.
+- **Bước tiếp theo:** Chạy huấn luyện dài hạn trên GPU theo chuỗi `pretrain_bc` sang Asymmetric PPO `37D`/`48D` với `--curriculum-smoothness --max-action-delay 2` rồi tinh chỉnh ELU FastSAC, đánh giá trên mô phỏng và robot thật để chốt checkpoint `.pt` V2 và gắn Git tag điểm neo khôi phục chính thức.
 
 ---
 
