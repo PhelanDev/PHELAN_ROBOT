@@ -202,8 +202,13 @@ def test_self_righting_locked_after_three_failed_attempts():
 
 
 def test_parallel_sim_runner_auto_recovery_integration():
-    """Verify ParallelSimRunner with enable_auto_recovery=True recovers fallen robot to standing."""
-    sim = ParallelSimRunner(num_envs=2, decimation=1, enable_auto_recovery=True)
+    """Verify ParallelSimRunner with enable_auto_recovery=True and opt-in allow_teleport_assist=True recovers fallen robot."""
+    sim = ParallelSimRunner(
+        num_envs=2,
+        decimation=1,
+        enable_auto_recovery=True,
+        allow_teleport_assist=True,
+    )
     assert hasattr(sim, "enable_auto_recovery")
     assert sim.enable_auto_recovery is True
     assert hasattr(sim, "recovery_controllers")
@@ -271,4 +276,31 @@ def test_self_righting_completes_at_mjcf_standing_geometry_and_rejects_fallen_po
         if ctrl_fallen.state == SelfRightingController.FAILED_LOCKED:
             break
     assert ctrl_fallen.state == SelfRightingController.FAILED_LOCKED
+
+
+def test_auto_recovery_defaults_to_pure_torque_without_teleport_assist():
+    """F11: ParallelSimRunner(enable_auto_recovery=True) defaults allow_teleport_assist=False without qpos teleport."""
+    import mujoco
+    from sim.env.run_parallel_sim import ParallelSimRunner
+
+    sim = ParallelSimRunner(num_envs=1, decimation=1, terrain_mode="flat", enable_auto_recovery=True)
+    try:
+        assert sim.allow_teleport_assist is False
+        ctrl = sim.recovery_controllers[0]
+        ctrl.trigger(FallType.SUPINE, np.zeros(8, dtype=np.float32))
+        ctrl.state = SelfRightingController.PHASE3_PUSH_TO_STAND
+        ctrl.phase_steps = 15
+
+        d = sim.datas[0]
+        d.qpos[2] = 0.045
+        d.qpos[3:7] = [0.0, 1.0, 0.0, 0.0]
+        d.qvel[:] = 0.0
+        mujoco.mj_forward(sim.model, d)
+
+        _, _, _, infos = sim.step(np.zeros((1, 8), dtype=np.float32))
+        assert infos[0]["assisted_recovery"] is False
+        assert float(sim.datas[0].qpos[2]) < 0.09
+    finally:
+        sim.close()
+
 

@@ -408,6 +408,14 @@ def export_onnx(
     return output_path
 
 
+def _format_c_float(value: float) -> str:
+    """Format float as valid C float literal (never emit bare integer + 'f' like '1f')."""
+    s = f"{float(value):.9g}"
+    if "." not in s and "e" not in s and "E" not in s:
+        return f"{s}.0f"
+    return f"{s}f"
+
+
 def _format_array_c(arr: np.ndarray, per_line: int = 12) -> str:
     """Format 1D numpy array into a formatted C string."""
     flat = arr.flatten()
@@ -535,8 +543,8 @@ def export_esp32_headers(
 #define POLICY_SQUASH_ACTIONS {squash}
 #define POLICY_OBS_SCHEMA_VERSION {int(schema["version"])}
 #define POLICY_EMBED_PHASE_CLOCK {1 if schema["embed_phase_clock"] else 0}
-#define POLICY_CONTROL_DT {float(schema["control_dt"]):.9g}f
-#define POLICY_GAIT_PERIOD {float(schema["period"]):.9g}f
+#define POLICY_CONTROL_DT {_format_c_float(schema["control_dt"])}
+#define POLICY_GAIT_PERIOD {_format_c_float(schema["period"])}
 #define POLICY_CLOCK_ADVANCE_AFTER_ACTION 1
 #define POLICY_CLOCK_ZERO_CMD_ADVANCE 1
 static const float POLICY_OBS_LOWER[POLICY_LAYER1_IN] = {{{lower_code}}};

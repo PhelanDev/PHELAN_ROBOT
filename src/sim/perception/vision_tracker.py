@@ -44,6 +44,48 @@ RED_SECONDARY_BAND: Tuple[Tuple[int, int, int], Tuple[int, int, int]] = (
 )
 
 
+def _largest_connected_blob_numpy(mask: np.ndarray) -> Tuple[int, float, float]:
+    """Return (area, cx, cy) of the largest 4-connected True region in a boolean mask."""
+    h, w = mask.shape
+    ys, xs = np.where(mask)
+    if len(xs) == 0:
+        return 0, 0.0, 0.0
+    visited = np.zeros_like(mask, dtype=bool)
+    best_area = 0
+    best_cx = 0.0
+    best_cy = 0.0
+    for y0, x0 in zip(ys.tolist(), xs.tolist()):
+        if visited[y0, x0]:
+            continue
+        stack = [(y0, x0)]
+        visited[y0, x0] = True
+        area = 0
+        sum_x = 0
+        sum_y = 0
+        while stack:
+            cy_i, cx_i = stack.pop()
+            area += 1
+            sum_x += cx_i
+            sum_y += cy_i
+            if cy_i > 0 and mask[cy_i - 1, cx_i] and not visited[cy_i - 1, cx_i]:
+                visited[cy_i - 1, cx_i] = True
+                stack.append((cy_i - 1, cx_i))
+            if cy_i + 1 < h and mask[cy_i + 1, cx_i] and not visited[cy_i + 1, cx_i]:
+                visited[cy_i + 1, cx_i] = True
+                stack.append((cy_i + 1, cx_i))
+            if cx_i > 0 and mask[cy_i, cx_i - 1] and not visited[cy_i, cx_i - 1]:
+                visited[cy_i, cx_i - 1] = True
+                stack.append((cy_i, cx_i - 1))
+            if cx_i + 1 < w and mask[cy_i, cx_i + 1] and not visited[cy_i, cx_i + 1]:
+                visited[cy_i, cx_i + 1] = True
+                stack.append((cy_i, cx_i + 1))
+        if area > best_area:
+            best_area = area
+            best_cx = sum_x / float(area)
+            best_cy = sum_y / float(area)
+    return best_area, float(best_cx), float(best_cy)
+
+
 class ColorBlobTracker:
     """Fast, low-latency color segmentation and centroid detection for embedded vision."""
 
@@ -130,18 +172,16 @@ class ColorBlobTracker:
             else:
                 mask = (b > 150) & (r < 100) & (g < 100)
 
-            ys, xs = np.where(mask)
-            if len(xs) >= self.min_area:
-                cx = float(np.mean(xs))
-                cy = float(np.mean(ys))
+            area, cx, cy = _largest_connected_blob_numpy(mask)
+            if area >= self.min_area:
                 norm_x = (cx - (w / 2.0)) / (w / 2.0)
                 norm_y = (cy - (h / 2.0)) / (h / 2.0)
                 result["detected"] = True
                 result["norm_x"] = float(np.clip(norm_x, -1.0, 1.0))
                 result["norm_y"] = float(np.clip(norm_y, -1.0, 1.0))
                 result["center_px"] = (int(cx), int(cy))
-                result["area_px"] = float(len(xs))
-                result["radius_px"] = float(np.sqrt(len(xs) / np.pi))
+                result["area_px"] = float(area)
+                result["radius_px"] = float(np.sqrt(area / np.pi))
 
         return result
 
@@ -198,11 +238,13 @@ class VisualServoingHeadController:
             Tuple[float, float]: (target_head_yaw, target_head_pitch) in radians.
         """
         if not detected:
-            # Smoothly return to center / neutral position when target is lost
-            delta_yaw = np.clip(0.0 - self.current_yaw, -self.max_rate, self.max_rate)
-            delta_pitch = np.clip(0.0 - self.current_pitch, -self.max_rate, self.max_rate)
-            self.current_yaw += delta_yaw * 0.5
-            self.current_pitch += delta_pitch * 0.5
+            # Smoothly return to center / neutral position scaled linearly by control dt
+            scale = max(0.0, float(dt)) / 0.033
+            step_limit = 0.5 * self.max_rate * scale
+            delta_yaw = float(np.clip(-self.current_yaw * 0.5 * scale, -step_limit, step_limit))
+            delta_pitch = float(np.clip(-self.current_pitch * 0.5 * scale, -step_limit, step_limit))
+            self.current_yaw = float(np.clip(self.current_yaw + delta_yaw, self.yaw_limits[0], self.yaw_limits[1]))
+            self.current_pitch = float(np.clip(self.current_pitch + delta_pitch, self.pitch_limits[0], self.pitch_limits[1]))
             return self.current_yaw, self.current_pitch
 
         # Apply deadband filter to eliminate jitter

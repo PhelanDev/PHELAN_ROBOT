@@ -126,3 +126,43 @@ def test_render_head_camera_in_mujoco():
         rgb = render_head_camera(model, data, camera_name="head_camera", width=160, height=120)
         assert rgb.shape == (120, 160, 3)
         assert rgb.dtype == np.uint8
+
+
+def test_numpy_blob_tracker_rejects_scattered_noise_and_dt_return_scaling(monkeypatch):
+    """F09/F10: Pure-NumPy fallback filters disconnected speckles via CCL, and lost-target return scales with dt."""
+    import sim.perception.vision_tracker as vt_mod
+
+    scattered = np.zeros((32, 32, 3), dtype=np.uint8)
+    count = 0
+    for y in range(0, 32, 2):
+        for x in range(0, 32, 2):
+            if count < 40:
+                scattered[y, x] = [255, 255, 0]
+                count += 1
+
+    tracker = ColorBlobTracker(target_color="yellow", min_area=30)
+    res_cv = tracker.track(scattered)
+    assert res_cv["detected"] is False
+
+    monkeypatch.setattr(vt_mod, "_HAS_CV2", False)
+    res_np_noise = tracker.track(scattered)
+    assert res_np_noise["detected"] is False
+
+    # Contiguous 6x6 blob (36 px >= min_area=30) still triggers detection cleanly.
+    solid = np.zeros((32, 32, 3), dtype=np.uint8)
+    solid[10:16, 12:18] = [255, 255, 0]
+    res_np_blob = tracker.track(solid)
+    assert res_np_blob["detected"] is True
+    assert res_np_blob["area_px"] == pytest.approx(36.0)
+
+    # Lost-target return to center must integrate linearly with dt.
+    ctrl_fine = VisualServoingHeadController(max_rate=0.08)
+    ctrl_coarse = VisualServoingHeadController(max_rate=0.08)
+    ctrl_fine.reset(yaw=0.60, pitch=-0.20)
+    ctrl_coarse.reset(yaw=0.60, pitch=-0.20)
+    for _ in range(10):
+        yf, pf = ctrl_fine.update(0.0, 0.0, detected=False, dt=0.002)
+    yc, pc = ctrl_coarse.update(0.0, 0.0, detected=False, dt=0.020)
+    assert yf == pytest.approx(yc, abs=1e-5)
+    assert pf == pytest.approx(pc, abs=1e-5)
+

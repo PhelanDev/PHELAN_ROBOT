@@ -344,3 +344,55 @@ def test_viewer_rejects_legacy_policy_without_explicit_schema(tmp_path):
     )
     assert metrics["completed_steps"] > 0
 
+
+def test_export_esp32_headers_compile_clean_with_integer_period_and_dt(tmp_path):
+    """F05: Integer-valued period/control_dt must emit valid C++ float literals (1.0f, never 1f)."""
+    import re
+    import shutil
+    import subprocess
+    from sim.env.policy_contract import observation_schema
+    from tools.robot.export_policy import export_esp32_headers
+
+    model = ActorCritic(obs_dim=42, hidden_dim=16, squash_actions=True)
+    ckpt = tmp_path / "int_dt_period.pt"
+    schema = dict(observation_schema(42, True, 0.02))
+    schema["period"] = 1.0
+    torch.save(
+        {
+            "model_state_dict": model.state_dict(),
+            "obs_dim": 42,
+            "action_dim": 8,
+            "hidden_dim": 16,
+            "squash_actions": True,
+            "model_name": "cyberduck_v2.xml",
+            "observation_schema": schema,
+        },
+        ckpt,
+    )
+    w_path, c_path = export_esp32_headers(
+        ckpt,
+        weights_output_path=tmp_path / "esp32_policy_weights.h",
+        config_output_path=tmp_path / "esp32_quant_config.h",
+    )
+    w_text = w_path.read_text(encoding="utf-8")
+    assert re.search(r"#define\s+POLICY_GAIT_PERIOD\s+1\.0f\b", w_text)
+    assert re.search(r"#define\s+POLICY_CONTROL_DT\s+0\.02f\b", w_text)
+
+    gpp = shutil.which("g++")
+    if gpp:
+        cpp_stub = tmp_path / "compile_check.cpp"
+        cpp_stub.write_text(
+            '#include "esp32_policy_weights.h"\n'
+            '#include "esp32_quant_config.h"\n'
+            "int main() { float dt = POLICY_CONTROL_DT; float p = POLICY_GAIT_PERIOD; return (dt > 0 && p > 0) ? 0 : 1; }\n",
+            encoding="utf-8",
+        )
+        proc = subprocess.run(
+            [gpp, "-std=c++17", "-fsyntax-only", "-I", str(tmp_path), str(cpp_stub)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, f"g++ compile failed:\n{proc.stderr}"
+
+

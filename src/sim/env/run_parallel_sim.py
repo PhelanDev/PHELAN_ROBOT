@@ -240,6 +240,7 @@ class ParallelSimRunner:
         stand_still: bool = False,
         include_emotions: bool = False,
         enable_auto_recovery: bool = False,
+        allow_teleport_assist: bool = False,
         walk_min_z: float = 0.060,
         friction_range: Tuple[float, float] = (1.1, 1.6),
         embed_phase_clock: Optional[bool] = None,
@@ -477,6 +478,7 @@ class ParallelSimRunner:
 
         # Self-righting recovery controllers & pre-impact limp-fall predictors
         self.enable_auto_recovery = bool(enable_auto_recovery)
+        self.allow_teleport_assist = bool(allow_teleport_assist)
         if self.enable_auto_recovery:
             self.recovery_controllers: List[SelfRightingController] = [
                 SelfRightingController.from_model(self.model) for _ in range(self.num_envs)
@@ -1227,6 +1229,7 @@ class ParallelSimRunner:
         else:
             scaled_targets = scale_actions(exec_actions, self.cfg, nominal_centered=True)
 
+        assisted_recovery_flags = np.zeros(self.num_envs, dtype=bool)
         if self.enable_auto_recovery:
             for i in range(self.num_envs):
                 ctrl = self.recovery_controllers[i]
@@ -1241,15 +1244,16 @@ class ParallelSimRunner:
                     ], dtype=np.float32)
                     target_q, is_done = ctrl.step(qpos, root_z_val, proj_grav_val)
                     scaled_targets[i] = target_q
-                    if ctrl.is_push_completed or (
-                        ctrl.state == SelfRightingController.PHASE3_PUSH_TO_STAND
-                        and ctrl.phase_steps >= 15
+                    if self.allow_teleport_assist and (
+                        ctrl.is_push_completed
+                        or (ctrl.state == SelfRightingController.PHASE3_PUSH_TO_STAND and ctrl.phase_steps >= 15)
                     ):
                         d = self.datas[i]
                         d.qpos[2] = max(float(d.qpos[2]), float(self.model.qpos0[2]))
                         d.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
                         d.qvel[:] = 0.0
                         mujoco.mj_forward(self.model, d)
+                        assisted_recovery_flags[i] = True
 
         # 2. Rate-limit target joint changes (vectorized)
         target_positions = clip_action_rates(
@@ -1652,6 +1656,7 @@ class ParallelSimRunner:
             if self.enable_auto_recovery:
                 infos[i]["recovering"] = bool(self.recovery_controllers[i].is_recovering)
                 infos[i]["recovery_state"] = int(self.recovery_controllers[i].state)
+                infos[i]["assisted_recovery"] = bool(assisted_recovery_flags[i])
 
         if np.any(dones):
             for i in np.where(dones)[0]:
