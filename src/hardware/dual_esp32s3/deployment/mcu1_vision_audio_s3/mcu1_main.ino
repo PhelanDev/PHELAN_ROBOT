@@ -58,9 +58,10 @@ static uint8_t g_tx_buffer[128];
 // 5-Ray LiDAR distance state (meters)
 static float g_lidar_distances[5] = {1.50f, 1.50f, 1.50f, 1.50f, 1.50f};
 static bool g_obstacle_detected = false;
+static bool g_lidar_valid = false;
 
-// Current navigation velocity targets
-static float g_cmd_vx = 0.20f;  // Default forward walk (0.2 m/s)
+// Current navigation velocity targets (start stopped until valid perception/cmd)
+static float g_cmd_vx = 0.00f;
 static float g_cmd_vy = 0.00f;  // Lateral
 static float g_cmd_wz = 0.00f;  // Turn rate (rad/s)
 
@@ -107,18 +108,52 @@ void init_camera() {
 
 void init_lidar() {
     Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, 400000);
-    Serial.println("[MCU 1] I2C Bus for 5-Ray ToF LiDAR scanner initialized @ 400kHz.");
+    Serial.println("[MCU 1] I2C Bus for ToF LiDAR scanner initialized @ 400kHz.");
+}
+
+bool read_vl53l0x_single_mm(uint8_t addr, uint16_t* out_mm) {
+    Wire.beginTransmission(addr);
+    Wire.write((uint8_t)0x00); // SYSRANGE_START
+    Wire.write((uint8_t)0x01);
+    if (Wire.endTransmission(true) != 0) {
+        return false;
+    }
+    Wire.beginTransmission(addr);
+    Wire.write((uint8_t)(0x14 + 10)); // RESULT_RANGE_MM (0x1E..0x1F)
+    if (Wire.endTransmission(false) != 0) {
+        return false;
+    }
+    Wire.requestFrom((uint8_t)addr, (size_t)2, true);
+    if (Wire.available() < 2) {
+        return false;
+    }
+    uint8_t hi = (uint8_t)Wire.read();
+    uint8_t lo = (uint8_t)Wire.read();
+    if (out_mm) {
+        *out_mm = (uint16_t)(((uint16_t)hi << 8) | (uint16_t)lo);
+    }
+    return true;
 }
 
 void sample_lidar_sensors() {
-    // Read distances from the 5-ray ToF rangefinders
-    // In production, cycles through TCA9548A multiplexer channels or reads multi-zone ToF
-    g_obstacle_detected = false;
-    for (int i = 0; i < 5; ++i) {
-        // Evaluate obstacle threshold (0.35m)
-        if (g_lidar_distances[i] < OBSTACLE_THRESHOLD) {
-            g_obstacle_detected = true;
+    uint16_t mm = 0;
+    if (!read_vl53l0x_single_mm(LIDAR_I2C_ADDR, &mm)) {
+        g_lidar_valid = false;
+        g_obstacle_detected = false;
+        g_cmd_vx = 0.00f;
+        g_cmd_wz = 0.00f;
+        for (int i = 0; i < 5; ++i) {
+            g_lidar_distances[i] = 0.00f;
         }
+        return;
+    }
+    float dist_m = (float)mm * 0.001f;
+    if (dist_m < 0.03f) dist_m = 0.03f;
+    if (dist_m > 2.00f) dist_m = 2.00f;
+    g_lidar_valid = true;
+    g_obstacle_detected = (dist_m < OBSTACLE_THRESHOLD);
+    for (int i = 0; i < 5; ++i) {
+        g_lidar_distances[i] = dist_m;
     }
 }
 
@@ -159,6 +194,7 @@ void loop() {
             lidar_pkt.ranges[i] = g_lidar_distances[i];
         }
         lidar_pkt.obstacle_detected = g_obstacle_detected ? 1 : 0;
+        lidar_pkt.sensor_valid = g_lidar_valid ? 1 : 0;
 
         uint16_t len = encode_lidar_packet(lidar_pkt, g_seq_id++, g_tx_buffer, sizeof(g_tx_buffer));
         if (len > 0) {
@@ -170,8 +206,11 @@ void loop() {
     if (now - g_last_cmd_time >= 50) {
         g_last_cmd_time = now;
 
-        // If obstacle detected directly ahead (ray 2), execute autonomous avoidance turn
-        if (g_obstacle_detected) {
+        // Fail closed when ToF sensor is invalid; otherwise steer around obstacle
+        if (!g_lidar_valid) {
+            g_cmd_vx = 0.00f;
+            g_cmd_wz = 0.00f;
+        } else if (g_obstacle_detected) {
             g_cmd_vx = 0.05f;  // Slow down
             g_cmd_wz = 0.50f;  // Turn to clear obstacle
         } else {

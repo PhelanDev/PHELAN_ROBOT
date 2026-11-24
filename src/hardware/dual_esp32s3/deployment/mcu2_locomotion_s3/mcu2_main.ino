@@ -90,7 +90,7 @@ float g_last_raw_actions[8]         = {0};
 
 // Telemetry from MCU 1
 static VelocityCmdPacket g_cmd_pkt = {0.0f, 0.0f, 0.0f};
-static LidarPerceptionPacket g_lidar_pkt = {{1.5f, 1.5f, 1.5f, 1.5f, 1.5f}, 0};
+static LidarPerceptionPacket g_lidar_pkt = {{1.5f, 1.5f, 1.5f, 1.5f, 1.5f}, 0, 0};
 static ColorTargetPacket g_color_target_pkt = {0, 0, 0};
 static uint32_t g_last_mcu1_pkt_time = 0;
 static uint32_t g_last_cmd_pkt_time = 0;
@@ -146,6 +146,7 @@ void init_servos() {
 static float s_gyro_bias[3] = {0.0f, 0.0f, 0.0f};
 static float s_filt_gyro[3] = {0.0f, 0.0f, 0.0f};
 static float s_filt_grav[3] = {0.0f, 0.0f, -1.0f};
+static bool g_imu_stale = false;
 
 // Mahony Filter State Variables & Feedback
 static float s_q0 = 1.0f;
@@ -303,6 +304,12 @@ void init_mpu6050() {
     Serial.println("[MCU 2] MPU6050 IMU initialized @ 400kHz with 42Hz DLPF & bias calibrated.");
 }
 
+static inline void project_quat_to_gravity(float s_q0, float s_q1, float s_q2, float s_q3, float *proj_grav) {
+    proj_grav[0] = -2.0f * (s_q1 * s_q3 - s_q0 * s_q2);
+    proj_grav[1] = -2.0f * (s_q2 * s_q3 + s_q0 * s_q1);
+    proj_grav[2] = -(s_q0 * s_q0 - s_q1 * s_q1 - s_q2 * s_q2 + s_q3 * s_q3);
+}
+
 void read_mpu6050(float *gyro, float *proj_grav) {
     // Read Accel (6B) + Temp (2B) + Gyro (6B) = 14 bytes from register 0x3B
     Wire.beginTransmission(MPU6050_ADDR);
@@ -311,6 +318,7 @@ void read_mpu6050(float *gyro, float *proj_grav) {
     Wire.requestFrom((uint8_t)MPU6050_ADDR, (size_t)14, true);
 
     if (Wire.available() >= 14) {
+        g_imu_stale = false;
         uint8_t ax_h = Wire.read(); uint8_t ax_l = Wire.read();
         uint8_t ay_h = Wire.read(); uint8_t ay_l = Wire.read();
         uint8_t az_h = Wire.read(); uint8_t az_l = Wire.read();
@@ -350,9 +358,7 @@ void read_mpu6050(float *gyro, float *proj_grav) {
         mahony_update(ax, ay, az, s_filt_gyro[0], s_filt_gyro[1], s_filt_gyro[2], CONTROL_DT);
 
         // Project gravity to MuJoCo base coordinate frame
-        proj_grav[0] = -2.0f * (s_q1 * s_q3 - s_q0 * s_q2);
-        proj_grav[1] = -2.0f * (s_q2 * s_q3 + s_q0 * s_q1);
-        proj_grav[2] = -(s_q0 * s_q0 - s_q1 * s_q1 - s_q2 * s_q2 + s_q3 * s_q3);
+        project_quat_to_gravity(s_q0, s_q1, s_q2, s_q3, proj_grav);
 
         // Update legacy IIR filter for diagnostics and backward test compatibility
         float norm = sqrtf(ax * ax + ay * ay + az * az);
@@ -367,11 +373,10 @@ void read_mpu6050(float *gyro, float *proj_grav) {
             s_filt_grav[2] = alpha * s_filt_grav[2] + (1.0f - alpha) * gz_norm;
         }
     } else {
-        // Fallback default: projected gravity from current quaternion
+        // Fallback default: mark IMU stale and keep identical projected gravity sign
+        g_imu_stale = true;
         gyro[0] = 0.0f; gyro[1] = 0.0f; gyro[2] = 0.0f;
-        proj_grav[0] = 2.0f * (s_q1 * s_q3 - s_q0 * s_q2);
-        proj_grav[1] = 2.0f * (s_q2 * s_q3 + s_q0 * s_q1);
-        proj_grav[2] = -(s_q0 * s_q0 - s_q1 * s_q1 - s_q2 * s_q2 + s_q3 * s_q3);
+        project_quat_to_gravity(s_q0, s_q1, s_q2, s_q3, proj_grav);
     }
 }
 
@@ -628,8 +633,8 @@ void setup() {
 }
 
 void update_mcu1_watchdogs(uint32_t now) {
-    // Safety watchdog: stop walking if velocity/voice commands are stale (> 500ms)
-    if (!g_has_cmd_pkt || (now - g_last_cmd_pkt_time > 500)) {
+    // Safety watchdog: stop walking if velocity/voice commands are stale (> 500ms), IMU is stale, or active ToF is invalid
+    if (!g_has_cmd_pkt || (now - g_last_cmd_pkt_time > 500) || g_imu_stale || (g_has_lidar_pkt && !g_lidar_pkt.sensor_valid)) {
         g_cmd_pkt.vx = 0.0f;
         g_cmd_pkt.vy = 0.0f;
         g_cmd_pkt.wz = 0.0f;
@@ -656,6 +661,14 @@ void loop() {
 
         // Assemble 42-dimensional observation vector
         assemble_observation(g_obs);
+        if (g_imu_stale || (g_has_lidar_pkt && !g_lidar_pkt.sensor_valid)) {
+            g_cmd_pkt.vx = 0.0f;
+            g_cmd_pkt.vy = 0.0f;
+            g_cmd_pkt.wz = 0.0f;
+            g_obs[6] = 0.0f;
+            g_obs[7] = 0.0f;
+            g_obs[8] = 0.0f;
+        }
 
         // Run RL / Gait policy
         evaluate_locomotion_policy(g_obs, g_target_angles);

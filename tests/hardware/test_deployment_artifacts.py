@@ -412,6 +412,7 @@ int main() {{
         lidar_in.ranges[i] = 0.5f + i * 0.2f;
     }}
     lidar_in.obstacle_detected = 1;
+    lidar_in.sensor_valid = 1;
 
     encoded_len = encode_lidar_packet(lidar_in, 100, buffer, sizeof(buffer));
     assert(encoded_len > 0);
@@ -421,6 +422,7 @@ int main() {{
     assert(ok == true);
     assert(seq_out == 100);
     assert(lidar_out.obstacle_detected == 1);
+    assert(lidar_out.sensor_valid == 1);
     for (int i = 0; i < 5; ++i) {{
         assert(std::fabs(lidar_out.ranges[i] - (0.5f + i * 0.2f)) < 1e-4);
     }}
@@ -1722,7 +1724,7 @@ const float JOINT_NOMINAL_POS[8] = {{0}};
 static float g_last_targets[8] = {{0}};
 static float g_current_joint_pos[8] = {{0}};
 static VelocityCmdPacket g_cmd_pkt = {{0.0f, 0.0f, 0.0f}};
-static LidarPerceptionPacket g_lidar_pkt = {{{{1.5f, 1.5f, 1.5f, 1.5f, 1.5f}}, 0}};
+static LidarPerceptionPacket g_lidar_pkt = {{{{1.5f, 1.5f, 1.5f, 1.5f, 1.5f}}, 0, 0}};
 static ColorTargetPacket g_color_target_pkt = {{0, 0, 0}};
 static uint32_t g_last_mcu1_pkt_time = 0;
 static uint32_t g_last_cmd_pkt_time = 0;
@@ -1730,6 +1732,7 @@ static uint32_t g_last_lidar_pkt_time = 0;
 static bool g_has_cmd_pkt = false;
 static bool g_has_lidar_pkt = false;
 static bool g_emergency_stop = false;
+static bool g_imu_stale = false;
 static bool s_warned_lidar_fallback = false;
 static uint8_t g_rx_ring[256];
 static uint16_t g_rx_head = 0;
@@ -1747,7 +1750,7 @@ int main() {{
     VelocityCmdPacket vel = {{0.20f, 0.0f, 0.0f}};
     uint16_t n = encode_velocity_packet(&vel, 1, pkt, sizeof(pkt));
     UartLink.push(pkt, n);
-    LidarPerceptionPacket lid = {{{{0.10f, 0.10f, 0.10f, 0.10f, 0.10f}}, 1}};
+    LidarPerceptionPacket lid = {{{{0.10f, 0.10f, 0.10f, 0.10f, 0.10f}}, 1, 1}};
     n = encode_lidar_packet(&lid, 2, pkt, sizeof(pkt));
     UartLink.push(pkt, n);
     process_uart_packets();

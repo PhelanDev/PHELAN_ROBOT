@@ -76,6 +76,7 @@ typedef struct {
 typedef struct {
     float ranges[5];           // Distances [-30, -15, 0, +15, +30 deg] in meters (0.05 - 2.0m)
     uint8_t obstacle_detected; // Flag: 1 if any ray < 0.35m threshold, 0 otherwise
+    uint8_t sensor_valid;      // Flag: 1 if real ToF I2C read succeeded, 0 on NACK/timeout
 } LidarPerceptionPacket;
 
 /**
