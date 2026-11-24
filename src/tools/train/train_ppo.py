@@ -27,6 +27,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from sim.env.env_config import MicroDuck8DoFConfig, _DEFAULT_CFG
 from sim.env.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
+from sim.env.symmetry import compute_actor_symmetry_loss, mirror_critic_obs_53, mirror_obs_42
 from robot.robot_spec import MODEL_PATH, MODEL_NAME, CHECKPOINT_PREFIX, REPO_ROOT
 from sim.env.terrain_curriculum import (
     STAGES,
@@ -322,24 +323,42 @@ def compute_gae(
     Returns:
         (advantages, returns) both of shape (num_steps, num_envs)
     """
-    num_steps, num_envs = rewards.shape
+    rewards_safe = torch.nan_to_num(rewards, nan=0.0, posinf=100.0, neginf=-100.0)
+    values_safe = torch.nan_to_num(values, nan=0.0, posinf=100.0, neginf=-100.0)
+    next_val_safe = torch.nan_to_num(next_value, nan=0.0, posinf=100.0, neginf=-100.0)
+    num_steps, num_envs = rewards_safe.shape
     advantages = torch.zeros((num_steps, num_envs), dtype=torch.float32, device=rewards.device)
     last_gae = torch.zeros(num_envs, dtype=torch.float32, device=rewards.device)
 
     for t in reversed(range(num_steps)):
         if t == num_steps - 1:
             next_non_terminal = 1.0 - dones[t]
-            next_val = next_value
+            next_val = next_val_safe
         else:
             next_non_terminal = 1.0 - dones[t]
-            next_val = values[t + 1]
+            next_val = values_safe[t + 1]
 
-        delta = rewards[t] + gamma * next_val * next_non_terminal - values[t]
+        delta = rewards_safe[t] + gamma * next_val * next_non_terminal - values_safe[t]
         last_gae = delta + gamma * gae_lambda * next_non_terminal * last_gae
         advantages[t] = last_gae
 
-    returns = advantages + values
-    return advantages, returns
+    returns = advantages + values_safe
+    return (
+        torch.nan_to_num(advantages, nan=0.0, posinf=100.0, neginf=-100.0),
+        torch.nan_to_num(returns, nan=0.0, posinf=100.0, neginf=-100.0),
+    )
+
+
+def compute_scheduled_action_rate_weight(
+    progress: float,
+    start_weight: float = -0.02,
+    end_weight: float = -0.10,
+    warmup_frac: float = 0.40,
+) -> float:
+    """Ramp action_rate_penalty weight from gentle start_weight to full end_weight over warmup_frac."""
+    p = min(1.0, max(0.0, float(progress)))
+    t = 1.0 if float(warmup_frac) <= 0.0 else min(1.0, p / float(warmup_frac))
+    return float(start_weight + (float(end_weight) - float(start_weight)) * t)
 
 
 def apply_timeout_bootstrap(
@@ -560,6 +579,11 @@ def train_ppo(
     pillar_density: float = 1.0,
     pillar_jitter: float = 0.06,
     squash_actions: Optional[bool] = None,
+    symmetry_coef: float = 0.5,
+    max_action_delay: int = 0,
+    zero_cmd_prob: float = 0.0,
+    turn_in_place_prob: float = 0.0,
+    curriculum_smoothness: bool = False,
 ) -> Dict[str, Any]:
     """Execute PPO training pipeline using ParallelSimRunner."""
     model_path = resolve_v2_model_path(model_path)
@@ -668,7 +692,13 @@ def train_ppo(
         randomize_pillars=randomize_pillars,
         pillar_density=pillar_density,
         pillar_jitter_xy=pillar_jitter,
+        max_action_delay_steps=max_action_delay,
+        zero_cmd_prob=zero_cmd_prob,
+        turn_in_place_prob=turn_in_place_prob,
     )
+    if curriculum_smoothness:
+        runner.cfg = MicroDuck8DoFConfig()
+        runner.cfg.REWARD_WEIGHTS = dict(runner.cfg.REWARD_WEIGHTS)
 
     obs_dim = runner.obs_dim
     critic_obs_dim = getattr(runner, "privileged_obs_dim", obs_dim)
@@ -689,6 +719,17 @@ def train_ppo(
 
     obs_rms = RunningMeanStd(shape=obs_dim, clip=10.0)
     critic_obs_rms = RunningMeanStd(shape=critic_obs_dim, clip=10.0)
+    use_sym = float(symmetry_coef) > 0.0
+
+    def update_rms_pair(raw_obs: np.ndarray, raw_critic: np.ndarray) -> None:
+        if use_sym and obs_dim == 42:
+            obs_rms.update(np.concatenate([raw_obs, mirror_obs_42(raw_obs)], axis=0))
+        else:
+            obs_rms.update(raw_obs)
+        if use_sym and critic_obs_dim == 53:
+            critic_obs_rms.update(np.concatenate([raw_critic, mirror_critic_obs_53(raw_critic)], axis=0))
+        else:
+            critic_obs_rms.update(raw_critic)
 
     def get_runner_critic_obs(raw_obs=None, env_indices=None):
         if hasattr(runner, "get_privileged_obs"):
@@ -910,8 +951,7 @@ def train_ppo(
     # Initial state
     current_obs_raw = runner.reset()
     current_critic_raw = get_runner_critic_obs(raw_obs=current_obs_raw)
-    obs_rms.update(current_obs_raw)
-    critic_obs_rms.update(current_critic_raw)
+    update_rms_pair(current_obs_raw, current_critic_raw)
     current_obs = torch.as_tensor(obs_rms.normalize(current_obs_raw), dtype=torch.float32, device=dev)
     current_critic_obs = torch.as_tensor(critic_obs_rms.normalize(current_critic_raw), dtype=torch.float32, device=dev)
 
@@ -926,6 +966,7 @@ def train_ppo(
         "policy_loss": 0.0,
         "value_loss": 0.0,
         "entropy": 0.0,
+        "symmetry_loss": 0.0,
         "total_loss": 0.0,
         "mean_reward": 0.0,
         "approx_kl": 0.0,
@@ -961,7 +1002,8 @@ def train_ppo(
         for iteration in range(start_iteration, total_target_iters + 1):
             iter_start = time.perf_counter()
 
-            # Randomize slalom pillars per iteration outside worker stepping (thread-safe)
+            # Randomize dynamics & slalom pillars per iteration outside worker stepping (thread-safe)
+            runner._randomize_model_dynamics()
             runner.randomize_stage_pillars()
 
             progress = (
@@ -970,11 +1012,17 @@ def train_ppo(
                 else min(1.0, max(0.0, (iteration - 1) / (total_target_iters - 1)))
             )
             current_entropy_coef = float(entropy_coef) + (eff_entropy_end - float(entropy_coef)) * progress
+            if curriculum_smoothness and hasattr(runner, "cfg") and hasattr(runner.cfg, "REWARD_WEIGHTS"):
+                runner.cfg.REWARD_WEIGHTS["action_rate_penalty"] = compute_scheduled_action_rate_weight(progress)
 
             # Smooth velocity warmup over first 15 iterations: stabilize early stepping balance
             if not stand_first and not transfer_loaded and iteration <= 15:
                 max_cmd_vx = 0.15 + 0.35 * (iteration / 15.0)
-                runner.commands[:, 0] = np.clip(runner.commands[:, 0], 0.08, max_cmd_vx)
+                if zero_cmd_prob > 0.0 or turn_in_place_prob > 0.0:
+                    walk_mask = runner.commands[:, 0] > 0.0
+                    runner.commands[walk_mask, 0] = np.clip(runner.commands[walk_mask, 0], 0.08, max_cmd_vx)
+                else:
+                    runner.commands[:, 0] = np.clip(runner.commands[:, 0], 0.08, max_cmd_vx)
 
             # ------------------------------------------------------------------
             # Phase 1: Rollout Collection
@@ -1061,8 +1109,7 @@ def train_ppo(
                 dones_buffer[step] = torch.as_tensor(dones_np, dtype=torch.float32, device=dev)
 
                 next_critic_raw = get_runner_critic_obs(raw_obs=next_obs_raw)
-                obs_rms.update(next_obs_raw)
-                critic_obs_rms.update(next_critic_raw)
+                update_rms_pair(next_obs_raw, next_critic_raw)
                 current_obs = torch.as_tensor(obs_rms.normalize(next_obs_raw), dtype=torch.float32, device=dev)
                 current_critic_obs = torch.as_tensor(critic_obs_rms.normalize(next_critic_raw), dtype=torch.float32, device=dev)
                 total_timesteps += num_envs
@@ -1116,6 +1163,7 @@ def train_ppo(
             epoch_policy_loss = 0.0
             epoch_value_loss = 0.0
             epoch_entropy = 0.0
+            epoch_sym_loss = 0.0
             total_kl_sum = 0.0
             update_count = 0
 
@@ -1152,15 +1200,21 @@ def train_ppo(
                     mb_ret = b_returns[mb_inds]
                     value_loss = 0.5 * F.smooth_l1_loss(new_values, mb_ret, beta=2.0)
 
-                    # Total Loss with Entropy Regularization
+                    # Total Loss with Entropy & Sagittal Symmetry Regularization
                     entropy_mean = entropy.mean()
+                    sym_loss = (
+                        compute_actor_symmetry_loss(model.forward_actor, b_obs[mb_inds])
+                        if (use_sym and obs_dim == 42)
+                        else policy_loss.new_zeros(())
+                    )
                     total_loss = (
                         policy_loss
                         + value_loss_coef * value_loss
                         - current_entropy_coef * entropy_mean
+                        + float(symmetry_coef) * sym_loss
                     )
 
-                    if not torch.isfinite(torch.stack((policy_loss, value_loss, entropy_mean, total_loss, approx_kl))).all():
+                    if not torch.isfinite(torch.stack((policy_loss, value_loss, entropy_mean, sym_loss, total_loss, approx_kl))).all():
                         raise ValueError("PPO loss must be finite before optimizer update")
                     optimizer.zero_grad()
                     total_loss.backward()
@@ -1176,6 +1230,7 @@ def train_ppo(
                     epoch_policy_loss += float(policy_loss.item())
                     epoch_value_loss += float(value_loss.item())
                     epoch_entropy += float(entropy_mean.item())
+                    epoch_sym_loss += float(sym_loss.item())
                     update_count += 1
 
                 epoch_mean_kl = epoch_kl_sum / max(1, epoch_batches)
@@ -1206,10 +1261,12 @@ def train_ppo(
                 metrics["policy_loss"] = epoch_policy_loss / update_count
                 metrics["value_loss"] = epoch_value_loss / update_count
                 metrics["entropy"] = epoch_entropy / update_count
+                metrics["symmetry_loss"] = epoch_sym_loss / update_count
                 metrics["total_loss"] = (
                     metrics["policy_loss"]
                     + value_loss_coef * metrics["value_loss"]
                     - current_entropy_coef * metrics["entropy"]
+                    + float(symmetry_coef) * metrics["symmetry_loss"]
                 )
                 metrics["approx_kl"] = total_kl_sum / update_count
             else:
@@ -1428,6 +1485,11 @@ def main():
         default=None,
         help="Explicit tanh action transform declaration/override for legacy transfer",
     )
+    parser.add_argument("--symmetry-coef", type=float, default=0.5, help="Sagittal symmetry regularization weight (default: 0.5)")
+    parser.add_argument("--max-action-delay", type=int, default=0, help="Max randomized action latency in control steps (default: 0)")
+    parser.add_argument("--zero-cmd-prob", type=float, default=0.0, help="Fraction of episodes sampled with exact zero [0,0,0] command (default: 0.0)")
+    parser.add_argument("--turn-in-place-prob", type=float, default=0.0, help="Fraction of episodes sampled with pure turn-in-place command (default: 0.0)")
+    parser.add_argument("--curriculum-smoothness", action="store_true", help="Gradually ramp action_rate_penalty from -0.02 to -0.10 during training")
 
     args = parser.parse_args()
 
@@ -1470,6 +1532,11 @@ def main():
         pillar_density=args.pillar_density,
         pillar_jitter=args.pillar_jitter,
         squash_actions=args.squash_actions,
+        symmetry_coef=args.symmetry_coef,
+        max_action_delay=args.max_action_delay,
+        zero_cmd_prob=args.zero_cmd_prob,
+        turn_in_place_prob=args.turn_in_place_prob,
+        curriculum_smoothness=args.curriculum_smoothness,
     )
 
 

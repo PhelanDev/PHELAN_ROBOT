@@ -21,6 +21,7 @@ from sim.behaviors.advanced_gaits import BipedalGaitGenerator
 from sim.env.env_config import unscale_actions
 from sim.env.policy_contract import observation_schema, validate_model_identity
 from sim.env.run_parallel_sim import ParallelSimRunner
+from sim.env.symmetry import augment_symmetry_batch, compute_actor_symmetry_loss
 
 
 def _get_actor_in_dim(actor: nn.Module) -> int:
@@ -36,17 +37,18 @@ def _get_actor_in_dim(actor: nn.Module) -> int:
 
 def _collect_rollouts(
     runner: ParallelSimRunner,
-    policy_fn: Callable[[np.ndarray, int], np.ndarray],
+    policy_fn: Callable[[np.ndarray, int], Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]],
     num_steps: int,
     gamma: float = 0.99,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     obs = runner.reset()
     traj_obs, traj_act, traj_rew, traj_done = [], [], [], []
     for s in range(num_steps):
-        act = policy_fn(obs, s)
-        next_obs, rews, dones, _ = runner.step(act, fast=True)
+        out = policy_fn(obs, s)
+        exec_act, label_act = out if isinstance(out, tuple) else (out, out)
+        next_obs, rews, dones, _ = runner.step(exec_act, fast=True)
         traj_obs.append(obs.copy())
-        traj_act.append(act.copy())
+        traj_act.append(label_act.copy())
         traj_rew.append(rews.copy())
         traj_done.append(dones.copy())
         obs = next_obs
@@ -88,6 +90,25 @@ def collect_gait_demonstrations(
     return _collect_rollouts(runner, policy_fn, num_steps, gamma)
 
 
+def _eval_actor_batch(actor: nn.Module, obs: np.ndarray) -> np.ndarray:
+    """Evaluate a 42-obs -> 8-act PyTorch policy deterministically."""
+    if obs.shape[1] != NUM_OBSERVATIONS:
+        raise ValueError(f"V2 teacher observation mismatch: {obs.shape[1]} != {NUM_OBSERVATIONS}")
+    norm_obs = obs
+    bc_rms = getattr(actor, "_bc_obs_rms", None)
+    if bc_rms is not None:
+        norm_obs = bc_rms.normalize(obs)
+    with torch.no_grad():
+        t_obs = torch.as_tensor(norm_obs, dtype=torch.float32)
+        out = actor.forward_actor(t_obs) if hasattr(actor, "forward_actor") else policy_actor_forward(actor, t_obs)
+        if isinstance(out, tuple):
+            out = out[0]
+        act = out.detach().cpu().numpy()
+    if act.shape[-1] != NUM_ACTIONS:
+        raise ValueError(f"V2 teacher action mismatch: {act.shape[-1]} != {NUM_ACTIONS}")
+    return np.clip(act, -1.0, 1.0).astype(np.float32)
+
+
 def collect_teacher_demonstrations(
     runner: ParallelSimRunner, teacher_actor: nn.Module, num_steps: int = 200, gamma: float = 0.99
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -98,17 +119,37 @@ def collect_teacher_demonstrations(
         raise ValueError("V2 teacher demonstrations require a 42-observation, 8-action policy")
 
     def policy_fn(obs: np.ndarray, _step: int) -> np.ndarray:
-        if obs.shape[1] != NUM_OBSERVATIONS:
-            raise ValueError(f"V2 teacher observation mismatch: {obs.shape[1]} != {NUM_OBSERVATIONS}")
-        with torch.no_grad():
-            t_obs = torch.as_tensor(obs, dtype=torch.float32)
-            out = teacher_actor.forward_actor(t_obs) if hasattr(teacher_actor, "forward_actor") else policy_actor_forward(teacher_actor, t_obs)
-            if isinstance(out, tuple):
-                out = out[0]
-            act = out.detach().cpu().numpy()
-        if act.shape[-1] != NUM_ACTIONS:
-            raise ValueError(f"V2 teacher action mismatch: {act.shape[-1]} != {NUM_ACTIONS}")
-        return np.clip(act, -1.0, 1.0).astype(np.float32)
+        return _eval_actor_batch(teacher_actor, obs)
+
+    return _collect_rollouts(runner, policy_fn, num_steps, gamma)
+
+
+def collect_dagger_demonstrations(
+    runner: ParallelSimRunner,
+    teacher_actor: nn.Module,
+    student_actor: Optional[nn.Module] = None,
+    num_steps: int = 200,
+    beta: float = 0.5,
+    gamma: float = 0.99,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Collect DAgger trajectories (blended execution, teacher action labels)."""
+    teacher_actor.eval()
+    t_in_dim = _get_actor_in_dim(teacher_actor)
+    if runner.obs_dim != NUM_OBSERVATIONS or runner.action_dim != NUM_ACTIONS or t_in_dim != NUM_OBSERVATIONS:
+        raise ValueError("V2 teacher demonstrations require a 42-observation, 8-action policy")
+    if student_actor is not None:
+        student_actor.eval()
+        if _get_actor_in_dim(student_actor) != NUM_OBSERVATIONS:
+            raise ValueError("V2 student demonstrations require a 42-observation, 8-action policy")
+    mix_beta = float(np.clip(beta, 0.0, 1.0))
+
+    def policy_fn(obs: np.ndarray, _step: int) -> Tuple[np.ndarray, np.ndarray]:
+        teacher_act = _eval_actor_batch(teacher_actor, obs)
+        if student_actor is None or mix_beta >= 1.0:
+            return teacher_act, teacher_act
+        student_act = _eval_actor_batch(student_actor, obs)
+        exec_act = np.clip(mix_beta * teacher_act + (1.0 - mix_beta) * student_act, -1.0, 1.0).astype(np.float32)
+        return exec_act, teacher_act
 
     return _collect_rollouts(runner, policy_fn, num_steps, gamma)
 
@@ -118,6 +159,9 @@ def train_behavior_cloning(
     obs_dim: int = 42, action_dim: int = 8, hidden_dim: int = 256,
     epochs: int = 30, batch_size: int = 256, lr: float = 1e-3, device: str = "cpu",
     obs_rms: Optional[RunningMeanStd] = None,
+    augment_symmetry: bool = True,
+    symmetry_coef: float = 0.25,
+    init_model: Optional[ActorCritic] = None,
 ) -> Tuple[ActorCritic, List[float]]:
     """Train Actor (MSE) and Critic (SmoothL1) to avoid cold critic shock at PPO iteration 1."""
     if obs_dim != NUM_OBSERVATIONS or action_dim != NUM_ACTIONS:
@@ -126,7 +170,13 @@ def train_behavior_cloning(
         raise ValueError("V2 behavior cloning input must have shape [samples, 42]")
     if np.asarray(actions).ndim != 2 or np.asarray(actions).shape[1] != NUM_ACTIONS:
         raise ValueError("V2 behavior cloning actions must have shape [samples, 8]")
-    model = ActorCritic(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
+    if augment_symmetry:
+        obs, actions, returns = augment_symmetry_batch(obs, actions, returns)
+    model = (
+        init_model.to(device)
+        if init_model is not None
+        else ActorCritic(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
+    )
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     if obs_rms is None:
@@ -140,12 +190,15 @@ def train_behavior_cloning(
     ret_t = torch.as_tensor(returns, dtype=torch.float32, device=device) if returns is not None else None
 
     dataset_size, epoch_losses = len(obs), []
+    sym_w = float(symmetry_coef)
     for _ in range(epochs):
         perm, total_loss, batches = torch.randperm(dataset_size, device=device), 0.0, 0
         for i in range(0, dataset_size, batch_size):
             idx = perm[i : i + batch_size]
             b_obs, b_act = obs_t[idx], act_t[idx]
             loss = F.mse_loss(model.forward_actor(b_obs), b_act)
+            if sym_w > 0.0 and obs_dim == NUM_OBSERVATIONS and action_dim == NUM_ACTIONS:
+                loss = loss + sym_w * compute_actor_symmetry_loss(model.forward_actor, b_obs)
             if ret_t is not None:
                 loss = loss + 0.5 * F.smooth_l1_loss(model.forward_critic(b_obs), ret_t[idx])
             optimizer.zero_grad()
@@ -200,13 +253,22 @@ def main():
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--num-envs", type=int, default=8)
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--dagger-rounds", type=int, default=1)
+    parser.add_argument("--no-symmetry", action="store_true")
     parser.add_argument("--output", default=str(REPO_ROOT / "models" / "checkpoints" / f"{CHECKPOINT_PREFIX}_bc_init.pt"))
     args = parser.parse_args()
 
+    use_sym = not args.no_symmetry
+    sym_coef = 0.25 if use_sym else 0.0
     runner = ParallelSimRunner(model_path=args.model_path, num_envs=args.num_envs, num_threads=1, stage=0)
     try:
         if args.mode == "gait":
             obs, acts, rets = collect_gait_demonstrations(runner, num_steps=args.steps)
+            model, losses = train_behavior_cloning(
+                obs, acts, returns=rets, obs_dim=runner.obs_dim, action_dim=runner.action_dim,
+                epochs=args.epochs, batch_size=args.batch_size, lr=args.lr,
+                augment_symmetry=use_sym, symmetry_coef=sym_coef,
+            )
         else:
             if not args.teacher_checkpoint:
                 raise ValueError("--teacher-checkpoint is required when --mode=teacher")
@@ -216,13 +278,29 @@ def main():
             validate_model_identity(teacher_checkpoint, MODEL_NAME)
             teacher = load_actor_from_checkpoint(args.teacher_checkpoint)
             obs, acts, rets = collect_teacher_demonstrations(runner, teacher, num_steps=args.steps)
+            model, losses = train_behavior_cloning(
+                obs, acts, returns=rets, obs_dim=runner.obs_dim, action_dim=runner.action_dim,
+                epochs=args.epochs, batch_size=args.batch_size, lr=args.lr,
+                augment_symmetry=use_sym, symmetry_coef=sym_coef,
+            )
+            rounds = max(1, int(args.dagger_rounds))
+            for r in range(1, rounds):
+                beta = max(0.2, 1.0 - 0.5 * (r / max(1, rounds - 1)))
+                d_obs, d_acts, d_rets = collect_dagger_demonstrations(
+                    runner, teacher, student_actor=model, num_steps=args.steps, beta=beta
+                )
+                obs = np.concatenate([obs, d_obs], axis=0)
+                acts = np.concatenate([acts, d_acts], axis=0)
+                rets = np.concatenate([rets, d_rets], axis=0)
+                model, losses = train_behavior_cloning(
+                    obs, acts, returns=rets, obs_dim=runner.obs_dim, action_dim=runner.action_dim,
+                    epochs=args.epochs, batch_size=args.batch_size, lr=args.lr,
+                    obs_rms=model._bc_obs_rms, augment_symmetry=use_sym, symmetry_coef=sym_coef,
+                    init_model=model,
+                )
     finally:
         runner.close()
 
-    model, losses = train_behavior_cloning(
-        obs, acts, returns=rets, obs_dim=runner.obs_dim, action_dim=runner.action_dim,
-        epochs=args.epochs, batch_size=args.batch_size, lr=args.lr,
-    )
     out_path = save_bc_checkpoint(args.output, model, runner.obs_dim, runner.action_dim)
     print(f"Pretrained BC model saved to {out_path} (final loss: {losses[-1]:.4f})")
 

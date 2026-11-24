@@ -27,6 +27,86 @@ PRONE_NOMINAL_QPOS: np.ndarray = LIE_NOMINAL_QPOS.copy()
 STAND_NOMINAL_QPOS: np.ndarray = DEFAULT_NOMINAL_QPOS.copy()
 
 
+def compute_grav_z_dot(
+    base_ang_vel: Union[np.ndarray, list, tuple],
+    proj_gravity: Union[np.ndarray, list, tuple],
+) -> Union[float, np.ndarray]:
+    """Compute analytical projected gravity Z rate -(omega x g)_z = w_y*g_x - w_x*g_y."""
+    w = np.asarray(base_ang_vel, dtype=np.float32)
+    g = np.asarray(proj_gravity, dtype=np.float32)
+    dot = w[..., 1] * g[..., 0] - w[..., 0] * g[..., 1]
+    return float(dot) if w.ndim == 1 and g.ndim == 1 else dot.astype(np.float32)
+
+
+class FallPredictor:
+    """Analytical pre-impact fall predictor with hysteresis arming and limp-fall trigger."""
+
+    def __init__(
+        self,
+        lookahead_s: float = 0.30,
+        armed_grav_z: float = -0.90,
+        fall_grav_z: float = -0.50,
+        arm_confirm_steps: int = 10,
+        trip_confirm_steps: int = 3,
+        limp_kp_scale: float = 0.25,
+    ):
+        self.lookahead_s = float(lookahead_s)
+        self.armed_grav_z = float(armed_grav_z)
+        self.fall_grav_z = float(fall_grav_z)
+        self.arm_confirm_steps = max(1, int(arm_confirm_steps))
+        self.trip_confirm_steps = max(1, int(trip_confirm_steps))
+        self.limp_kp_scale = float(limp_kp_scale)
+        self.reset()
+
+    def reset(self) -> None:
+        """Reset arming and trip confirmation state."""
+        self.armed = False
+        self.limp_active = False
+        self._arm_streak = 0
+        self._trip_streak = 0
+
+    def update(
+        self,
+        base_ang_vel: np.ndarray,
+        proj_gravity: np.ndarray,
+        imu_ready: bool = True,
+    ) -> bool:
+        """Update fall prediction from raw body gyro (rad/s) and projected gravity."""
+        if not imu_ready:
+            self._arm_streak = 0
+            self._trip_streak = 0
+            return self.limp_active
+
+        w = np.asarray(base_ang_vel, dtype=np.float32)
+        g = np.asarray(proj_gravity, dtype=np.float32)
+        if not (np.all(np.isfinite(w)) and np.all(np.isfinite(g))):
+            return self.limp_active
+
+        grav_z = float(g[2])
+        if grav_z <= self.armed_grav_z:
+            self._arm_streak += 1
+            self._trip_streak = 0
+            if self._arm_streak >= self.arm_confirm_steps:
+                self.armed = True
+                self.limp_active = False
+            return self.limp_active
+
+        self._arm_streak = 0
+        if not self.armed:
+            return self.limp_active
+
+        g_z_dot = float(compute_grav_z_dot(w, g))
+        g_z_pred = grav_z + g_z_dot * self.lookahead_s
+        tipping_down = (g_z_dot > 0.0 and g_z_pred > self.fall_grav_z) or (grav_z > self.fall_grav_z)
+        if tipping_down:
+            self._trip_streak += 1
+            if self._trip_streak >= self.trip_confirm_steps:
+                self.limp_active = True
+        else:
+            self._trip_streak = 0
+        return self.limp_active
+
+
 class FallType(str, Enum):
     """4-way fall direction categorization."""
 
