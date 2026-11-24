@@ -228,3 +228,27 @@ def test_nav_planner_stage0_bearing_heading_and_yaw_termination(goal_xy, yaw):
     finally:
         runner.close()
 
+
+def test_nav_planner_halts_forward_velocity_on_blocked_rays():
+    """F04: Blocked front clearance (<= stop_dist) or all-blocked rays must clamp vx == 0.0."""
+    planner = LidarWaypointPlanner(NavPlannerConfig())
+    assert planner.cfg.stop_dist == pytest.approx(0.18)
+
+    cmd_all_blocked = planner.compute_command(
+        pos_xy=np.array([0.0, 0.0]),
+        yaw=0.0,
+        goal_xy=np.array([2.0, 0.0]),
+        lidar_ranges=np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32),
+    )
+    assert cmd_all_blocked[0] == 0.0
+    assert abs(cmd_all_blocked[2]) > 0.0
+
+    cmd_front_blocked = planner.compute_command(
+        pos_xy=np.array([0.0, 0.0]),
+        yaw=0.0,
+        goal_xy=np.array([2.0, 0.0]),
+        lidar_ranges=np.array([0.5, 0.5, 0.12, 0.5, 0.5], dtype=np.float32),
+    )
+    assert cmd_front_blocked[0] == 0.0
+
+

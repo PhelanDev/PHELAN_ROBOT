@@ -156,6 +156,65 @@ class HardwarePCA9685:
         self.bus.write_i2c_block_data(self.address, self.ALL_LED_ON_L, [0, 0, 0, 0x10])
 
 
+class VL53L0XReader:
+    """Real I2C driver for VL53L0X single-ray ToF sensor (0x29) with explicit validity state."""
+
+    VL53L0X_ADDR = 0x29
+    REG_SYSRANGE_START = 0x00
+    REG_RESULT_RANGE_STATUS = 0x14
+    REG_RESULT_RANGE_MM = 0x1E
+
+    def __init__(
+        self,
+        bus_num: int = 1,
+        address: int = VL53L0X_ADDR,
+        mock: bool = False,
+        min_range_m: float = 0.03,
+        max_range_m: float = 2.0,
+    ):
+        self.address = int(address)
+        self.min_range_m = float(min_range_m)
+        self.max_range_m = float(max_range_m)
+        self.mock = bool(mock) or (smbus is None)
+        self.is_valid = bool(self.mock)
+        self.last_range_m = 1.5 if self.mock else 0.0
+        self.last_error: Optional[Exception] = None
+        self.bus = None
+        if not self.mock:
+            try:
+                self.bus = smbus.SMBus(bus_num)
+            except (OSError, RuntimeError) as exc:
+                self.last_error = exc
+                self.is_valid = False
+
+    def read_range_m(self) -> Tuple[float, bool]:
+        """Read measured distance in meters and whether hardware reading succeeded."""
+        if self.mock:
+            self.is_valid = True
+            self.last_range_m = 1.5
+            return 1.5, True
+        if self.bus is None:
+            self.is_valid = False
+            self.last_range_m = 0.0
+            return 0.0, False
+        try:
+            self.bus.write_byte_data(self.address, self.REG_SYSRANGE_START, 0x01)
+            raw = self.bus.read_i2c_block_data(self.address, self.REG_RESULT_RANGE_MM, 2)
+            if len(raw) < 2:
+                raise ValueError(f"Expected 2 VL53L0X range bytes, got {len(raw)}")
+            mm = (int(raw[0]) << 8) | int(raw[1])
+            dist_m = float(np.clip(mm * 0.001, self.min_range_m, self.max_range_m))
+            self.is_valid = True
+            self.last_range_m = dist_m
+            self.last_error = None
+            return dist_m, True
+        except (OSError, RuntimeError, ValueError) as exc:
+            self.is_valid = False
+            self.last_range_m = 0.0
+            self.last_error = exc
+            return 0.0, False
+
+
 class MPU6050FilterReader:
     """Hardware I2C driver for MPU6050 with 42Hz DLPF, Mahony AHRS sensor fusion, and impact gating."""
 
@@ -468,6 +527,8 @@ class BaseRPiInferenceEngine:
             dt=self.dt,
             allow_mock_fallback=self.allow_mock_fallback,
         )
+        self.tof_reader = VL53L0XReader(bus_num=i2c_bus, mock=self.mock)
+        self.last_lidar_valid = bool(self.mock)
 
         # ONNX Model setup (walking policy + optional hot-swappable standup recovery policy)
         self.model_path = str(model_path) if model_path is not None else (None if self.mock else str(DEFAULT_ONNX_PATH))
@@ -614,14 +675,21 @@ class BaseRPiInferenceEngine:
         return [1.0, 1.0, 0.0, 0.0]
 
     def read_lidar_ranges(self) -> List[float]:
-        """Read 5-ray ToF LiDAR distance sensors [-30, -15, 0, +15, +30 deg]."""
-        if not self._warned_lidar_fallback:
-            if self.mock:
+        """Read ToF distance sensor (projected to 5 rays for 42D policy or mocked when mock=True)."""
+        if self.mock:
+            if not self._warned_lidar_fallback:
                 print("[Warning] LiDAR sensor array running in mock/fallback mode. Using clear 1.5m range.")
-            else:
-                print("[Warning] Hardware I2C LiDAR array unavailable on bus. Using clear 1.5m range.")
-            self._warned_lidar_fallback = True
-        return [1.5, 1.5, 1.5, 1.5, 1.5]
+                self._warned_lidar_fallback = True
+            self.last_lidar_valid = True
+            return [1.5, 1.5, 1.5, 1.5, 1.5]
+        dist_m, valid = self.tof_reader.read_range_m()
+        self.last_lidar_valid = bool(valid)
+        if not valid:
+            if not self._warned_lidar_fallback:
+                print(f"[Warning] Hardware VL53L0X ToF read failed ({self.tof_reader.last_error}); failing safe to 0.0m.")
+                self._warned_lidar_fallback = True
+            return [0.0, 0.0, 0.0, 0.0, 0.0]
+        return [dist_m] * 5
 
     def predict_action(self, obs: np.ndarray) -> np.ndarray:
         """Run policy model inference to produce normalized actions [-1, 1]."""
@@ -714,22 +782,24 @@ class BaseRPiInferenceEngine:
                 self.update_safety_state(base_ang_vel, proj_grav)
                 imu_stale = bool(getattr(self.imu_reader, "is_stale", False))
                 self.last_imu_stale = imu_stale
+                # Read foot contact and LiDAR perception hooks
+                foot_contact = self.read_foot_contact()
+                lidar_ranges = self.read_lidar_ranges()
+                lidar_valid = True if self.mock else bool(getattr(self.tof_reader, "is_valid", False))
+
                 base_commands = (
                     self.get_active_command()
                     if self._last_cmd_timestamp is not None
                     else commands
                 )
-                if imu_stale:
-                    self.imu_stale_steps += 1
+                if imu_stale or not lidar_valid:
+                    if imu_stale:
+                        self.imu_stale_steps += 1
+                        if self.imu_stale_steps == 1 or self.imu_stale_steps % max(1, int(self.freq)) == 0:
+                            print(f"[{self.engine_name} Warning] Stale IMU sample ({self.imu_reader.last_read_error}); zeroing velocity commands.")
                     loop_commands = [0.0, 0.0, 0.0]
-                    if self.imu_stale_steps == 1 or self.imu_stale_steps % max(1, int(self.freq)) == 0:
-                        print(f"[{self.engine_name} Warning] Stale IMU sample ({self.imu_reader.last_read_error}); zeroing velocity commands.")
                 else:
                     loop_commands = base_commands
-
-                # Read foot contact and LiDAR perception hooks (with fallback warning)
-                foot_contact = self.read_foot_contact()
-                lidar_ranges = self.read_lidar_ranges()
 
                 # Finite-difference joint velocity: (current_q - prev_q) / dt
                 current_q = self.last_targets.copy()

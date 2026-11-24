@@ -204,3 +204,79 @@ def test_limp_fall_without_standup_policy_disables_all_servo_pwm_outputs(monkeyp
     hw_pca.disable_all_channels()
     assert (0x40, 0xFA, [0, 0, 0, 0x10]) in writes
 
+
+def test_vl53l0x_i2c_reader_valid_and_fault_zeroes_hardware_loop_velocity(monkeypatch, tmp_path):
+    """VL53L0XReader decodes I2C millimeter readings, reports validity, and gates hardware loop vx=0 on fault."""
+    import hardware.rpi_infer_core as core
+
+    walk_model = ActorCritic(hidden_dim=16, squash_actions=True)
+    walk_model.model_name = "cyberduck_v2.xml"
+    walk_model.observation_schema = observation_schema(42, True, 0.02)
+    walk_onnx = export_onnx(walk_model, tmp_path / "walk_tof_gate.onnx")
+
+    fail_tof = {"flag": False}
+
+    class _FakeBus:
+        def __init__(self, _bus_num):
+            pass
+
+        def read_byte_data(self, addr, reg):
+            if addr == 0x29 and fail_tof["flag"]:
+                raise OSError("VL53L0X NACK")
+            if addr == 0x29 and reg == 0x13:
+                return 0x07  # RESULT_INTERRUPT_STATUS data ready
+            return 0x00
+
+        def write_byte_data(self, addr, _reg, _val):
+            if addr == 0x29 and fail_tof["flag"]:
+                raise OSError("VL53L0X write NACK")
+
+        def read_i2c_block_data(self, addr, reg, length):
+            if addr == 0x68 and length == 14:
+                buf = [0] * 14
+                buf[4], buf[5] = 0x40, 0x00  # az = +1.0g
+                return buf
+            if addr == 0x29:
+                if fail_tof["flag"]:
+                    raise OSError("VL53L0X block read NACK")
+                if reg == 0x1E and length == 2:
+                    return [0x01, 0xA4]  # 420 mm -> 0.42 m
+                if reg == 0x14 and length >= 12:
+                    buf = [0] * length
+                    buf[10], buf[11] = 0x01, 0xA4
+                    return buf
+            return [0] * length
+
+        def write_i2c_block_data(self, _addr, _reg, _data):
+            return None
+
+    monkeypatch.setattr(core, "smbus", type("_SM", (), {"SMBus": _FakeBus}))
+
+    reader = core.VL53L0XReader(bus_num=1, mock=False)
+    dist_m, ok = reader.read_range_m()
+    assert ok is True and reader.is_valid is True
+    assert dist_m == pytest.approx(0.42, abs=1e-4)
+
+    fail_tof["flag"] = True
+    dist_bad, ok_bad = reader.read_range_m()
+    assert ok_bad is False and reader.is_valid is False
+    assert dist_bad == pytest.approx(0.0)
+
+    # Verify BaseRPiInferenceEngine.run_loop forces commands=[0,0,0] when not mock and ToF invalid
+    fail_tof["flag"] = False
+    monkeypatch.setattr(core.MPU6050FilterReader, "_calibrate_gyro", lambda self, samples=100: None)
+    engine = BaseRPiInferenceEngine(mock=False, freq=50.0, model_path=str(walk_onnx))
+    fail_tof["flag"] = True
+    captured_cmds = []
+    orig_step = engine.step
+
+    def _capture_step(obs):
+        captured_cmds.append(obs[6:9].copy())
+        return orig_step(obs)
+
+    monkeypatch.setattr(engine, "step", _capture_step)
+    engine.run_loop(steps=1)
+    assert len(captured_cmds) == 1
+    np.testing.assert_allclose(captured_cmds[0], [0.0, 0.0, 0.0])
+
+

@@ -23,6 +23,7 @@ class NavPlannerConfig:
     max_vy: float = 0.06
     max_wz: float = 0.55
     safe_dist: float = 0.45
+    stop_dist: float = 0.18
     goal_tol: float = 0.15
     max_range: float = 2.0
 
@@ -57,6 +58,8 @@ class LidarWaypointPlanner:
 
         target_steer = goal_bearing
         fwd_clearance = self.cfg.max_range
+        all_blocked = False
+        best_idx = 2
 
         if lidar_ranges is not None:
             flat_lidar = np.asarray(lidar_ranges, dtype=np.float32).ravel()
@@ -65,6 +68,7 @@ class LidarWaypointPlanner:
                 ranges = np.where(np.isnan(flat_lidar[:5]) | (flat_lidar[:5] < 0.0), self.cfg.max_range, flat_lidar[:5])
                 ranges = np.clip(ranges, 0.0, self.cfg.max_range)
                 fwd_clearance = float(np.min(ranges[1:4]))  # center 3 rays (-15, 0, +15)
+                all_blocked = bool(np.all(ranges < self.cfg.safe_dist))
 
                 if np.any(ranges < self.cfg.safe_dist):
                     # Balance free space vs goal direction; penalize blocked rays (< safe_dist)
@@ -74,12 +78,23 @@ class LidarWaypointPlanner:
                     best_idx = int(np.argmax(scores))
                     target_steer = float(RAY_ANGLES[best_idx])
 
-        # Velocity scaling: slow down before tight gaps or when misaligned
+        # Velocity scaling: hard stop when blocked ahead or boxed in on all rays
+        if all_blocked:
+            vx = 0.0
+            vy = 0.0
+            escape_angle = float(RAY_ANGLES[best_idx])
+            turn_sign = 1.0 if abs(escape_angle) < 1e-6 else float(np.sign(escape_angle))
+            wz = float(np.clip(turn_sign * self.cfg.max_wz * 0.5, -self.cfg.max_wz, self.cfg.max_wz))
+            return np.array([vx, vy, wz], dtype=np.float32)
+
         clearance_scale = float(np.clip(fwd_clearance / max(self.cfg.safe_dist, 1e-4), 0.2, 1.0))
         heading_scale = max(0.0, float(np.cos(target_steer)))
         dist_scale = min(1.0, dist)
 
-        vx = float(np.clip(self.cfg.max_vx * clearance_scale * heading_scale * dist_scale, 0.0, self.cfg.max_vx))
+        if fwd_clearance <= self.cfg.stop_dist:
+            vx = 0.0
+        else:
+            vx = float(np.clip(self.cfg.max_vx * clearance_scale * heading_scale * dist_scale, 0.0, self.cfg.max_vx))
         vy = 0.0  # shortcut: biped forward-walking primary, lateral crab-walk disabled
         wz = float(np.clip(target_steer * 1.5, -self.cfg.max_wz, self.cfg.max_wz))
 
