@@ -81,12 +81,15 @@ def main():
     parser.add_argument('--output', type=Path, default=Path('artifacts/cad/verification.json'))
     args = parser.parse_args()
     variants = VARIANTS if args.variant == 'all' else (args.variant,)
+    from .dfam import inspect_printable_walls
+
     parts = validate_parts()
-    result = {'units': 'mm', 'source_receipt': source_receipt(), 'parts': parts,
+    dfam_report = inspect_printable_walls()
+    result = {'units': 'mm', 'source_receipt': source_receipt(), 'parts': parts, 'dfam': dfam_report,
               'assemblies': [validate_assembly(v, samples=args.samples,
                               sweep=not args.nominal_only, limit=args.limit) for v in variants]}
     result['passed'] = all(p['passed'] for p in parts) and all(a['passed'] for a in result['assemblies'])
-    result.update(assess_release(parts, result['assemblies']))
+    result.update(assess_release(parts, result['assemblies'], dfam_report=dfam_report))
     result['continuous_sweep_certified'] = False
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + '\n', encoding='utf-8')

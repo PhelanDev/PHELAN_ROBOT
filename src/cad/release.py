@@ -3,10 +3,13 @@
 from .params import VARIANTS
 
 
-def assess_release(parts, assemblies):
+def assess_release(parts, assemblies, dfam_report=None):
     variants_complete = (len(assemblies) == len(VARIANTS)
                          and {a['variant'] for a in assemblies} == set(VARIANTS))
     poses = [p for a in assemblies for p in a['poses']]
+    dfam_parts = dfam_report.get('parts') if isinstance(dfam_report, dict) else None
+    dfam_ok = (isinstance(dfam_parts, dict) and bool(dfam_parts)
+               and not any(r.get('observed_below_requirement', True) for r in dfam_parts.values()))
     gates = {
         'all_three_variants': variants_complete,
         'parts_brep': bool(parts) and all(p['passed'] for p in parts),
@@ -24,7 +27,7 @@ def assess_release(parts, assemblies):
         'verified_reference_sources': False,
         'complete_fastener_mating': False,
         'neck_service_loop_clearance': False,
-        'dfam_wall_thickness': False,
+        'dfam_wall_thickness': dfam_ok,
         'print_orientation_support': False,
         'cad_simulation_parity': False,
         'servo_torque_envelope': False,

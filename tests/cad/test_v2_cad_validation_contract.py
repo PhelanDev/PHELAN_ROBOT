@@ -96,3 +96,13 @@ def test_source_receipt_changes_with_inputs_but_ignores_generated_outputs(tmp_pa
     (source / 'params.py').write_text('length = 70\n', encoding='utf-8')
     assert before['sha256'] != source_receipt(tmp_path)['sha256']
     assert json.loads(json.dumps(before)) == before
+
+
+def test_assess_release_wires_live_dfam_report():
+    from cad.release import assess_release
+
+    assert assess_release([], [])['gates']['dfam_wall_thickness'] is False
+    clean_report = {'parts': {'trunk_front': {'observed_below_requirement': False}}}
+    thin_report = {'parts': {'trunk_front': {'observed_below_requirement': True}}}
+    assert assess_release([], [], dfam_report=clean_report)['gates']['dfam_wall_thickness'] is True
+    assert assess_release([], [], dfam_report=thin_report)['gates']['dfam_wall_thickness'] is False
