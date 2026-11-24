@@ -39,10 +39,13 @@ def test_readme_comprehensive_content():
     with open(readme_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # 1. Overview: MG996R hardware target and explicit V2 simulation mass
+    # 1. Overview: MG996R hardware target and CAD-synced V2 simulation parameters
     assert "MG996R" in content
-    assert "811" in content
-    assert "not a verified MG996R" in content
+    assert "1.262" in content
+    assert "0.202" in content
+    assert "head_tof" in content
+    assert "811" not in content
+    assert "not a verified MG996R" not in content
 
     # 2. Kinematic tree & link dimensions (2 DOF head, 6 DOF legs)
     assert "head_yaw" in content
@@ -62,7 +65,7 @@ def test_readme_comprehensive_content():
     assert "--num_envs" in content or "--envs" in content
 
     # 6. RL Sim-to-Real training guide with the V2 37x8 contract and ONNX export
-    assert "37" in content or "42" in content
+    assert "37" in content
     assert "8" in content   # 8-dim action
     assert "Sim-to-Real" in content or "sim-to-real" in content or "Sim-To-Real" in content
     assert "ONNX" in content

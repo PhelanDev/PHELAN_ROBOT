@@ -1,238 +1,144 @@
-# CyberDuck V2 Pro
+# CyberDuck V2
 
-An 8-DOF bipedal robot for simulation training and sim-to-real research. CyberDuck V2 is the sole robot model used by training, simulation, verification, and policy export. Raspberry Pi 5, Raspberry Pi Zero 2 W, and Dual ESP32-S3 are deployment profiles for the same robot and policy contract.
+Đây là dự án học tập của sinh viên làm về robot hai chân 8 bậc tự do, từ khâu dựng cơ khí CAD, mô phỏng động lực học bằng MuJoCo, huấn luyện học tăng cường Sim-to-Real cho đến thử nghiệm trên mạch nhúng. Kho mã nguồn dùng một mô hình vật lý duy nhất là `src/robot/cyberduck_v2.xml` làm gốc cho mọi công đoạn.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![Physics: MuJoCo 3.x](https://img.shields.io/badge/Physics-MuJoCo%203.x-black.svg)](https://mujoco.org/)
+Ba cấu hình phần cứng đích gồm Raspberry Pi 5, Raspberry Pi Zero 2 W và Dual ESP32-S3 chỉ tách nhau ở lớp đọc cảm biến, xuất xung servo và định dạng suy luận nằm trong `src/hardware/`. Cả ba nền tảng đều dùng chung một hình học robot và một hợp đồng điều khiển.
 
 <p align="center">
-  <img src="src/robot/media/cyberduck_v2_iso.png" width="48%" alt="CyberDuck V2 Isometric View" />
-  <img src="src/robot/media/cyberduck_v2_front.png" width="48%" alt="CyberDuck V2 Front View" />
+  <img src="src/robot/media/cyberduck_v2_iso.png" width="48%" alt="Góc nhìn đẳng trục CyberDuck V2" />
+  <img src="src/robot/media/cyberduck_v2_front.png" width="48%" alt="Góc nhìn chính diện CyberDuck V2" />
 </p>
 
----
+## Các cấu hình phần cứng dự kiến
 
-## 1. Robot And Deployment Profiles
+Phần mềm được tổ chức để cùng một mạng điều khiển có thể thử nghiệm trên nhiều bo mạch phổ thông dễ tiếp cận khi làm đồ án.
 
-`src/robot/cyberduck_v2.xml` is the canonical physical model. Platform-specific code under `src/hardware/` selects hardware I/O and inference format; it must not define a different robot geometry or training checkpoint.
-
-| Parameter | Raspberry Pi 5 | Dual ESP32-S3 | Raspberry Pi Zero 2 W |
+| Thông số | Raspberry Pi 5 | Dual ESP32-S3 | Raspberry Pi Zero 2 W |
 | :--- | :--- | :--- | :--- |
-| **Hardware path** | `src/hardware/rpi5/` | `src/hardware/dual_esp32s3/` | `src/hardware/pizero2w/` |
-| **Robot model** | CyberDuck V2 | CyberDuck V2 | CyberDuck V2 |
-| **Main compute** | Broadcom BCM2712 Quad A76 @ 2.4 GHz | 2× ESP32-S3 Dual LX7 @ 240 MHz | Broadcom BCM2710A1 Quad A53 @ 1.0 GHz |
-| **Memory** | 4 GB / 8 GB LPDDR4X | 2× 512 KB SRAM + 8 MB PSRAM | 512 MB LPDDR2 |
-| **Operating system** | Raspberry Pi OS 64-bit | FreeRTOS (bare metal) | Raspberry Pi OS Lite 64-bit |
-| **Servo interface** | PCA9685 I2C PWM driver | 8-channel hardware LEDC PWM | PCA9685 I2C PWM driver |
-| **Policy runtime** | Float32 ONNX Runtime (50 Hz) | Quantized INT8 ESP-NN C++ (50 Hz) | Float32 ONNX Runtime (50 Hz) |
-| **Inter-chip bus** | Internal system bus | High-speed UART2 @ 921,600 baud with CRC16 | Internal system bus |
-| **Primary focus** | Onboard vision & dense models | Low-power embedded execution | Lightweight headless Linux runner |
+| Thư mục mã nguồn | `src/hardware/rpi5/` | `src/hardware/dual_esp32s3/` | `src/hardware/pizero2w/` |
+| Bộ xử lý | Broadcom BCM2712 Quad A76 2.4 GHz | 2 x ESP32-S3 Dual LX7 240 MHz | Broadcom BCM2710A1 Quad A53 1.0 GHz |
+| Bộ nhớ | 4 GB hoặc 8 GB LPDDR4X | 2 x 512 KB SRAM và 8 MB PSRAM | 512 MB LPDDR2 |
+| Hệ điều hành | Raspberry Pi OS 64-bit | FreeRTOS bare metal | Raspberry Pi OS Lite 64-bit |
+| Điều khiển servo | Mạch PCA9685 qua I2C | 8 kênh LEDC PWM phần cứng | Mạch PCA9685 qua I2C |
+| Định dạng policy 50 Hz | Float32 ONNX Runtime | C++ lượng tử hóa INT8 ESP-NN | Float32 ONNX Runtime |
+| Bus liên mạch | Bus nội bộ hệ thống | UART2 921600 baud kèm CRC16 | Bus nội bộ hệ thống |
+| Hướng thử nghiệm | Xử lý ảnh trực tiếp trên mạch | Chạy mạng gọn nhẹ tiêu thụ điện thấp | Chạy không màn hình gọn nhẹ |
 
----
+## Cơ khí, động học và cảm biến
 
-## 2. CyberDuck V2 Pro: Athletic Redesign
+Robot dùng 8 động cơ servo MG996R, chia thành 2 bậc tự do ở cổ và 6 bậc tự do ở hai chân. Trong mô phỏng MuJoCo, mỗi khớp đặt ngưỡng mô-men `1.0 N.m`, tốc độ tối đa `6.0 rad/s`, hệ số PD `kp = 13.5 N.m/rad` và `kd = 0.9 N.m.s/rad`. Đây là các giới hạn giả định dùng để huấn luyện và cần đo kiểm lại trên lô servo mua thực tế trước khi lắp chạy ngoài đời.
 
-CyberDuck V2 Pro redesigns the bipedal chassis with high-definition bionic styling and improved mechanical balance:
+Phần khung gá MG996R được lập trình tham số bằng `build123d` trong `src/cad/`. Trên phần mềm CAD, bộ lắp ráp hiện tại đã vượt qua các bài kiểm tra tự động gồm 0 giao cắt trên cả 3 cấu hình bo mạch, quét góc hành trình khớp, kiểm tra đường đi dây, tổng khối lượng cấu hình đầy đủ dưới mức `1.5 kg` và kiểm tra bề dày thành DfAM trên 28 chi tiết in 3D tại 512 điểm lấy mẫu. Tuy nhiên, robot vẫn chưa được in 3D hoàn chỉnh, lắp ốc và cân đo thực tế. Các yếu tố như lắp ghép ốc vít thật, hướng đặt in, độ rơ cơ khí và mô-men làm việc thực của servo vẫn cần đối chiếu lại lúc gia công.
 
-- **17 Precision CAD Parts**: High-density STL meshes (>125,000 triangles total) comprising an aero helmet, cyan visor, metallic beak, filleted neck collar, chest plate, rear thruster pack, leg linkages, and 3-claw athletic feet.
-- **Universal Gimbal Neck**: Dual-DOF universal joint matching hip gimbal mechanics. Head is lowered by 8 mm into an aggressive athletic stance, with a filleted collar eliminating visual gaps.
-- **Athletic Soles**: The simulation support collider is $50\text{ mm} \times 26\text{ mm} \times 8\text{ mm}$, aligned to the tread footprint and the ground plane at $Z = 0.000\text{ m}$.
-- **CAD Exports**: Full 3D assembly in `src/robot/cad/cyberduck_v2_assembly.obj` with MTL PBR materials, accompanied by printable parts in `src/robot/cad/cyberduck_v2_stl_parts.zip`.
-- **Integrated Simulation Sensors**: Base IMU, dual foot contact, eight joint states, five forward range rays, and a head camera. The actor observation contract is 42 dimensions; hardware sensor availability must be verified separately before deployment.
+Mô hình `src/robot/cyberduck_v2.xml` cùng hai tệp dẫn xuất `src/robot/cyberduck_v2_robot.xml` và `src/robot/cyberduck_v2.urdf` đã đồng bộ hình học và quán tính từ bộ CAD MG996R với giả định tỷ lệ điền đầy nhựa in FDM 60%. Gốc thân nằm ở độ cao `0.202 m`, chiều dài đùi `60 mm`, cẳng chân `54 mm`, khối tiếp xúc đế mỗi chân kích thước `82 x 46 x 12 mm` chạm phẳng mặt sàn tại `Z = 0.000 m`. Tổng khối lượng trong mô phỏng là `1.262 kg`, được tính từ quán tính từng khâu CAD và chưa qua cân đo trên robot lắp thật.
 
----
+Hệ cảm biến trên mô hình gồm IMU ở thân, cảm biến tiếp xúc hai bàn chân, cảm biến góc và vận tốc cho 8 khớp, camera gắn đầu và 1 cảm biến đo khoảng cách laser `head_tof` đặt ở trán với tầm đo `2.0 m`. Trên phần cứng, phần mặt dự kiến dùng màn hình OLED SSD1309 độ phân giải `128x64` giao tiếp SPI để hiển thị biểu cảm mắt.
 
-## 3. Kinematics & Servo Specifications
-
-**Hardware target:** 8 metal-gear MG996R servos. The MJCF uses a nominal 1.0 N·m torque limit and 6.0 rad/s speed limit; these are simulation limits, not measured performance of the selected servos.
-
-**Mechanical status:** The current skeleton CAD generator still contains a micro-servo-sized concept. It is not a verified MG996R mounting design; the brackets and leg links need a mechanical redesign and fit check before fabrication. The visual armor CAD is separate from this actuator mounting issue.
-
-### Chibi Squat Geometry
-
-The canonical V2 MJCF currently specifies:
-
-- Thigh link length: 44 mm; shin link length: 36 mm.
-- Base link origin: $Z = 0.128\text{ m}$.
-- Model mass: 811 g, from the explicit link inertials in the canonical MJCF. This is a simulation-model value, not a measured assembled robot mass.
-- Servo model limits: $1.0\text{ N}\cdot\text{m}$ torque and $6.0\text{ rad/s}$; identify actual MG996R variants and validate usable torque, speed, and mounting fit before treating these as hardware measurements.
-
-### Joint Limits
-
-| Joint Name | Axis | Limits (rad) | Limits (deg) | Rated Torque | Max Speed |
+| Tên khớp | Trục | Giới hạn rad | Giới hạn độ | Mô-men mô phỏng | Tốc độ tối đa |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| `head_yaw` | $Z$ | $[-1.57, +1.57]$ | $\pm 90^\circ$ | 1.0 N·m | 6.0 rad/s |
-| `head_pitch` | $Y$ | $[-0.52, +0.78]$ | $-30^\circ \to +45^\circ$ | 1.0 N·m | 6.0 rad/s |
-| `left_hip_roll` | $X$ | $[-0.44, +0.44]$ | $\pm 25^\circ$ | 1.0 N·m | 6.0 rad/s |
-| `left_hip_pitch` | $Y$ | $[-0.87, +0.87]$ | $\pm 50^\circ$ | 1.0 N·m | 6.0 rad/s |
-| `left_knee_pitch` | $Y$ | $[0.00, +1.48]$ | $0^\circ \to +85^\circ$ | 1.0 N·m | 6.0 rad/s |
-| `right_hip_roll` | $X$ | $[-0.44, +0.44]$ | $\pm 25^\circ$ | 1.0 N·m | 6.0 rad/s |
-| `right_hip_pitch` | $Y$ | $[-0.87, +0.87]$ | $\pm 50^\circ$ | 1.0 N·m | 6.0 rad/s |
-| `right_knee_pitch` | $Y$ | $[0.00, +1.48]$ | $0^\circ \to +85^\circ$ | 1.0 N·m | 6.0 rad/s |
+| `head_yaw` | Z | -1.57 đến +1.57 | -90 đến +90 | 1.0 N.m | 6.0 rad/s |
+| `head_pitch` | Y | -0.52 đến +0.78 | -30 đến +45 | 1.0 N.m | 6.0 rad/s |
+| `left_hip_roll` | X | -0.44 đến +0.44 | -25 đến +25 | 1.0 N.m | 6.0 rad/s |
+| `left_hip_pitch` | Y | -0.87 đến +0.87 | -50 đến +50 | 1.0 N.m | 6.0 rad/s |
+| `left_knee_pitch` | Y | 0.00 đến +1.48 | 0 đến +85 | 1.0 N.m | 6.0 rad/s |
+| `right_hip_roll` | X | -0.44 đến +0.44 | -25 đến +25 | 1.0 N.m | 6.0 rad/s |
+| `right_hip_pitch` | Y | -0.87 đến +0.87 | -50 đến +50 | 1.0 N.m | 6.0 rad/s |
+| `right_knee_pitch` | Y | 0.00 đến +1.48 | 0 đến +85 | 1.0 N.m | 6.0 rad/s |
 
----
+## Hợp đồng điều khiển và các mô-đun phần mềm
 
-## 4. Behavioral Engine & AI Vision
+Vòng điều khiển chạy ở tần số `50 Hz`, ứng với chu kỳ điều khiển `0.02 s` trên bước tích phân vật lý `0.002 s`. Mạng Actor triển khai là MLP kiến trúc `37 -> 256 -> 256 -> 8` dùng hàm kích hoạt `ELU`. Vectơ quan sát `37` chiều gồm vận tốc góc thân 3 chiều, vectơ trọng lực chiếu 3 chiều, lệnh vận tốc `vx`, `vy`, `wz` 3 chiều, vị trí 8 khớp, vận tốc 8 khớp, hành động bước trước 8 chiều, tiếp xúc hai bàn chân 2 chiều và cặp pha nhịp bước `sin`, `cos` 2 chiều. Khi huấn luyện Asymmetric PPO, mạng Critic nhận thêm 11 chiều trạng thái đặc quyền thành đầu vào `48` chiều để ước lượng hàm giá trị ổn định hơn mà không đưa các tín hiệu khó đo vào mạng chạy trên mạch.
 
-### Kinematic Gaits and Reflexes
-
-Located in `src/sim/behaviors/advanced_gaits.py`:
-
-- **Waddling Gait**: Open-loop V2 preview with pelvic roll sway (0.08 rad) and double-frequency head nodding. These demos do not provide feedback balance for hardware or uneven terrain.
-- **Spot Turn**: 360-degree rotation in place ($v_x = 0, \omega_z \ne 0$) without forward translation.
-- **Head Dance**: Expressive Lissajous head gestures while maintaining a stable stance.
-- **Fall Recovery**: 3-phase finite state machine (`ORIENT_PRONE` $\to$ `CROUCH_TO_SIT` $\to$ `PUSH_TO_STAND`) with angular rate limits ($|\Delta q| \le 0.10\text{ rad/step}$) to protect servo gears.
-
-### AI Vision and Visual Servoing
-
-Located in `src/sim/perception/vision_tracker.py`:
-
-- **Color Blob Tracking**: High-throughput HSV segmentation for yellow targets and red objects running at 30+ FPS.
-- **Visual Servoing**: Closed-loop proportional tracking for `head_yaw` and `head_pitch` with an anti-jitter deadband (0.06) and slew rate limiting.
-- **Embedded C++ Loop**: Sub-sampled RGB565 scan routine in `src/hardware/dual_esp32s3/deployment/mcu1_vision_audio_s3/mcu1_main.ino` streaming 8-byte binary UART servo packets to MCU 2.
-
----
-
-## 5. Unified CLI: duck.py
-
-The root `duck.py` CLI provides a single command surface across development workflows:
-
-```bash
-# Check system status, checkpoints, and hardware targets
-python duck.py status
-
-# Verify the canonical V2 model and generated URDF
-python duck.py verify
-
-# Launch the canonical CyberDuck V2 simulation
-python duck.py view
-
-# Run waddling gait demonstration
-python duck.py view --gait waddle
-
-# Run spot turn demonstration
-python duck.py view --gait spot_turn
-
-# Enable visual servoing with onboard head camera
-python duck.py view --track --target-color yellow
-
-# Combine CyberDuck V2 with waddling gait and vision tracking
-python duck.py view --v2 --gait waddle --track
-
-# Train one V2 policy (target selects deployment profile only)
-python duck.py train --target rpi5 --envs 256 --iterations 500
-python duck.py train --target pizero2w --envs 256 --iterations 500
-python duck.py train --target esp32 --envs 256 --iterations 500
-
-# Export trained policy
-python duck.py export --target rpi5
-python duck.py export --target pizero2w
-python duck.py export --target esp32
-```
-
-All training profiles use the `cyberduck_v2_{ppo,latest,best}.pt` checkpoint namespace. A platform target selects deployment packaging, not model identity. `export --target all` packages the same V2 policy for each runtime.
-
-The pre-existing V2 checkpoints lack model identity and observation schema, so the active consumers reject them. Train a fresh policy into a new output path after the geometry is finalized. The shipped ESP headers also require regeneration from a valid V2 policy before firmware compilation.
-Resume yêu cầu cùng model, terrain, observation schema và kích thước tensor;
-Checkpoints without the V2 identity or observation schema are rejected; do not transfer weights from a different robot model.
-
-Checkpoint và ONNX mới mang `observation_schema` gồm clock, period, control timestep
-và quy tắc reset. Clock tăng sau mỗi action, cả khi command bằng zero.
-Runtime Pi rejects policies without the V2 schema. Do not infer clock rules from tensor size. JSON schema for the V2 policy clock at 50 Hz:
+Mỗi checkpoint và tệp ONNX mới đều lưu tên mô hình `cyberduck_v2.xml` cùng trường `observation_schema` phiên bản `2`. Đồng hồ pha chu kỳ `0.8 s` đặt về `0` lúc bắt đầu tập mới và tăng sau mỗi hành động ngay cả khi lệnh vận tốc bằng `0`. Các lớp nạp trên Raspberry Pi, trình xem 3D và công cụ xuất đều kiểm tra chặt metadata này, từ chối tệp cũ hoặc sai lược đồ và không suy đoán theo kích thước tensor.
 
 ```json
 {"version":2,"obs_dim":37,"embed_phase_clock":true,"period":0.8,"control_dt":0.02,"reset":"episode_steps_zero","advance":"after_action","zero_command":"advance"}
 ```
 
-Tests công khai nằm trong `tests/`. Trên clean checkout, cài các dependency Python
-và đặt `g++` trên PATH để chạy kiểm tra header/firmware C++:
+Bộ mô phỏng song song đặt tại `src/sim/env/run_parallel_sim.py` và cấu hình phần thưởng nằm ở `src/sim/env/env_config.py`. Chuỗi huấn luyện trong `src/tools/train/` gồm `pretrain_bc.py` cho học bắt chước có đối xứng và DAgger, `train_ppo.py` cho Asymmetric PPO kèm chiếu gương trái phải, trễ hành động, sụt áp pin, ngẫu nhiên hóa động lực học dạng Markov và nhiễu cảm biến riêng cho Actor, cùng `train_sac.py` thử nghiệm FastSAC dùng hàm `ELU`.
+
+Ngoài phần học tăng cường, kho mã nguồn còn tách riêng các mô-đun hành vi, nhận thức và bảo vệ an toàn. Trong đó, `src/sim/behaviors/advanced_gaits.py` cài các dáng đi hở vòng để kiểm tra khớp như đi lắc kiểu vịt, xoay tại chỗ, lắc đầu và máy trạng thái tự đứng dậy 3 pha không có ngoại lực trợ giúp. Với phần cảm biến trán, `src/sim/behaviors/active_head_scanner.py` xoay cổ cho `head_tof` quét ngang, lọc bỏ các tia cúi xuống sàn và dựng bộ nhớ 5 tia ảo có thời hạn `2.0 s` cấp cho bộ dẫn đường `LidarWaypointPlanner`. Phần bám vật thể theo màu HSV qua khớp cổ nằm ở `src/sim/perception/vision_tracker.py`, còn `src/hardware/oled_eyes.py` vẽ 5 biểu cảm mắt `128x64` xoay 180 độ cho `SSD1309Display`. Ở tầng phần cứng, `src/hardware/rpi_infer_core.py` cùng firmware trong `src/hardware/dual_esp32s3/deployment/` áp dụng cơ chế dừng an toàn khi lỗi I2C, IMU hoặc cảm biến ToF, ngắt xung PWM `PCA9685` lúc kích hoạt bảo vệ ngã `limp_fall`, giữ nguyên tư thế nếu mạng xuất `NaN` hoặc `Inf` và đưa lệnh vận tốc về `0` khi quá thời gian chờ.
+
+## Cài đặt và sử dụng với duck.py
+
+Dự án cần Python 3.10 trở lên để chạy mô phỏng và kiểm thử. Nếu muốn chạy các bài kiểm tra biên dịch C++ cho ESP32-S3, hãy cài sẵn `g++` trên `PATH`. Phần CAD tham số dùng `build123d` chạy trong môi trường ảo riêng `.venv_cad` để tránh xung đột thư viện với môi trường huấn luyện.
 
 ```bash
 python -m pip install pytest numpy mujoco torch onnx onnxruntime opencv-python
+```
+
+Các tác vụ chính từ xem trạng thái, kiểm tra vật lý, mở trình xem tương tác `src/tools/robot/interactive_viewer.py`, huấn luyện PPO cho tới xuất mô hình đều gọi qua `duck.py` tại thư mục gốc.
+
+```bash
+# Xem tổng quan kiến trúc mạng, checkpoint và tệp triển khai
+python duck.py status
+
+# Kiểm tra vật lý MJCF/URDF qua verify_model.py và chạy toàn bộ pytest
+python duck.py verify
+
+# Mở trình xem 3D tương tác với mô hình CyberDuck V2
+python duck.py view
+
+# Chạy thử dáng đi lắc, xoay tại chỗ hoặc bám màu qua camera đầu
+python duck.py view --gait waddle
+python duck.py view --gait spot_turn
+python duck.py view --track --target-color yellow
+
+# Chạy thử 1 vòng lặp huấn luyện để kiểm tra đường ống
+python duck.py train --dry-run
+
+# Huấn luyện PPO cho CyberDuck V2 kèm các tùy chọn Sim-to-Real
+python duck.py train --target rpi5 --envs 256 --iterations 500 --curriculum-smoothness --max-action-delay 2
+
+# Xuất policy đã huấn luyện sang ONNX cho Raspberry Pi và INT8 C header cho ESP32-S3
+python duck.py export --target rpi5
+python duck.py export --target pizero2w
+python duck.py export --target esp32
+python duck.py export --target all
+```
+
+Mọi cấu hình huấn luyện đều lưu chung theo quy ước tên `cyberduck_v2_ppo.pt`, `cyberduck_v2_latest.pt` và `cyberduck_v2_best.pt` trong `models/checkpoints/`. Các checkpoint cũ chưa có metadata schema đã được đưa vào `models/checkpoints/legacy_pre_schema/`. Tệp `models/cyberduck_v2_policy.onnx` cùng hai tệp header trong `src/hardware/dual_esp32s3/deployment/` hiện mới là bản xuất mẫu 37 chiều để kiểm thử đường ống triển khai, chưa qua huấn luyện đầy đủ trên GPU.
+
+Để chạy từng nhóm kiểm thử độc lập trên bản sao mới tải về:
+
+```bash
+python src/tools/robot/verify_model.py --steps 1000
 python -m pytest tests/robot tests/sim tests/hardware -q -p no:cacheprovider
 .\.venv_cad\Scripts\python.exe -m pytest tests/cad -q -p no:cacheprovider
-python duck.py verify
+.\.venv_cad\Scripts\python.exe -m pytest tests/cad --run-slow -q -p no:cacheprovider
 ```
 
-`verify` chạy kiểm tra vật lý cùng test suite, không yêu cầu train dài hoặc robot thật.
-Tests tạo checkpoint/ONNX/header trong thư mục tạm. Browser dashboard được giữ nguyên
-và đưa vào Git vì test CLI hiện kiểm contract của file này.
-
----
-
-## 6. Repository Layout
+## Cấu trúc thư mục
 
 ```text
-cyberduck-v2/
-├── duck.py                                   # Unified operations CLI
-├── README.md                                 # Technical documentation
-├── LICENSE                                   # MIT License
-├── .gitignore                                # Git ignore configuration (incl. artifacts/, docs/his.md)
-├── src/                                      # Source modules & canonical V2 robot assets
-│   ├── robot/                                # cyberduck_v2.xml, cyberduck_v2.urdf, robot_spec.py, meshes/, cad/, media/
-│   ├── cad/                                  # Parametric build123d CAD sources (.venv_cad)
-│   ├── sim/                                  # env/ (env_config.py, run_parallel_sim.py), behaviors/, perception/
-│   ├── hardware/                             # rpi_infer_core.py, rpi5/, dual_esp32s3/, pizero2w/
-│   └── tools/                                # train/, robot/ (verify_model.py, interactive_viewer.py, export_policy.py), cad/, viewer_3d.html
-├── tests/                                    # Domain-grouped pytest suite (robot/, sim/, hardware/, cad/)
-├── models/                                   # V2 policy and checkpoint artifacts (.onnx & checkpoints/*.pt)
-├── artifacts/                                # Gitignored generated CAD drafts, reviews & reports
-└── docs/                                     # Specs, migration guide, audit, plans/, archive/v1/ & his.md
+.
+├── duck.py                     # Giao diện dòng lệnh trung tâm
+├── README.md                   # Tài liệu tổng quan dự án
+├── LICENSE                     # Giấy phép MIT
+├── .gitignore                  # Bỏ qua artifacts/, docs/plans/, docs/his.md
+├── src/
+│   ├── robot/                  # cyberduck_v2.xml, cyberduck_v2_robot.xml, cyberduck_v2.urdf, robot_spec.py, meshes/, media/
+│   ├── cad/                    # Nguồn CAD tham số build123d chạy với .venv_cad
+│   ├── sim/                    # env/, behaviors/, perception/
+│   ├── hardware/               # rpi_infer_core.py, oled_eyes.py, rpi5/, pizero2w/, dual_esp32s3/
+│   └── tools/                  # train/, robot/, cad/, viewer_3d.html
+├── tests/                      # Bộ kiểm thử chia theo robot/, sim/, hardware/, cad/
+├── models/                     # Policy ONNX và thư mục checkpoints/
+├── artifacts/                  # Đầu ra sinh tự động từ CAD, không theo dõi trên Git
+└── docs/                       # Tài liệu đặc tả, báo cáo audit, hướng dẫn Isaac và kho lưu trữ V1
 ```
 
----
+## Chuyển mô hình sang Isaac Lab
 
-## Đưa V2 vào Isaac
+Quy trình đưa robot sang Isaac Sim hoặc Isaac Lab được ghi cụ thể trong [docs/isaac_v2_migration.md](docs/isaac_v2_migration.md). Kho mã nguồn đã tạo sẵn `src/robot/cyberduck_v2_robot.xml` và `src/robot/cyberduck_v2.urdf` đặt cạnh thư mục `src/robot/meshes/` để nhập thử articulation và kiểm tra quán tính. Máy phát triển hiện tại mới cài PyTorch bản CPU, chưa cài Isaac và chưa có tệp USD hay số liệu đối chiếu solver thực tế.
 
-Xem [hướng dẫn chuyển V2 sang Isaac](docs/isaac_v2_migration.md) để chọn asset nhập, giữ hợp đồng điều khiển và kiểm tra solver trước training. Đã có robot-only MJCF và URDF dẫn xuất; chưa có USD hoặc kết quả chạy Isaac. Môi trường Python hiện tại chưa cài Isaac và Torch đang là bản CPU.
+## Trạng thái hiện tại
 
-Mesh và articulation đủ để bắt đầu kiểm tra import. Khung gá MG996R, inertial đo từ robot thật và cảm biến deployment cần hoàn thiện trước khi coi mô hình đạt yêu cầu sim-to-real.
+- Đang dừng ở đâu: nhánh `main` tại commit mã nguồn `5317b516` và cập nhật bàn giao `763f4163`, đã hoàn tất đồng bộ CAD MG996R sang MJCF và URDF với khối lượng mô phỏng `1.262 kg`, cao độ thân `0.202 m` và hợp đồng điều khiển `37` quan sát actor, `48` quan sát critic ở `50 Hz`; chưa chạy huấn luyện dài hạn trên GPU và chưa gắn Git tag điểm neo trọng số V2.
+- Đã hoàn thành: sửa các lỗi thuật toán RL và cơ chế an toàn fail-closed trên Raspberry Pi và Dual ESP32-S3, vượt qua kiểm tra lắp ráp 0 giao cắt cùng bề dày thành DfAM cho 28 chi tiết in 3D trên CAD, thêm `ActiveHeadScanner` và `OLED SSD1309`, chuẩn hóa toàn bộ chuỗi mô phỏng, huấn luyện và xuất tệp sang cảm biến đơn trán `head_tof` và vectơ `37` chiều.
+- Kết quả kiểm thử: `628 passed` trên `tests/robot`, `tests/sim`, `tests/hardware`; `193 passed` trên `tests/cad --run-slow`; `python duck.py train --dry-run` và `python duck.py verify` đều thoát `0`.
+- Bước tiếp theo: huấn luyện đầy đủ trên máy có GPU theo chuỗi `pretrain_bc.py`, Asymmetric PPO và ELU FastSAC cho hợp đồng `37` chiều, sau đó in lắp phần cứng MG996R để cân đo, hiệu chỉnh và chốt checkpoint V2 chính thức.
 
-## 7. Trạng Thái Hiện Tại & Điểm Neo Khôi Phục
+## Giấy phép
 
-- **Đang dừng ở đâu (2026-11-18):** Đang triển khai CAD MG996R trên `wip/fix-project-audit` tại `6ac4c124`, chưa commit/tag mới; **chưa qua nghiệm thu Phase 1, chưa sẵn sàng chế tạo**. Canonical V2 vẫn 0.811 kg / 128–44–36 mm, contract 42 obs / 8 actions / 50 Hz.
-- **Đã làm:** Tạo `.venv_cad`, 77 part B-rep, 32 fit reference + 9 STEP nguồn có hash; sửa và kiểm tra riêng càng/vòng bi, chân phải, pin/nguồn và ba module điện tử; xuất 180 STEP/STL/3MF/BOM artifact nháp tại `duck_v2/cad/draft/` (nay chuyển về `artifacts/cad/draft/`); đã xóa ảnh `microduck_concept_render.jpg` khỏi kho lưu trữ V1 (`docs/archive/v1/`).
-- **Kiểm chứng:** 198 CAD tests đạt; `python duck.py verify` exit 0 với `579 passed, 7 skipped, 38 warnings` (7 module CAD chạy riêng). Assembly đầy đủ còn giao cắt và quá ngân sách mass; `release_ready=false`. Xem [báo cáo thực thi](docs/plans/261118-1705-cyberduck-v2-mg996r-3d-rebuild/execution.md).
-- **Bước tiếp theo:** Sửa giao cắt toàn cụm/cổ rỗng, mating ốc và 22 part có mẫu thành mỏng; giảm mass có cơ sở, nghiệm thu sweep + DfAM rồi mới đồng bộ CAD sang MJCF/URDF/mesh/biến thể và torque smoke; chưa train hoặc tạo neo weights V2 mới.
-
-### Rà soát thuật toán ngày 2026-11-19
-
-- **Đang dừng ở đâu:** Audit trên `wip/fix-project-audit`, HEAD `6ac4c124`, gồm working tree; chưa sửa thuật toán hoặc tạo checkpoint/tag V2 mới.
-- **Đã kiểm tra:** Xác nhận 13 vấn đề trong cảm biến/deployment, planner, recovery, action/observation, randomization, benchmark, vision, exporter, mass dây CAD và test collection; xem [báo cáo audit](docs/project_algorithm_audit_2026-11-19.md).
-- **Kiểm chứng:** Physics verifier đạt; full pytest dừng do import `build123d` trước `importorskip`; bỏ riêng module đó đạt `579 passed, 8 skipped, 38 warnings`. Kiểm live 78 artifact nháp không sai hash nhưng `source_current=false`; báo cáo CAD cần tái tạo từ snapshot nguồn thống nhất.
-- **Bước tiếp theo:** Ưu tiên lỗi cảm biến và dừng chuyển động, sửa phép đo benchmark/recovery cùng các hợp đồng điều khiển; chốt nguồn CAD và kiểm chứng lại trước huấn luyện dài hoặc triển khai robot thật.
-
-### Quy hoạch lại kiến trúc thư mục ngày 2026-11-19
-
-- **Đang dừng ở đâu:** Nhánh `wip/repo-reorg` trên cấu trúc mặt tiền sạch `src/{robot,cad,sim,hardware,tools}`, `tests/{robot,sim,hardware,cad}/`, `models/`, `docs/{specs,plans,archive/v1,his.md}`, `artifacts/` (gitignored); chưa tạo tag neo weights V2 mới.
-- **Đã làm:** Chuyển 5 trụ cột vào `src/`, dời `viewer_3d.html` sang `src/tools/viewer_3d.html`, dời `his.md`, `plans/`, `archive/v1/` vào `docs/`, xóa phần trùng trong `docs/superpowers/`, ẩn thư mục cache/AI trên Windows Explorer, sửa thứ tự `importorskip('build123d')`, cập nhật contract test `tests/robot/test_repo_layout_contract.py` và toàn bộ đường dẫn trong `duck.py`, `src/`, `tests/`, tài liệu.
-- **Kiểm chứng:** `pytest tests/robot tests/sim tests/hardware`, `.venv_cad` `pytest tests/cad`, `python duck.py verify` và `python src/tools/robot/verify_model.py --steps 1000` đều pass 100%, `git ls-files artifacts` rỗng.
-- **Bước tiếp theo:** Xử lý các hạng mục F01–F04 trong báo cáo audit `docs/project_algorithm_audit_2026-11-19.md`, hoàn thiện cơ khí MG996R trong `src/cad/` và nhập `src/robot/cyberduck_v2.urdf` sang Isaac Lab trước khi huấn luyện lại policy V2 mang metadata đầy đủ.
-
-### Nâng cấp thuật toán Hybrid RL 3-trong-1 ngày 2026-11-22
-
-- **Đang dừng ở đâu:** Trên nhánh `wip/repo-reorg` (HEAD `c17cc302`, kèm các sửa đổi đang giữ), chưa train dài hạn hoặc tạo neo weights V2 mới. Giữ nguyên contract triển khai `42 obs -> 256 (ELU) -> 256 (ELU) -> 8 actions` ở `50 Hz`.
-- **Đã thử và sửa:** Xây dựng [symmetry.py](src/sim/env/symmetry.py) cho phép chiếu gương trái-phải 42D/53D/8D; bổ sung bám quỹ đạo pha `gait_imitation` trong [env_config.py](src/sim/env/env_config.py); thêm hàng đợi trễ hành động `max_action_delay_steps` và làm mới domain randomization ở ranh giới đồng bộ trong [run_parallel_sim.py](src/sim/env/run_parallel_sim.py) (vá `F07`); sửa đo metric trước reset trong [evaluate_models_sim.py](src/tools/train/evaluate_models_sim.py) (vá `F08`); tích hợp Symmetry-BC + DAgger vào [pretrain_bc.py](src/tools/train/pretrain_bc.py), Symmetry-PPO vào [train_ppo.py](src/tools/train/train_ppo.py), và ELU FastSAC + N-step replay buffer + xuất INT8 ESP32-S3 vào [train_sac.py](src/tools/train/train_sac.py) và [export_policy.py](src/tools/robot/export_policy.py).
-- **Kiểm chứng:** `python -m pytest tests/robot tests/sim tests/hardware -q -p no:cacheprovider` đạt `595 passed, 40 warnings`; `.\.venv_cad\Scripts\python.exe -m pytest tests/cad -q -p no:cacheprovider` đạt `173 passed`; `python duck.py verify --skip-tests` thoát `0`.
-- **Bước tiếp theo:** Xử lý F01–F04 phần cứng/planner, chốt cơ khí MG996R rồi chạy train phối hợp Symmetry-BC warmup -> Asymmetric PPO (kèm `--max-action-delay`) -> ELU FastSAC / DAgger để tạo checkpoint và neo V2 chính thức.
-
-### Tích hợp kỹ thuật Sim2Real & an toàn phần cứng từ Microduck ngày 2026-11-22
-
-- **Đang dừng ở đâu:** Trên nhánh `wip/repo-reorg` (`c17cc302` kèm working tree), đã hoàn tất cả hai đợt nâng cấp thuật toán Hybrid RL và Sim2Real/Safety từ `pollen-robotics/microduck`, chưa chạy đợt train dài hoặc gắn tag neo weights V2 mới.
-- **Đã làm:** Thêm dự báo ngã giải tích `FallPredictor` + hạ độ cứng `Limp-Fall` trong [self_righting.py](src/sim/behaviors/self_righting.py) và [run_parallel_sim.py](src/sim/env/run_parallel_sim.py); bổ sung bucket lấy mẫu lệnh đứng yên/xoay tại chỗ `zero_cmd_prob`/`turn_in_place_prob`, chuyển tư thế mượt `compute_slewed_posture_target`, `multiplicative_posture_reward`, phạt lệch đầu EMA 1 giây (`head_ema_penalty`), phạt vượt ngưỡng hành động (`action_over_limit_penalty`), sụt áp pin động, nhiễu cảm biến chỉ áp dụng lên Actor (`encoder_bias_rad`, `imu_mount_max_rad`, `delay_joint_vel_obs`) kèm làm sạch NaN cho Critic/GAE trong [env_config.py](src/sim/env/env_config.py), [run_parallel_sim.py](src/sim/env/run_parallel_sim.py), [train_ppo.py](src/tools/train/train_ppo.py); bổ sung `imu_ready`, giữ tư thế khi gặp `NaN`/`Inf`, Deadman zero twist và hot-swap `standup` ONNX trong [rpi_infer_core.py](src/hardware/rpi_infer_core.py).
-- **Kiểm chứng:** `python -m pytest tests/robot tests/sim tests/hardware -q -p no:cacheprovider` đạt `607 passed, 44 warnings` (gồm `tests/sim/test_microduck_sim2real_upgrades.py` và `tests/hardware/test_microduck_safety_runtime.py`); `python duck.py verify --skip-tests` thoát `0`.
-- **Bước tiếp theo:** Xử lý F01–F04 phần cứng còn lại, hoàn thiện cơ khí MG996R trong `src/cad/` và chạy train PPO với `--zero-cmd-prob 0.15 --turn-in-place-prob 0.15 --curriculum-smoothness --max-action-delay 2` trước khi xuất policy và tạo neo V2.
-
-### Khắc phục toàn hệ thống, nghiệm thu CAD MG996R và chuẩn hóa hợp đồng 37D ngày 2026-11-24
-
-- **Đang dừng ở đâu:** Nhánh `main` sau khi gộp `wip/v2-full-remediation` tại `5317b516`, hoàn tất toàn bộ 4 giai đoạn khắc phục hệ thống; `src/robot/cyberduck_v2.xml` đồng bộ từ CAD MG996R với khối lượng `1.262072 kg`, cao cơ sở `0.202 m`, đùi `0.060 m`, cẳng `0.054 m`, hợp đồng `37` quan sát actor `schema version 2` và `48` quan sát critic ở `50 Hz`, kèm `models/cyberduck_v2_policy.onnx` và bộ header INT8 ESP32-S3 mẫu `37D`; chưa gắn tag neo `.pt` V2 chính thức.
-- **Đã thử và sửa:** Khắc phục các lỗi audit thuật toán và an toàn phần cứng ở Phase 1 và Phase 2 gồm Markov DR, chuẩn hóa critic `48D` và DAgger RMS, fail-closed I2C/PCA9685/ToF/IMU, tự đứng dậy không trợ lực; nghiệm thu lắp ráp và bề dày thành DfAM cho 28 chi tiết in 3D ở Phase 3 đạt `0` giao cắt, `0` chi tiết thành mỏng ở `512` mẫu và `release_ready=True`; bổ sung `ActiveHeadScanner`, `EyeRenderer`, `SSD1309Display` và chuyển đồng bộ toàn chuỗi sim, train, export, RPi và Dual ESP32-S3 sang hợp đồng `37D` cùng cảm biến trán `head_tof`.
-- **Kiểm chứng:** `python -m pytest tests/robot tests/sim tests/hardware -q -p no:cacheprovider` đạt `628 passed`, `.\.venv_cad\Scripts\python.exe -m pytest tests/cad --run-slow -q -p no:cacheprovider` đạt `193 passed`, `python duck.py train --dry-run` và `python duck.py verify` đều thoát `0`.
-- **Bước tiếp theo:** Chạy huấn luyện dài hạn trên GPU theo chuỗi `pretrain_bc` sang Asymmetric PPO `37D`/`48D` với `--curriculum-smoothness --max-action-delay 2` rồi tinh chỉnh ELU FastSAC, đánh giá trên mô phỏng và robot thật để chốt checkpoint `.pt` V2 và gắn Git tag điểm neo khôi phục chính thức.
-
----
-
-## 8. License
-
-Distributed under the [MIT License](LICENSE). Copyright (c) 2026 PhelanDev.
+Dự án phát hành theo [MIT License](LICENSE). Bản quyền 2026 PhelanDev.
