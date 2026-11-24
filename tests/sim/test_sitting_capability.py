@@ -37,7 +37,7 @@ def test_locomotion_mode_enum_and_constants():
     assert LocomotionMode.SIT == 1
     assert len(LocomotionMode) >= 2
 
-    assert TARGET_SIT_HEIGHT == 0.075
+    assert TARGET_SIT_HEIGHT == 0.120
 
     # SIT_NOMINAL_QPOS: 8-DOF target joint angles (float32)
     assert isinstance(SIT_NOMINAL_QPOS, np.ndarray)
@@ -207,10 +207,10 @@ def test_parallel_sim_runner_adaptive_fall_detection():
     assert sim.cmd_modes[0] == 0
     assert sim.cmd_modes[1] == 1
 
-    # Place both robots at height z = 0.075m (upright, nominal leg joint angles)
+    # Place both robots at height z = 0.120m (upright, nominal leg joint angles)
     for env_idx in range(2):
         d = sim.datas[env_idx]
-        d.qpos[0:3] = [0.0, 0.0, 0.075]  # z = 0.075m
+        d.qpos[0:3] = [0.0, 0.0, 0.120]  # z = 0.120m
         d.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]  # upright quaternion
         d.qpos[7:15] = SIT_NOMINAL_QPOS
         d.qvel[:] = 0.0
@@ -222,22 +222,22 @@ def test_parallel_sim_runner_adaptive_fall_detection():
     actions = np.zeros((2, 8), dtype=np.float32)
     next_obs, rewards, dones, infos = sim.step(actions)
 
-    # Env 0 (WALK) at z=0.075m < 0.08m: MUST FALL
+    # Env 0 (WALK) at z=0.120m < 0.125m: MUST FALL
     assert dones[0] == True
     assert infos[0]["fallen"] == True
 
-    # Env 1 (SIT) at z=0.075m >= 0.05m: MUST NOT FALL
+    # Env 1 (SIT) at z=0.120m >= 0.080m: MUST NOT FALL
     assert dones[1] == False
     assert infos[1]["fallen"] == False
 
 
 def test_parallel_sim_runner_sit_mode_very_low_fall():
-    """Verify that even in SIT mode, dropping below 0.05m triggers a fall."""
+    """Verify that even in SIT mode, dropping below 0.080m triggers a fall."""
     sim = ParallelSimRunner(num_envs=1, decimation=1)
     sim.set_cmd_modes(LocomotionMode.SIT)
 
     d = sim.datas[0]
-    d.qpos[0:3] = [0.0, 0.0, 0.040]  # z = 0.04m < 0.05m
+    d.qpos[0:3] = [0.0, 0.0, 0.065]  # z = 0.065m < 0.080m
     d.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
     d.qpos[7:15] = SIT_NOMINAL_QPOS
     d.qvel[:] = 0.0

@@ -84,36 +84,36 @@
     <geom name="floor_exit" type="box" size="0.40 0.40 0.005" pos="2.66 0.0 0.005" rgba="0.3 0.5 0.6 1.0" friction="1.5 0.01 0.0005" contype="1" conaffinity="1" group="3"/>
 
     <!-- Main Torso Body -->
-    <body name="trunk_base" pos="0 0 0.128" childclass="cyberduck_v2">
+    <body name="trunk_base" pos="0 0 0.202" childclass="cyberduck_v2">
       <freejoint name="trunk_freejoint" />
-      <inertial pos="0.002 0.000 -0.012" mass="0.36" diaginertia="0.00038 0.00048 0.00032" />
+      <inertial pos="-0.018972 -0.000844 -0.015274" mass="0.578958" diaginertia="0.00092568 0.00129935 0.00139401" />
       <site name="imu" pos="0.016 0.012 0.006" size="0.003" rgba="1.0 0.4 0.0 0.95" group="2" />
       <site name="imu_site" pos="0.016 0.012 0.006" size="0.003" rgba="1.0 0.4 0.0 0.95" group="2" />
 
       <!-- Chest Armor, Reactor Core, Thruster Backpack -->
       <geom type="mesh" mesh="cyber_chest" material="mecha_white" class="visual" />
-      <geom type="box" pos="0.005 0 0.001" size="0.033 0.046 0.038" class="collision" />
+      <geom type="box" pos="0.008 0 -0.002" size="0.036 0.048 0.040" class="collision" />
       <geom type="mesh" mesh="cyber_reactor" material="mecha_cyan_glow" class="visual" />
       <geom type="mesh" mesh="cyber_thruster_pack" material="mecha_thruster" class="visual" />
-      <geom type="box" pos="-0.032 0 0.008" size="0.017 0.026 0.034" class="collision" />
+      <geom type="box" pos="-0.060 0 -0.010" size="0.022 0.048 0.042" class="collision" />
 
       <!-- Neck & Head Assembly -->
-      <body name="neck" pos="0.012 0 0.038">
+      <body name="neck" pos="0.006 0 0.028">
         <joint name="head_yaw" type="hinge" axis="0 0 1" range="-1.57 1.57" />
-        <inertial pos="0 0 0.008" mass="0.030" diaginertia="0.00001 0.00001 0.00001" />
+        <inertial pos="0.007756 0.000310 0.037734" mass="0.083008" diaginertia="0.00002947 0.00003277 0.00002528" />
         <geom type="mesh" mesh="cyber_neck" material="mecha_carbon" class="visual" />
-        <geom type="capsule" fromto="0 0 0.004 0 0 0.020" size="0.012" class="collision" />
+        <geom type="capsule" fromto="0 0 0.008 0 0 0.038" size="0.014" class="collision" />
 
-        <body name="head" pos="0 0 0.016">
+        <body name="head" pos="0 0 0.044">
           <joint name="head_pitch" type="hinge" axis="0 1 0" range="-0.52 0.78" />
-          <inertial pos="0.015 0 0.018" mass="0.065" diaginertia="0.00007 0.00007 0.00006" />
+          <inertial pos="0.025233 0.000626 0.032953" mass="0.078636" diaginertia="0.00010172 0.00009077 0.00010261" />
 
           <!-- Aero Helm, Glowing Cyber Visor, Metallic Gold Beak -->
           <geom type="mesh" mesh="cyber_helm" material="mecha_white" class="visual" />
-          <geom type="box" pos="0.002 0 0.017" size="0.028 0.028 0.022" class="collision" />
+          <geom type="box" pos="0.015 0 0.026" size="0.038 0.042 0.026" class="collision" />
           <geom type="mesh" mesh="cyber_visor" material="mecha_cyan_glow" class="visual" />
           <geom type="mesh" mesh="cyber_beak" material="mecha_gold" class="visual" />
-          <geom type="box" pos="0.037 0 0.003" size="0.020 0.016 0.006" class="collision" />
+          <geom type="box" pos="0.048 0 0.012" size="0.012 0.032 0.010" class="collision" />
           <camera name="head_camera" pos="0.040 0 0.022" fovy="60" xyaxes="0 -1 0 0 0 1" />
           <site name="camera_site" pos="0.026 0 0.024" size="0.002" rgba="0.0 0.95 1.0 0.95" group="2" />
 
@@ -127,30 +127,30 @@
       </body>
 
       <!-- Left Biped Leg -->
-      <body name="left_hip" pos="0.005 0.036 -0.025">
+      <body name="left_hip" pos="0 0.042 -0.040">
         <joint name="left_hip_roll" type="hinge" axis="1 0 0" range="-0.44 0.44" />
-        <inertial pos="0 0.008 -0.010" mass="0.05" diaginertia="0.00002 0.00002 0.00002" />
+        <inertial pos="-0.011000 0.020573 -0.029591" mass="0.104308" diaginertia="0.00005853 0.00008498 0.00007505" />
         <geom type="mesh" mesh="cyber_hip_left" material="mecha_carbon" class="visual" />
-        <geom type="box" pos="0 0.004 -0.008" size="0.010 0.012 0.015" class="collision" />
+        <geom type="box" pos="-0.008 0.012 -0.018" size="0.020 0.016 0.022" class="collision" />
 
-        <body name="left_thigh" pos="0 0.012 -0.015">
+        <body name="left_thigh" pos="0 0.023 -0.038">
           <joint name="left_hip_pitch" type="hinge" axis="0 1 0" range="-0.87 0.87" />
-          <inertial pos="0.002 0 -0.020" mass="0.05" diaginertia="0.00003 0.00003 0.00002" />
+          <inertial pos="0.005456 0.002467 -0.042766" mass="0.107027" diaginertia="0.00009466 0.00006675 0.00005499" />
           <geom type="mesh" mesh="cyber_thigh_left" material="mecha_white" class="visual" />
-          <geom type="capsule" fromto="0.003 0 0.006 0.003 0 -0.028" size="0.011" class="collision" />
+          <geom type="capsule" fromto="0.003 0 0.006 0.003 0 -0.052" size="0.015" class="collision" />
 
-          <body name="left_shin" pos="0 0 -0.044">
+          <body name="left_shin" pos="0 0 -0.060">
             <joint name="left_knee_pitch" type="hinge" axis="0 1 0" range="0.0 1.48" />
-            <inertial pos="0 0 -0.018" mass="0.04" diaginertia="0.00002 0.00002 0.00001" />
+            <inertial pos="0.000738 0.001436 -0.019669" mass="0.027586" diaginertia="0.00002715 0.00001256 0.00001699" />
             <geom type="mesh" mesh="cyber_shin_left" material="mecha_carbon" class="visual" />
-            <geom type="capsule" fromto="0.006 0 0.000 0.006 0 -0.030" size="0.010" class="collision" />
+            <geom type="capsule" fromto="0.002 0 0.000 0.002 0 -0.048" size="0.013" class="collision" />
 
-            <body name="left_foot" pos="0.004 0 -0.036">
-              <inertial pos="0.005 0 0.006" mass="0.038" diaginertia="0.00002 0.00002 0.00002" />
-              <site name="left_foot_touch_site" pos="0.005 0 -0.004" size="0.027 0.019 0.005" type="box" rgba="0.0 0.9 1.0 0.45" group="2" />
+            <body name="left_foot" pos="0.004 0 -0.054">
+              <inertial pos="0.003982 0.000000 -0.005056" mass="0.021814" diaginertia="0.00000345 0.00001101 0.00001378" />
+              <site name="left_foot_touch_site" pos="0.004 0 -0.004" size="0.043 0.025 0.007" type="box" rgba="0.0 0.9 1.0 0.45" group="2" />
               <!-- 3-Claw Tactical Gold Foot & Rubber Tread Sole -->
               <geom type="mesh" mesh="cyber_foot_left" material="mecha_gold" class="visual" />
-              <geom name="left_sole_geom" type="box" size="0.025 0.013 0.004" pos="0.005 0 -0.004" friction="1.5 0.01 0.0005" solref="0.005 1" solimp="0.9 0.95 0.001 0.5 2" class="collision" />
+              <geom name="left_sole_geom" type="box" size="0.041 0.023 0.006" pos="0.004 0 -0.004" friction="1.5 0.01 0.0005" solref="0.005 1" solimp="0.9 0.95 0.001 0.5 2" class="collision" />
               <geom type="mesh" mesh="cyber_sole_left" material="mecha_sole_rubber" class="visual" />
             </body>
           </body>
@@ -158,30 +158,30 @@
       </body>
 
       <!-- Right Biped Leg -->
-      <body name="right_hip" pos="0.005 -0.036 -0.025">
+      <body name="right_hip" pos="0 -0.042 -0.040">
         <joint name="right_hip_roll" type="hinge" axis="1 0 0" range="-0.44 0.44" />
-        <inertial pos="0 -0.008 -0.010" mass="0.05" diaginertia="0.00002 0.00002 0.00002" />
+        <inertial pos="-0.011000 -0.020573 -0.029591" mass="0.104308" diaginertia="0.00005853 0.00008498 0.00007505" />
         <geom type="mesh" mesh="cyber_hip_right" material="mecha_carbon" class="visual" />
-        <geom type="box" pos="0 -0.004 -0.008" size="0.010 0.012 0.015" class="collision" />
+        <geom type="box" pos="-0.008 -0.012 -0.018" size="0.020 0.016 0.022" class="collision" />
 
-        <body name="right_thigh" pos="0 -0.012 -0.015">
+        <body name="right_thigh" pos="0 -0.023 -0.038">
           <joint name="right_hip_pitch" type="hinge" axis="0 1 0" range="-0.87 0.87" />
-          <inertial pos="0.002 0 -0.020" mass="0.05" diaginertia="0.00003 0.00003 0.00002" />
+          <inertial pos="0.005456 -0.002467 -0.042766" mass="0.107027" diaginertia="0.00009466 0.00006675 0.00005499" />
           <geom type="mesh" mesh="cyber_thigh_right" material="mecha_white" class="visual" />
-          <geom type="capsule" fromto="0.003 0 0.006 0.003 0 -0.028" size="0.011" class="collision" />
+          <geom type="capsule" fromto="0.003 0 0.006 0.003 0 -0.052" size="0.015" class="collision" />
 
-          <body name="right_shin" pos="0 0 -0.044">
+          <body name="right_shin" pos="0 0 -0.060">
             <joint name="right_knee_pitch" type="hinge" axis="0 1 0" range="0.0 1.48" />
-            <inertial pos="0 0 -0.018" mass="0.04" diaginertia="0.00002 0.00002 0.00001" />
+            <inertial pos="0.000738 -0.001436 -0.019669" mass="0.027586" diaginertia="0.00002715 0.00001256 0.00001699" />
             <geom type="mesh" mesh="cyber_shin_right" material="mecha_carbon" class="visual" />
-            <geom type="capsule" fromto="0.006 0 0.000 0.006 0 -0.030" size="0.010" class="collision" />
+            <geom type="capsule" fromto="0.002 0 0.000 0.002 0 -0.048" size="0.013" class="collision" />
 
-            <body name="right_foot" pos="0.004 0 -0.036">
-              <inertial pos="0.005 0 0.006" mass="0.038" diaginertia="0.00002 0.00002 0.00002" />
-              <site name="right_foot_touch_site" pos="0.005 0 -0.004" size="0.027 0.019 0.005" type="box" rgba="0.0 0.9 1.0 0.45" group="2" />
+            <body name="right_foot" pos="0.004 0 -0.054">
+              <inertial pos="0.003982 0.000000 -0.005056" mass="0.021814" diaginertia="0.00000345 0.00001101 0.00001378" />
+              <site name="right_foot_touch_site" pos="0.004 0 -0.004" size="0.043 0.025 0.007" type="box" rgba="0.0 0.9 1.0 0.45" group="2" />
               <!-- 3-Claw Tactical Gold Foot & Rubber Tread Sole -->
               <geom type="mesh" mesh="cyber_foot_right" material="mecha_gold" class="visual" />
-              <geom name="right_sole_geom" type="box" size="0.025 0.013 0.004" pos="0.005 0 -0.004" friction="1.5 0.01 0.0005" solref="0.005 1" solimp="0.9 0.95 0.001 0.5 2" class="collision" />
+              <geom name="right_sole_geom" type="box" size="0.041 0.023 0.006" pos="0.004 0 -0.004" friction="1.5 0.01 0.0005" solref="0.005 1" solimp="0.9 0.95 0.001 0.5 2" class="collision" />
               <geom type="mesh" mesh="cyber_sole_right" material="mecha_sole_rubber" class="visual" />
             </body>
           </body>

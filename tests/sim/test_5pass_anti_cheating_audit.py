@@ -761,16 +761,16 @@ def test_audit_14_anti_backward_and_forward_gait_lock():
     data.qpos[hip_qadr] = -0.35
     data.qpos[knee_qadr] = 0.0
     mujoco.mj_forward(model, data)
-    # V2: hip origin x=5mm, foot offset x=4mm, thigh=44mm, shin=36mm.
-    expected_hip_x = 0.005 + 0.004 * np.cos(-0.35) - (0.044 + 0.036) * np.sin(-0.35)
+    # V2 CAD-synced: hip origin x=0mm, foot offset x=4mm, thigh=60mm, shin=54mm.
+    expected_hip_x = 0.004 * np.cos(-0.35) - (0.060 + 0.054) * np.sin(-0.35)
     hip_x = data.xpos[foot_id][0] - data.xpos[base_id][0]
     assert hip_x == pytest.approx(expected_hip_x, abs=1e-9)
-    assert hip_x > 0.009, "Hip pitch < 0 must advance the foot from its neutral x=9mm"
+    assert hip_x > 0.004, "Hip pitch < 0 must advance the foot from its neutral x=4mm"
 
     data.qpos[hip_qadr] = 0.0
     data.qpos[knee_qadr] = 0.50
     mujoco.mj_forward(model, data)
-    expected_knee_x = 0.005 + 0.004 * np.cos(0.50) - 0.036 * np.sin(0.50)
+    expected_knee_x = 0.004 * np.cos(0.50) - 0.054 * np.sin(0.50)
     knee_x = data.xpos[foot_id][0] - data.xpos[base_id][0]
     assert knee_x == pytest.approx(expected_knee_x, abs=1e-9)
     assert knee_x < 0.0, "Knee pitch > 0 must fold the V2 foot behind the base (-X)"

@@ -157,9 +157,9 @@ def assert_urdf_structure_and_joint_limits(
     base_inertial_z_max: Optional[float] = None,
 ) -> None:
     if knee_origin is None:
-        knee_origin = [0.0, 0.0, -0.044]
+        knee_origin = [0.0, 0.0, -0.060]
     if foot_origin is None:
-        foot_origin = [0.004, 0.0, -0.036]
+        foot_origin = [0.004, 0.0, -0.054]
 
     assert os.path.exists(urdf_path), f"URDF model not found: {urdf_path}"
     tree = ET.parse(urdf_path)

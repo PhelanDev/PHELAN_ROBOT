@@ -17,6 +17,7 @@ from robot.robot_spec import (  # noqa: E402
     NUM_OBSERVATIONS,
     SOLE_HALF_SIZE_M,
     TOTAL_MASS_KG,
+    TOUCH_SITE_HALF_SIZE_M,
 )
 
 MJCF_PATH = str(CANONICAL_V2_MJCF)
@@ -335,7 +336,7 @@ def test_cyberduck_v2_joint_frictionloss_damping_and_sole_calibration():
 
     # Sole and touch_site dimensions
     expected_sole_size = np.array(SOLE_HALF_SIZE_M)
-    expected_site_size = np.array([0.027, 0.019, 0.005])
+    expected_site_size = np.array(TOUCH_SITE_HALF_SIZE_M)
 
     for sname in ("left_sole_geom", "right_sole_geom"):
         gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, sname)

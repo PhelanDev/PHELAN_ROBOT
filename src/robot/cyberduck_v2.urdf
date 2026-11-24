@@ -8,7 +8,7 @@
   <joint name="trunk_freejoint" type="floating">
     <parent link="world" />
     <child link="trunk_base" />
-    <origin xyz="0 0 0.128" rpy="0 0 0" />
+    <origin xyz="0 0 0.202" rpy="0 0 0" />
   </joint>
   <material name="mecha_white">
     <color rgba="0.34 0.36 0.40 1.0" />
@@ -30,9 +30,9 @@
   </material>
   <link name="trunk_base">
     <inertial>
-      <origin xyz="0.002 0 -0.012" rpy="0 0 0" />
-      <mass value="0.36" />
-      <inertia ixx="0.00038" iyy="0.00048" izz="0.00032" ixy="0" ixz="0" iyz="0" />
+      <origin xyz="-0.018972 -0.000844 -0.015274" rpy="0 0 0" />
+      <mass value="0.578958" />
+      <inertia ixx="0.00092568" iyy="0.00129935" izz="0.00139401" ixy="0" ixz="0" iyz="0" />
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -42,9 +42,9 @@
       <material name="mecha_white" />
     </visual>
     <collision>
-      <origin xyz="0.005 0 0.001" rpy="0 0 0" />
+      <origin xyz="0.008 0 -0.002" rpy="0 0 0" />
       <geometry>
-        <box size="0.066 0.092 0.076" />
+        <box size="0.072 0.096 0.08" />
       </geometry>
     </collision>
     <visual>
@@ -62,17 +62,17 @@
       <material name="mecha_thruster" />
     </visual>
     <collision>
-      <origin xyz="-0.032 0 0.008" rpy="0 0 0" />
+      <origin xyz="-0.06 0 -0.01" rpy="0 0 0" />
       <geometry>
-        <box size="0.034 0.052 0.068" />
+        <box size="0.044 0.096 0.084" />
       </geometry>
     </collision>
   </link>
   <link name="neck">
     <inertial>
-      <origin xyz="0 0 0.008" rpy="0 0 0" />
-      <mass value="0.030" />
-      <inertia ixx="1e-05" iyy="1e-05" izz="1e-05" ixy="0" ixz="0" iyz="0" />
+      <origin xyz="0.007756 0.00031 0.037734" rpy="0 0 0" />
+      <mass value="0.083008" />
+      <inertia ixx="2.947e-05" iyy="3.277e-05" izz="2.528e-05" ixy="0" ixz="0" iyz="0" />
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -82,37 +82,37 @@
       <material name="mecha_carbon" />
     </visual>
     <collision>
-      <origin xyz="0 0 0.012" rpy="0 -0 0" />
+      <origin xyz="0 0 0.023" rpy="0 -0 0" />
       <geometry>
-        <cylinder radius="0.012" length="0.016" />
+        <cylinder radius="0.014" length="0.03" />
       </geometry>
     </collision>
     <collision>
-      <origin xyz="0 0 0.004" rpy="0 0 0" />
+      <origin xyz="0 0 0.008" rpy="0 0 0" />
       <geometry>
-        <sphere radius="0.012" />
+        <sphere radius="0.014" />
       </geometry>
     </collision>
     <collision>
-      <origin xyz="0 0 0.02" rpy="0 0 0" />
+      <origin xyz="0 0 0.038" rpy="0 0 0" />
       <geometry>
-        <sphere radius="0.012" />
+        <sphere radius="0.014" />
       </geometry>
     </collision>
   </link>
   <joint name="head_yaw" type="revolute">
     <parent link="trunk_base" />
     <child link="neck" />
-    <origin xyz="0.012 0 0.038" rpy="0 0 0" />
+    <origin xyz="0.006 0 0.028" rpy="0 0 0" />
     <axis xyz="0 0 1" />
     <limit lower="-1.57" upper="1.57" effort="1" velocity="6" />
     <dynamics damping="0.25" friction="0.008" />
   </joint>
   <link name="head">
     <inertial>
-      <origin xyz="0.015 0 0.018" rpy="0 0 0" />
-      <mass value="0.065" />
-      <inertia ixx="7e-05" iyy="7e-05" izz="6e-05" ixy="0" ixz="0" iyz="0" />
+      <origin xyz="0.025233 0.000626 0.032953" rpy="0 0 0" />
+      <mass value="0.078636" />
+      <inertia ixx="0.00010172" iyy="9.077e-05" izz="0.00010261" ixy="0" ixz="0" iyz="0" />
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -122,9 +122,9 @@
       <material name="mecha_white" />
     </visual>
     <collision>
-      <origin xyz="0.002 0 0.017" rpy="0 0 0" />
+      <origin xyz="0.015 0 0.026" rpy="0 0 0" />
       <geometry>
-        <box size="0.056 0.056 0.044" />
+        <box size="0.076 0.084 0.052" />
       </geometry>
     </collision>
     <visual>
@@ -142,25 +142,25 @@
       <material name="mecha_gold" />
     </visual>
     <collision>
-      <origin xyz="0.037 0 0.003" rpy="0 0 0" />
+      <origin xyz="0.048 0 0.012" rpy="0 0 0" />
       <geometry>
-        <box size="0.04 0.032 0.012" />
+        <box size="0.024 0.064 0.02" />
       </geometry>
     </collision>
   </link>
   <joint name="head_pitch" type="revolute">
     <parent link="neck" />
     <child link="head" />
-    <origin xyz="0 0 0.016" rpy="0 0 0" />
+    <origin xyz="0 0 0.044" rpy="0 0 0" />
     <axis xyz="0 1 0" />
     <limit lower="-0.52" upper="0.78" effort="1" velocity="6" />
     <dynamics damping="0.25" friction="0.008" />
   </joint>
   <link name="left_hip">
     <inertial>
-      <origin xyz="0 0.008 -0.01" rpy="0 0 0" />
-      <mass value="0.05" />
-      <inertia ixx="2e-05" iyy="2e-05" izz="2e-05" ixy="0" ixz="0" iyz="0" />
+      <origin xyz="-0.011 0.020573 -0.029591" rpy="0 0 0" />
+      <mass value="0.104308" />
+      <inertia ixx="5.853e-05" iyy="8.498e-05" izz="7.505e-05" ixy="0" ixz="0" iyz="0" />
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -170,25 +170,25 @@
       <material name="mecha_carbon" />
     </visual>
     <collision>
-      <origin xyz="0 0.004 -0.008" rpy="0 0 0" />
+      <origin xyz="-0.008 0.012 -0.018" rpy="0 0 0" />
       <geometry>
-        <box size="0.02 0.024 0.03" />
+        <box size="0.04 0.032 0.044" />
       </geometry>
     </collision>
   </link>
   <joint name="left_hip_roll" type="revolute">
     <parent link="trunk_base" />
     <child link="left_hip" />
-    <origin xyz="0.005 0.036 -0.025" rpy="0 0 0" />
+    <origin xyz="0 0.042 -0.04" rpy="0 0 0" />
     <axis xyz="1 0 0" />
     <limit lower="-0.44" upper="0.44" effort="1" velocity="6" />
     <dynamics damping="0.25" friction="0.008" />
   </joint>
   <link name="left_thigh">
     <inertial>
-      <origin xyz="0.002 0 -0.02" rpy="0 0 0" />
-      <mass value="0.05" />
-      <inertia ixx="3e-05" iyy="3e-05" izz="2e-05" ixy="0" ixz="0" iyz="0" />
+      <origin xyz="0.005456 0.002467 -0.042766" rpy="0 0 0" />
+      <mass value="0.107027" />
+      <inertia ixx="9.466e-05" iyy="6.675e-05" izz="5.499e-05" ixy="0" ixz="0" iyz="0" />
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -198,37 +198,37 @@
       <material name="mecha_white" />
     </visual>
     <collision>
-      <origin xyz="0.003 0 -0.011" rpy="3.14159265359 -0 0" />
+      <origin xyz="0.003 0 -0.023" rpy="3.14159265359 -0 0" />
       <geometry>
-        <cylinder radius="0.011" length="0.034" />
+        <cylinder radius="0.015" length="0.058" />
       </geometry>
     </collision>
     <collision>
       <origin xyz="0.003 0 0.006" rpy="0 0 0" />
       <geometry>
-        <sphere radius="0.011" />
+        <sphere radius="0.015" />
       </geometry>
     </collision>
     <collision>
-      <origin xyz="0.003 0 -0.028" rpy="0 0 0" />
+      <origin xyz="0.003 0 -0.052" rpy="0 0 0" />
       <geometry>
-        <sphere radius="0.011" />
+        <sphere radius="0.015" />
       </geometry>
     </collision>
   </link>
   <joint name="left_hip_pitch" type="revolute">
     <parent link="left_hip" />
     <child link="left_thigh" />
-    <origin xyz="0 0.012 -0.015" rpy="0 0 0" />
+    <origin xyz="0 0.023 -0.038" rpy="0 0 0" />
     <axis xyz="0 1 0" />
     <limit lower="-0.87" upper="0.87" effort="1" velocity="6" />
     <dynamics damping="0.25" friction="0.008" />
   </joint>
   <link name="left_shin">
     <inertial>
-      <origin xyz="0 0 -0.018" rpy="0 0 0" />
-      <mass value="0.04" />
-      <inertia ixx="2e-05" iyy="2e-05" izz="1e-05" ixy="0" ixz="0" iyz="0" />
+      <origin xyz="0.000738 0.001436 -0.019669" rpy="0 0 0" />
+      <mass value="0.027586" />
+      <inertia ixx="2.715e-05" iyy="1.256e-05" izz="1.699e-05" ixy="0" ixz="0" iyz="0" />
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -238,37 +238,37 @@
       <material name="mecha_carbon" />
     </visual>
     <collision>
-      <origin xyz="0.006 0 -0.015" rpy="3.14159265359 -0 0" />
+      <origin xyz="0.002 0 -0.024" rpy="3.14159265359 -0 0" />
       <geometry>
-        <cylinder radius="0.01" length="0.03" />
+        <cylinder radius="0.013" length="0.048" />
       </geometry>
     </collision>
     <collision>
-      <origin xyz="0.006 0 0" rpy="0 0 0" />
+      <origin xyz="0.002 0 0" rpy="0 0 0" />
       <geometry>
-        <sphere radius="0.01" />
+        <sphere radius="0.013" />
       </geometry>
     </collision>
     <collision>
-      <origin xyz="0.006 0 -0.03" rpy="0 0 0" />
+      <origin xyz="0.002 0 -0.048" rpy="0 0 0" />
       <geometry>
-        <sphere radius="0.01" />
+        <sphere radius="0.013" />
       </geometry>
     </collision>
   </link>
   <joint name="left_knee_pitch" type="revolute">
     <parent link="left_thigh" />
     <child link="left_shin" />
-    <origin xyz="0 0 -0.044" rpy="0 0 0" />
+    <origin xyz="0 0 -0.06" rpy="0 0 0" />
     <axis xyz="0 1 0" />
     <limit lower="0" upper="1.48" effort="1" velocity="6" />
     <dynamics damping="0.25" friction="0.008" />
   </joint>
   <link name="left_foot">
     <inertial>
-      <origin xyz="0.005 0 0.006" rpy="0 0 0" />
-      <mass value="0.038" />
-      <inertia ixx="2e-05" iyy="2e-05" izz="2e-05" ixy="0" ixz="0" iyz="0" />
+      <origin xyz="0.003982 0 -0.005056" rpy="0 0 0" />
+      <mass value="0.021814" />
+      <inertia ixx="3.45e-06" iyy="1.101e-05" izz="1.378e-05" ixy="0" ixz="0" iyz="0" />
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -278,9 +278,9 @@
       <material name="mecha_gold" />
     </visual>
     <collision>
-      <origin xyz="0.005 0 -0.004" rpy="0 0 0" />
+      <origin xyz="0.004 0 -0.004" rpy="0 0 0" />
       <geometry>
-        <box size="0.05 0.026 0.008" />
+        <box size="0.082 0.046 0.012" />
       </geometry>
     </collision>
     <visual>
@@ -294,13 +294,13 @@
   <joint name="left_foot_fixed" type="fixed">
     <parent link="left_shin" />
     <child link="left_foot" />
-    <origin xyz="0.004 0 -0.036" rpy="0 0 0" />
+    <origin xyz="0.004 0 -0.054" rpy="0 0 0" />
   </joint>
   <link name="right_hip">
     <inertial>
-      <origin xyz="0 -0.008 -0.01" rpy="0 0 0" />
-      <mass value="0.05" />
-      <inertia ixx="2e-05" iyy="2e-05" izz="2e-05" ixy="0" ixz="0" iyz="0" />
+      <origin xyz="-0.011 -0.020573 -0.029591" rpy="0 0 0" />
+      <mass value="0.104308" />
+      <inertia ixx="5.853e-05" iyy="8.498e-05" izz="7.505e-05" ixy="0" ixz="0" iyz="0" />
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -310,25 +310,25 @@
       <material name="mecha_carbon" />
     </visual>
     <collision>
-      <origin xyz="0 -0.004 -0.008" rpy="0 0 0" />
+      <origin xyz="-0.008 -0.012 -0.018" rpy="0 0 0" />
       <geometry>
-        <box size="0.02 0.024 0.03" />
+        <box size="0.04 0.032 0.044" />
       </geometry>
     </collision>
   </link>
   <joint name="right_hip_roll" type="revolute">
     <parent link="trunk_base" />
     <child link="right_hip" />
-    <origin xyz="0.005 -0.036 -0.025" rpy="0 0 0" />
+    <origin xyz="0 -0.042 -0.04" rpy="0 0 0" />
     <axis xyz="1 0 0" />
     <limit lower="-0.44" upper="0.44" effort="1" velocity="6" />
     <dynamics damping="0.25" friction="0.008" />
   </joint>
   <link name="right_thigh">
     <inertial>
-      <origin xyz="0.002 0 -0.02" rpy="0 0 0" />
-      <mass value="0.05" />
-      <inertia ixx="3e-05" iyy="3e-05" izz="2e-05" ixy="0" ixz="0" iyz="0" />
+      <origin xyz="0.005456 -0.002467 -0.042766" rpy="0 0 0" />
+      <mass value="0.107027" />
+      <inertia ixx="9.466e-05" iyy="6.675e-05" izz="5.499e-05" ixy="0" ixz="0" iyz="0" />
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -338,37 +338,37 @@
       <material name="mecha_white" />
     </visual>
     <collision>
-      <origin xyz="0.003 0 -0.011" rpy="3.14159265359 -0 0" />
+      <origin xyz="0.003 0 -0.023" rpy="3.14159265359 -0 0" />
       <geometry>
-        <cylinder radius="0.011" length="0.034" />
+        <cylinder radius="0.015" length="0.058" />
       </geometry>
     </collision>
     <collision>
       <origin xyz="0.003 0 0.006" rpy="0 0 0" />
       <geometry>
-        <sphere radius="0.011" />
+        <sphere radius="0.015" />
       </geometry>
     </collision>
     <collision>
-      <origin xyz="0.003 0 -0.028" rpy="0 0 0" />
+      <origin xyz="0.003 0 -0.052" rpy="0 0 0" />
       <geometry>
-        <sphere radius="0.011" />
+        <sphere radius="0.015" />
       </geometry>
     </collision>
   </link>
   <joint name="right_hip_pitch" type="revolute">
     <parent link="right_hip" />
     <child link="right_thigh" />
-    <origin xyz="0 -0.012 -0.015" rpy="0 0 0" />
+    <origin xyz="0 -0.023 -0.038" rpy="0 0 0" />
     <axis xyz="0 1 0" />
     <limit lower="-0.87" upper="0.87" effort="1" velocity="6" />
     <dynamics damping="0.25" friction="0.008" />
   </joint>
   <link name="right_shin">
     <inertial>
-      <origin xyz="0 0 -0.018" rpy="0 0 0" />
-      <mass value="0.04" />
-      <inertia ixx="2e-05" iyy="2e-05" izz="1e-05" ixy="0" ixz="0" iyz="0" />
+      <origin xyz="0.000738 -0.001436 -0.019669" rpy="0 0 0" />
+      <mass value="0.027586" />
+      <inertia ixx="2.715e-05" iyy="1.256e-05" izz="1.699e-05" ixy="0" ixz="0" iyz="0" />
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -378,37 +378,37 @@
       <material name="mecha_carbon" />
     </visual>
     <collision>
-      <origin xyz="0.006 0 -0.015" rpy="3.14159265359 -0 0" />
+      <origin xyz="0.002 0 -0.024" rpy="3.14159265359 -0 0" />
       <geometry>
-        <cylinder radius="0.01" length="0.03" />
+        <cylinder radius="0.013" length="0.048" />
       </geometry>
     </collision>
     <collision>
-      <origin xyz="0.006 0 0" rpy="0 0 0" />
+      <origin xyz="0.002 0 0" rpy="0 0 0" />
       <geometry>
-        <sphere radius="0.01" />
+        <sphere radius="0.013" />
       </geometry>
     </collision>
     <collision>
-      <origin xyz="0.006 0 -0.03" rpy="0 0 0" />
+      <origin xyz="0.002 0 -0.048" rpy="0 0 0" />
       <geometry>
-        <sphere radius="0.01" />
+        <sphere radius="0.013" />
       </geometry>
     </collision>
   </link>
   <joint name="right_knee_pitch" type="revolute">
     <parent link="right_thigh" />
     <child link="right_shin" />
-    <origin xyz="0 0 -0.044" rpy="0 0 0" />
+    <origin xyz="0 0 -0.06" rpy="0 0 0" />
     <axis xyz="0 1 0" />
     <limit lower="0" upper="1.48" effort="1" velocity="6" />
     <dynamics damping="0.25" friction="0.008" />
   </joint>
   <link name="right_foot">
     <inertial>
-      <origin xyz="0.005 0 0.006" rpy="0 0 0" />
-      <mass value="0.038" />
-      <inertia ixx="2e-05" iyy="2e-05" izz="2e-05" ixy="0" ixz="0" iyz="0" />
+      <origin xyz="0.003982 0 -0.005056" rpy="0 0 0" />
+      <mass value="0.021814" />
+      <inertia ixx="3.45e-06" iyy="1.101e-05" izz="1.378e-05" ixy="0" ixz="0" iyz="0" />
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -418,9 +418,9 @@
       <material name="mecha_gold" />
     </visual>
     <collision>
-      <origin xyz="0.005 0 -0.004" rpy="0 0 0" />
+      <origin xyz="0.004 0 -0.004" rpy="0 0 0" />
       <geometry>
-        <box size="0.05 0.026 0.008" />
+        <box size="0.082 0.046 0.012" />
       </geometry>
     </collision>
     <visual>
@@ -434,6 +434,6 @@
   <joint name="right_foot_fixed" type="fixed">
     <parent link="right_shin" />
     <child link="right_foot" />
-    <origin xyz="0.004 0 -0.036" rpy="0 0 0" />
+    <origin xyz="0.004 0 -0.054" rpy="0 0 0" />
   </joint>
 </robot>

@@ -234,34 +234,34 @@ def test_transient_one_step_dynamic_tilt_does_not_kill_walking_episode():
 
 
 def test_dynamic_knee_flexion_height_threshold():
-    """Verify that when knee flexion is at root_z = 0.072m, it is NOT marked fallen under default walk_min_z=0.060.
-    Under default walk_min_z=0.060, root_z = 0.050m (< 0.060m) IS marked fallen."""
-    # 1. Default walk_min_z = 0.060 -> z=0.072m does not fall
+    """Verify that when knee flexion is at root_z = 0.110m, it is NOT marked fallen under default walk_min_z=0.095.
+    Under default walk_min_z=0.095, root_z = 0.080m (< 0.095m) IS marked fallen."""
+    # 1. Default walk_min_z = 0.095 -> z=0.110m does not fall
     runner_flex = ParallelSimRunner(num_envs=1, terrain_mode="flat", decimation=1)
     try:
         runner_flex.reset()
         runner_flex.cmd_modes[:] = int(LocomotionMode.WALK)
-        runner_flex.datas[0].qpos[0:3] = [0.0, 0.0, 0.072]
+        runner_flex.datas[0].qpos[0:3] = [0.0, 0.0, 0.110]
         runner_flex.datas[0].qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
         runner_flex.datas[0].qvel[:] = 0.0
         mujoco.mj_forward(runner_flex.model, runner_flex.datas[0])
         _, _, dones_flex, infos_flex = runner_flex.step(np.zeros((1, 8), dtype=np.float32))
-        assert bool(infos_flex[0]["fallen"]) is False, "Knee flexion at z=0.072m with walk_min_z=0.060 should not fall"
+        assert bool(infos_flex[0]["fallen"]) is False, "Knee flexion at z=0.110m with walk_min_z=0.095 should not fall"
         assert bool(dones_flex[0]) is False
     finally:
         runner_flex.close()
 
-    # 2. Default walk_min_z = 0.060 -> z=0.050m must fall
+    # 2. Default walk_min_z = 0.095 -> z=0.080m must fall
     runner_def = ParallelSimRunner(num_envs=1, terrain_mode="flat", decimation=1)
     try:
         runner_def.reset()
         runner_def.cmd_modes[:] = int(LocomotionMode.WALK)
-        runner_def.datas[0].qpos[0:3] = [0.0, 0.0, 0.050]
+        runner_def.datas[0].qpos[0:3] = [0.0, 0.0, 0.080]
         runner_def.datas[0].qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
         runner_def.datas[0].qvel[:] = 0.0
         mujoco.mj_forward(runner_def.model, runner_def.datas[0])
         _, _, dones_def, infos_def = runner_def.step(np.zeros((1, 8), dtype=np.float32))
-        assert bool(infos_def[0]["fallen"]) is True, "z=0.050m under default walk_min_z=0.060 must fall"
+        assert bool(infos_def[0]["fallen"]) is True, "z=0.080m under default walk_min_z=0.095 must fall"
         assert bool(dones_def[0]) is True
     finally:
         runner_def.close()
@@ -397,21 +397,21 @@ def test_task2_locomotion_fall_tolerance_relaxation():
     r_rpi = RPi5Runner(num_envs=1)
     r_esp = ESP32Runner(num_envs=1)
     try:
-        assert r_main.walk_min_z == 0.060
-        assert r_rpi.walk_min_z == 0.060
-        assert r_esp.walk_min_z == 0.060
+        assert r_main.walk_min_z == 0.095
+        assert r_rpi.walk_min_z == 0.095
+        assert r_esp.walk_min_z == 0.095
 
-        # 2. Moving robot at z=0.058m (with walk_moving: vel_x >= 0.03, step > 1) does NOT fall because thresh is 0.055m
+        # 2. Moving robot at z=0.090m (with walk_moving: vel_x >= 0.03, step > 1) does NOT fall because thresh is 0.085m
         r_main.reset()
         r_main.episode_steps[0] = 5
         r_main.cmd_modes[0] = int(LocomotionMode.WALK)
-        r_main.datas[0].qpos[0:3] = [0.0, 0.0, 0.058]
+        r_main.datas[0].qpos[0:3] = [0.0, 0.0, 0.090]
         r_main.datas[0].qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
         r_main.datas[0].qvel[:] = 0.0
         r_main.datas[0].qvel[0] = 0.10  # forward moving >= 0.03 m/s
         mujoco.mj_forward(r_main.model, r_main.datas[0])
         _, rew, done, info = r_main.step(np.zeros((1, 8), dtype=np.float32))
-        assert not info[0]["fallen"], "Moving walk at z=0.058m should not fall (dynamic thresh is 0.055m)"
+        assert not info[0]["fallen"], "Moving walk at z=0.090m should not fall (dynamic thresh is 0.085m)"
         assert not done[0]
 
         # 3. 40-degree tilt (grav_z ~ -0.766) in WALK mode does NOT exceed tilt_thresh (-0.707)

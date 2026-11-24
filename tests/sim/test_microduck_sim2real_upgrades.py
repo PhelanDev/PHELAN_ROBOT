@@ -8,6 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from robot.robot_spec import BASE_HEIGHT_M
 from sim.behaviors.self_righting import FallPredictor, compute_grav_z_dot
 from sim.env.env_config import (
     DEFAULT_NOMINAL_QPOS,
@@ -159,7 +160,7 @@ def test_slewed_posture_target_and_multiplicative_goal_composite():
     """Verify posture target slewing, multiplicative goal gate, and encoded posture commands."""
     q0, z0 = compute_slewed_posture_target(0.0, LocomotionMode.SIT)
     np.testing.assert_allclose(q0, DEFAULT_NOMINAL_QPOS)
-    assert z0 == pytest.approx(0.128)
+    assert z0 == pytest.approx(BASE_HEIGHT_M)
 
     q1, z1 = compute_slewed_posture_target(1.0, LocomotionMode.SIT)
     np.testing.assert_allclose(q1, SIT_NOMINAL_QPOS)
@@ -171,7 +172,7 @@ def test_slewed_posture_target_and_multiplicative_goal_composite():
     )
     assert qb.shape == (2, 8)
     np.testing.assert_allclose(qb[1], LIE_NOMINAL_QPOS)
-    np.testing.assert_allclose(zb, [0.128, TARGET_LIE_HEIGHT])
+    np.testing.assert_allclose(zb, [BASE_HEIGHT_M, TARGET_LIE_HEIGHT])
 
     # Multiplicative posture reward blocks farming height reward while lying sideways
     common = dict(

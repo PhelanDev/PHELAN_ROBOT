@@ -373,7 +373,7 @@ def test_pizero2w_runner_walk_min_z_and_no_duplicate_info():
     from hardware.pizero2w.training.run_parallel_sim import ParallelSimRunner
     sig = inspect.signature(ParallelSimRunner.__init__)
     assert "walk_min_z" in sig.parameters, "ParallelSimRunner.__init__ must have walk_min_z parameter"
-    assert sig.parameters["walk_min_z"].default == 0.060
+    assert sig.parameters["walk_min_z"].default == 0.095
 
     runner_src_path = REPO_ROOT / "src" / "hardware" / "pizero2w" / "training" / "run_parallel_sim.py"
     src = runner_src_path.read_text(encoding="utf-8")

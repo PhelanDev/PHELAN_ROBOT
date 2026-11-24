@@ -66,3 +66,38 @@ def test_randomized_torso_mass_cannot_cross_zero():
     cfg = MicroDuck8DoFConfig(RANDOMIZE_HARDWARE_VARIANTS=True, TORSO_MASS_RANDOMIZATION_KG=1)
     with pytest.raises(ValueError, match='positive torso mass'):
         ParallelSimRunner(num_envs=2, cfg=cfg)
+
+
+def test_v2_cad_synced_geometry_fdm_mass_and_mg996r_torque_headroom():
+    import robot.robot_spec as spec
+
+    assert spec.BASE_HEIGHT_M == pytest.approx(0.202)
+    assert getattr(spec, 'THIGH_LINK_M', None) == pytest.approx(0.060)
+    assert getattr(spec, 'SHIN_LINK_M', None) == pytest.approx(0.054)
+    assert getattr(spec, 'SOLE_HALF_SIZE_M', None) == (0.041, 0.023, 0.006)
+    assert getattr(spec, 'TOUCH_SITE_HALF_SIZE_M', None) == (0.043, 0.025, 0.007)
+    assert 1.15 <= spec.TOTAL_MASS_KG <= 1.32
+
+    import mujoco
+    nominal_model = mujoco.MjModel.from_xml_path(str(spec.MODEL_PATH))
+    assert nominal_model.body_mass.sum() == pytest.approx(spec.TOTAL_MASS_KG, abs=1e-6)
+
+    cfg = MicroDuck8DoFConfig(RANDOMIZE_HARDWARE_VARIANTS=False)
+    with closing(ParallelSimRunner(num_envs=1, cfg=cfg)) as runner:
+        # 1. Two-leg standing PD hold
+        runner.reset_env(0)
+        for _ in range(50):
+            runner.step(np.zeros((1, 8), dtype=np.float32))
+            assert float(np.max(np.abs(runner.datas[0].ctrl))) <= 0.85
+        assert runner.datas[0].qpos[2] > 0.16
+
+        # 2. Single-leg weight-shifted stance hold (slew smoothly into left-foot load, then hold statically)
+        runner.reset_env(0)
+        stance_act = np.array([[0.0, 0.0, 0.45, 0.0, 0.0, 0.45, -0.55, 0.80]], dtype=np.float32)
+        for step_idx in range(1, 41):
+            runner.step((step_idx / 40.0) * stance_act)
+        for _ in range(50):
+            runner.step(stance_act)
+            assert float(np.max(np.abs(runner.datas[0].ctrl))) <= 0.85
+        assert runner.datas[0].qpos[2] > 0.14
+        assert float(runner.datas[0].sensordata[10]) > float(runner.datas[0].sensordata[11])

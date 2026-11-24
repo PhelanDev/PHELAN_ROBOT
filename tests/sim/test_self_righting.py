@@ -100,24 +100,24 @@ def test_fall_classifier_directions():
 
 def test_fall_classifier_valid_sit_and_lie_modes():
     """Verify FallClassifier discriminates intentional sitting/lying from actual falls."""
-    # 1. Valid SIT posture: z = 0.075m, grav_z = -0.98 -> None (not fallen)
+    # 1. Valid SIT posture: z = 0.120m, grav_z = -0.98 -> None (not fallen)
     sit_grav = np.array([0.0, 0.0, -0.98], dtype=np.float32)
-    assert FallClassifier.classify(0.075, sit_grav, LocomotionMode.SIT) is None
+    assert FallClassifier.classify(0.120, sit_grav, LocomotionMode.SIT) is None
 
-    # 2. Fallen SIT posture: z = 0.035m < 0.050m -> fallen (PRONE)
-    assert FallClassifier.classify(0.035, sit_grav, LocomotionMode.SIT) == FallType.PRONE
+    # 2. Fallen SIT posture: z = 0.060m < 0.080m -> fallen (PRONE)
+    assert FallClassifier.classify(0.060, sit_grav, LocomotionMode.SIT) == FallType.PRONE
 
     # 3. Fallen SIT posture: lateral roll grav_y > 0.6 -> fallen (LATERAL_LEFT)
     sit_roll_grav = np.array([0.0, 0.80, -0.50], dtype=np.float32)
-    assert FallClassifier.classify(0.075, sit_roll_grav, LocomotionMode.SIT) == FallType.LATERAL_LEFT
+    assert FallClassifier.classify(0.120, sit_roll_grav, LocomotionMode.SIT) == FallType.LATERAL_LEFT
 
-    # 4. Valid LIE posture: z = 0.040m, grav_z = -0.50 -> None (not fallen)
+    # 4. Valid LIE posture: z = 0.065m, grav_z = -0.50 -> None (not fallen)
     lie_grav = np.array([0.0, 0.0, -0.50], dtype=np.float32)
-    assert FallClassifier.classify(0.040, lie_grav, LocomotionMode.LIE) is None
+    assert FallClassifier.classify(0.065, lie_grav, LocomotionMode.LIE) is None
 
     # 5. Fallen LIE posture: upside down grav_z > 0.0 -> fallen (SUPINE)
     lie_upside_grav = np.array([0.0, 0.0, 0.80], dtype=np.float32)
-    assert FallClassifier.classify(0.040, lie_upside_grav, LocomotionMode.LIE) == FallType.SUPINE
+    assert FallClassifier.classify(0.065, lie_upside_grav, LocomotionMode.LIE) == FallType.SUPINE
 
 
 def test_self_righting_controller_phase_transitions():

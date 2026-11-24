@@ -191,7 +191,7 @@ def test_stair_ascent_reward_calculation():
     assert "stair_ascent" in rew_before
     assert pytest.approx(rew_before["stair_ascent"]) == 0.0
 
-    # 1b. Single env: Flat walking in stairs zone (x = 1.40m, z = 0.1234m <= 0.125m nominal) -> 0 reward
+    # 1b. Single env: Flat walking in stairs zone (x = 1.40m, z = 0.197m <= 0.199m nominal) -> 0 reward
     rew_flat = compute_rewards(
         base_lin_vel=base_lin,
         cmd_lin_vel=cmd_lin,
@@ -203,12 +203,12 @@ def test_stair_ascent_reward_calculation():
         foot_contact=f_contact,
         weights=cfg.REWARD_WEIGHTS,
         root_x=1.40,
-        root_z=0.1234,
+        root_z=0.197,
     )
     assert pytest.approx(rew_flat["stair_ascent"]) == 0.0
 
-    # 2. Single env: On stairs (x = 1.40m >= 1.35m), elevated by 0.020m relative to 0.125m baseline (z = 0.145m)
-    # elevation_gain = 0.145 - 0.125 = 0.020m -> r_stair = 0.020 * 10.0 = 0.20
+    # 2. Single env: On stairs (x = 1.40m >= 1.35m), elevated by 0.020m relative to 0.199m baseline (z = 0.219m)
+    # elevation_gain = 0.219 - 0.199 = 0.020m -> r_stair = 0.020 * 10.0 = 0.20
     rew_on_stairs = compute_rewards(
         base_lin_vel=base_lin,
         cmd_lin_vel=cmd_lin,
@@ -220,14 +220,14 @@ def test_stair_ascent_reward_calculation():
         foot_contact=f_contact,
         weights=cfg.REWARD_WEIGHTS,
         root_x=1.40,
-        root_z=0.145,
+        root_z=0.219,
     )
     assert pytest.approx(rew_on_stairs["stair_ascent"]) == 0.20
     # Difference in total reward should reflect weight * r_stair_ascent = 1.5 * 0.20 = 0.30
     diff_total = rew_on_stairs["total_reward"] - rew_before["total_reward"]
     assert pytest.approx(diff_total, abs=1e-5) == 0.30
 
-    # 3. Single env: Elevation clipping at max 0.050m (z = 0.200m -> gain 0.075m clipped to 0.050m)
+    # 3. Single env: Elevation clipping at max 0.050m (z = 0.275m -> gain 0.076m clipped to 0.050m)
     rew_clipped = compute_rewards(
         base_lin_vel=base_lin,
         cmd_lin_vel=cmd_lin,
@@ -239,7 +239,7 @@ def test_stair_ascent_reward_calculation():
         foot_contact=f_contact,
         weights=cfg.REWARD_WEIGHTS,
         root_x=1.50,
-        root_z=0.200,
+        root_z=0.275,
     )
     assert pytest.approx(rew_clipped["stair_ascent"]) == 0.50
 
@@ -252,7 +252,7 @@ def test_stair_ascent_reward_calculation():
     b_j_vel = np.zeros((3, 8), dtype=np.float32)
     b_f_contact = np.tile(f_contact, (3, 1))
     root_x_batch = np.array([1.0, 1.40, 1.64], dtype=np.float32)
-    root_z_batch = np.array([0.200, 0.140, 0.185], dtype=np.float32)
+    root_z_batch = np.array([0.200, 0.214, 0.259], dtype=np.float32)
 
     rew_batch = compute_rewards(
         base_lin_vel=b_lin,
@@ -270,8 +270,8 @@ def test_stair_ascent_reward_calculation():
     assert isinstance(rew_batch["stair_ascent"], np.ndarray)
     assert rew_batch["stair_ascent"].shape == (3,)
     # Env 0: x < 1.35 -> 0.0
-    # Env 1: x >= 1.35, z = 0.140 -> (0.140 - 0.125) * 10 = 0.15
-    # Env 2: x >= 1.35, z = 0.185 -> min(0.060, 0.050) * 10 = 0.50
+    # Env 1: x >= 1.35, z = 0.214 -> (0.214 - 0.199) * 10 = 0.15
+    # Env 2: x >= 1.35, z = 0.259 -> min(0.060, 0.050) * 10 = 0.50
     np.testing.assert_allclose(rew_batch["stair_ascent"], [0.0, 0.15, 0.50], atol=1e-5)
 
 

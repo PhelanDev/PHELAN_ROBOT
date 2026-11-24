@@ -54,7 +54,7 @@ class ParallelSimRunner(BaseRunner):
         kd: Optional[float] = None,
         max_episode_steps: int = 500,
         stand_still: bool = False,
-        walk_min_z: float = 0.060,
+        walk_min_z: float = 0.095,
         **kwargs,
     ):
         if cfg is None:

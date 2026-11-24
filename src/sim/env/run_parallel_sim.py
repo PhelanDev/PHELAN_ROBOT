@@ -241,7 +241,7 @@ class ParallelSimRunner:
         include_emotions: bool = False,
         enable_auto_recovery: bool = False,
         allow_teleport_assist: bool = False,
-        walk_min_z: float = 0.060,
+        walk_min_z: float = 0.095,
         friction_range: Tuple[float, float] = (1.1, 1.6),
         embed_phase_clock: Optional[bool] = None,
         randomize_pillars: bool = False,
@@ -1499,13 +1499,13 @@ class ParallelSimRunner:
 
         is_sitting_legs = (joint_pos[:, 4] > 0.9) | (joint_pos[:, 7] > 0.9)
         walk_moving = is_walk & (self.episode_steps > 1) & (base_lin_vel_body[:, 0] >= 0.03) & (~is_sitting_legs)
-        configured_min_z = getattr(self, "walk_min_z", 0.060)
-        sit_collapse_z = np.where(is_walk & is_sitting_legs, 0.080, configured_min_z)
-        walk_z_thresh = np.where(walk_moving, min(0.055, configured_min_z), sit_collapse_z)
+        configured_min_z = getattr(self, "walk_min_z", 0.095)
+        sit_collapse_z = np.where(is_walk & is_sitting_legs, 0.125, configured_min_z)
+        walk_z_thresh = np.where(walk_moving, min(0.085, configured_min_z), sit_collapse_z)
         z_fall_threshold = np.where(
             is_lie,
-            0.025,
-            np.where(is_sit, 0.050, walk_z_thresh),
+            0.040,
+            np.where(is_sit, 0.080, walk_z_thresh),
         )
 
         tilt_thresh = np.where(is_lie, 0.0, -0.707)

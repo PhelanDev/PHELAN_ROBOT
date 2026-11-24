@@ -101,9 +101,9 @@ def test_urdf_links_and_inertials():
     # Verify the canonical V2 hip-knee and knee-foot link frames.
     joints_by_name = {j.attrib["name"]: j for j in root.findall("joint")}
     knee_origin = [float(x) for x in joints_by_name["left_knee_pitch"].find("origin").attrib["xyz"].split()]
-    assert knee_origin == [0.0, 0.0, -0.044]
+    assert knee_origin == [0.0, 0.0, -0.060]
     foot_origin = [float(x) for x in joints_by_name["left_foot_fixed"].find("origin").attrib["xyz"].split()]
-    assert foot_origin == [0.004, 0.0, -0.036]
+    assert foot_origin == [0.004, 0.0, -0.054]
     assert joints_by_name["trunk_freejoint"].get("type") == "floating"
 
 def test_urdf_mujoco_compilation():
@@ -129,5 +129,5 @@ def test_urdf_head_link_com_synchronization():
     root = ET.parse(URDF_PATH).getroot()
     head = root.find("link[@name='head']")
     xyz = [float(value) for value in head.find("inertial/origin").get("xyz").split()]
-    np.testing.assert_allclose(xyz, [0.015, 0.0, 0.018], atol=1e-9)
+    np.testing.assert_allclose(xyz, [0.025233, 0.000626, 0.032953], atol=1e-9)
     assert verify_urdf_physics(str(MODEL_PATH), str(URDF_PATH))["valid"]

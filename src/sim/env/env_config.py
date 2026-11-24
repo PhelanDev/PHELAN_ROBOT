@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
-from robot.robot_spec import JOINT_ORDER, NUM_ACTIONS, NUM_OBSERVATIONS, TOTAL_MASS_KG
+from robot.robot_spec import BASE_HEIGHT_M, JOINT_ORDER, NUM_ACTIONS, NUM_OBSERVATIONS, TOTAL_MASS_KG
 
 
 class EmotionState(IntEnum):
@@ -37,8 +37,8 @@ class LocomotionMode(IntEnum):
     LIE = 2
 
 
-TARGET_SIT_HEIGHT: float = 0.075
-TARGET_LIE_HEIGHT: float = 0.040
+TARGET_SIT_HEIGHT: float = 0.120
+TARGET_LIE_HEIGHT: float = 0.065
 
 # Nominal sitting joint angles: (head_yaw, head_pitch, l_hip_roll, l_hip_pitch, l_knee_pitch, r_hip_roll, r_hip_pitch, r_knee_pitch)
 SIT_NOMINAL_QPOS: np.ndarray = np.array(
@@ -489,7 +489,7 @@ def compute_reference_gait_targets(
 def compute_slewed_posture_target(
     alpha: Union[float, np.ndarray],
     mode: Union[int, np.ndarray, LocomotionMode],
-    start_z: float = 0.128,
+    start_z: float = BASE_HEIGHT_M,
 ) -> Tuple[np.ndarray, Union[float, np.ndarray]]:
     """Interpolate target joint angles and torso height between standing and SIT/LIE posture."""
     a_arr = np.asarray(alpha, dtype=np.float32)
@@ -1090,8 +1090,8 @@ def compute_rewards(
         rx = np.asarray(root_x, dtype=np.float32)
         rz = np.asarray(root_z, dtype=np.float32)
         stair_mask = (rx >= 1.35).astype(np.float32)
-        # Baseline z=0.125m matches flat walking mean_root_z ≈ 0.1234m (spawn z=0.128m)
-        elevation_gain = np.clip(rz - 0.125, 0.0, 0.050)
+        # Baseline matches flat walking just below BASE_HEIGHT_M
+        elevation_gain = np.clip(rz - (BASE_HEIGHT_M - 0.003), 0.0, 0.050)
         r_stair_ascent = stair_mask * elevation_gain * 10.0
     else:
         r_stair_ascent = np.zeros(base_lin.shape[0], dtype=np.float32) if is_batch else 0.0

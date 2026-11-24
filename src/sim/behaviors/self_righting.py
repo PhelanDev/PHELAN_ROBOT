@@ -152,16 +152,16 @@ class FallClassifier:
 
         # 1. Check if robot is in a legitimate intentional pose based on mode
         if mode == int(LocomotionMode.LIE):
-            # In LIE mode: z >= 0.025m, not upside down (grav_z <= 0.0), no lateral rollover (|grav_y| <= 0.6)
-            if rz >= 0.025 and grav[2] <= 0.0 and abs(grav[1]) <= 0.6:
+            # In LIE mode: z >= 0.040m, not upside down (grav_z <= 0.0), no lateral rollover (|grav_y| <= 0.6)
+            if rz >= 0.040 and grav[2] <= 0.0 and abs(grav[1]) <= 0.6:
                 return None
         elif mode == int(LocomotionMode.SIT):
-            # In SIT mode: z >= 0.050m, grav_z <= -0.707, no lateral rollover (|grav_y| <= 0.6)
-            if rz >= 0.050 and grav[2] <= -0.707 and abs(grav[1]) <= 0.6:
+            # In SIT mode: z >= 0.080m, grav_z <= -0.707, no lateral rollover (|grav_y| <= 0.6)
+            if rz >= 0.080 and grav[2] <= -0.707 and abs(grav[1]) <= 0.6:
                 return None
         else:
-            # In WALK mode: z >= 0.080m, grav_z <= -0.707, no lateral rollover (|grav_y| <= 0.6)
-            if rz >= 0.080 and grav[2] <= -0.707 and abs(grav[1]) <= 0.6:
+            # In WALK mode: z >= 0.125m, grav_z <= -0.707, no lateral rollover (|grav_y| <= 0.6)
+            if rz >= 0.125 and grav[2] <= -0.707 and abs(grav[1]) <= 0.6:
                 return None
 
         # 2. Posture is fallen: classify into 4 distinct fall directions
@@ -171,7 +171,7 @@ class FallClassifier:
             return FallType.LATERAL_RIGHT
         if grav[2] > 0.0:
             return FallType.SUPINE
-        if rz < 0.080 and grav[2] <= 0.0:
+        if rz < 0.125 and grav[2] <= 0.0:
             return FallType.PRONE
 
         # Fallback for forward/backward pitch

@@ -20,8 +20,9 @@ from robot.robot_spec import (  # noqa: E402
     MJCF_MODEL_NAME,
     MODEL_PATH,
     NUM_ACTIONS,
-    THIGH_LINK_M,
     SHIN_LINK_M,
+    SOLE_HALF_SIZE_M,
+    THIGH_LINK_M,
     TOTAL_MASS_KG,
     URDF_PATH,
 )
@@ -314,7 +315,8 @@ def print_summary(joint_results, mass_info, com_info, sim_ok, num_steps, geometr
     print("\n3. V2 FRAMES AND FOOTPRINT")
     print(f"Base frame height: {geometry_info['body_matches']['trunk_base']} (expected {BASE_HEIGHT_M:.3f} m)")
     print(f"Thigh/shin frames: {geometry_info['body_matches']['left_shin']}, {geometry_info['body_matches']['left_foot']}")
-    print(f"Foot collider footprint: {geometry_info['sole_matches']} (50 x 26 x 8 mm)")
+    sx, sy, sz = (int(round(v * 2000)) for v in SOLE_HALF_SIZE_M)
+    print(f"Foot collider footprint: {geometry_info['sole_matches']} ({sx} x {sy} x {sz} mm)")
     print(f"Sole bottom heights: {[round(z, 6) for z in geometry_info['sole_bottoms']]} m")
     print("\n4. CENTER OF MASS AND PD SIMULATION")
     print(f"CoM relative to trunk: {[round(value, 6) for value in com_info['com_rel']]} m")

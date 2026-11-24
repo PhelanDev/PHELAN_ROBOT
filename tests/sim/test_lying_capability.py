@@ -45,7 +45,7 @@ def test_locomotion_mode_enum_and_constants():
     assert LocomotionMode.SIT == 1
     assert LocomotionMode.LIE == 2
 
-    assert TARGET_LIE_HEIGHT == 0.040
+    assert TARGET_LIE_HEIGHT == 0.065
 
     # LIE_NOMINAL_QPOS: 8-DOF target joint angles (float32)
     assert isinstance(LIE_NOMINAL_QPOS, np.ndarray)
@@ -77,7 +77,7 @@ def test_compute_rewards_lying_mode_active():
 
     # 1. Perfect lying posture and height
     joint_pos_lie = np.array([0.0, 0.0, 0.0, -0.65, 0.05, 0.0, -0.65, 0.05], dtype=np.float32)
-    root_z_lie = 0.040
+    root_z_lie = 0.065
 
     res_lie = compute_rewards(
         base_lin_vel=base_lin_vel,
@@ -106,7 +106,7 @@ def test_compute_rewards_lying_mode_active():
     # height error: (root_z - 0.040)^2 = 0.003 -> r_lie_height = exp(-1.0)
     deviated_joint_pos = joint_pos_lie.copy()
     deviated_joint_pos[3] += np.sqrt(0.20)
-    deviated_root_z = 0.040 + np.sqrt(0.003)
+    deviated_root_z = 0.065 + np.sqrt(0.003)
 
     res_deviated = compute_rewards(
         base_lin_vel=base_lin_vel,
@@ -150,7 +150,7 @@ def test_compute_rewards_walk_mode_no_lie_reward():
         joint_vel=joint_vel,
         foot_contact=foot_contact,
         joint_pos=joint_pos_lie,
-        root_z=0.040,
+        root_z=0.065,
         cmd_mode=LocomotionMode.WALK,
     )
 
@@ -176,7 +176,7 @@ def test_compute_rewards_batched_modes():
 
     joint_pos_lie = np.array([0.0, 0.0, 0.0, -0.65, 0.05, 0.0, -0.65, 0.05], dtype=np.float32)
     joint_pos = np.tile(joint_pos_lie, (batch_size, 1))
-    root_z = np.array([0.040, TARGET_SIT_HEIGHT, 0.040], dtype=np.float32)
+    root_z = np.array([0.065, TARGET_SIT_HEIGHT, 0.065], dtype=np.float32)
 
     # env 0 is WALK (0), env 1 is SIT (1), env 2 is LIE (2)
     cmd_modes = np.array([0, 1, 2], dtype=np.int32)
@@ -221,10 +221,10 @@ def test_parallel_sim_runner_adaptive_fall_detection_lie():
 
     lie_nominal = np.array([0.0, 0.0, 0.0, -0.65, 0.05, 0.0, -0.65, 0.05], dtype=np.float32)
 
-    # Place both robots at height z = 0.040m (upright quaternion, nominal lying joint angles)
+    # Place both robots at height z = 0.065m (upright quaternion, nominal lying joint angles)
     for env_idx in range(2):
         d = sim.datas[env_idx]
-        d.qpos[0:3] = [0.0, 0.0, 0.040]  # z = 0.040m
+        d.qpos[0:3] = [0.0, 0.0, 0.065]  # z = 0.065m
         d.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]  # upright quaternion
         d.qpos[7:15] = lie_nominal
         d.qvel[:] = 0.0
@@ -235,24 +235,24 @@ def test_parallel_sim_runner_adaptive_fall_detection_lie():
     actions = np.zeros((2, 8), dtype=np.float32)
     next_obs, rewards, dones, infos = sim.step(actions)
 
-    # Env 0 (WALK) at z=0.040m < 0.080m: MUST FALL and receive fall_penalty
+    # Env 0 (WALK) at z=0.065m < 0.095m: MUST FALL and receive fall_penalty
     assert dones[0] == True
     assert infos[0]["fallen"] == True
 
-    # Env 1 (LIE) at z=0.040m >= 0.025m: MUST NOT FALL
+    # Env 1 (LIE) at z=0.065m >= 0.040m: MUST NOT FALL
     assert dones[1] == False
     assert infos[1]["fallen"] == False
 
 
 def test_parallel_sim_runner_lie_mode_very_low_fall():
-    """Verify that even in LIE mode, dropping below 0.025m triggers a fall."""
+    """Verify that even in LIE mode, dropping below 0.040m triggers a fall."""
     sim = ParallelSimRunner(num_envs=1, decimation=1)
     sim.set_cmd_modes(2)
 
     lie_nominal = np.array([0.0, 0.0, 0.0, -0.65, 0.05, 0.0, -0.65, 0.05], dtype=np.float32)
 
     d = sim.datas[0]
-    d.qpos[0:3] = [0.0, 0.0, 0.020]  # z = 0.020m < 0.025m
+    d.qpos[0:3] = [0.0, 0.0, 0.030]  # z = 0.030m < 0.040m
     d.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
     d.qpos[7:15] = lie_nominal
     d.qvel[:] = 0.0
