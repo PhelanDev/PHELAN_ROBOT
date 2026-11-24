@@ -108,7 +108,9 @@ def collect_gait_demonstrations(
         raw_act = unscale_actions(q, runner.cfg, nominal_centered=True)
         return np.tile(raw_act, (runner.num_envs, 1))
 
-    return _collect_rollouts(runner, policy_fn, num_steps, gamma, return_privileged=return_privileged)
+    if return_privileged:
+        return _collect_rollouts(runner, policy_fn, num_steps, gamma, return_privileged=True)
+    return _collect_rollouts(runner, policy_fn, num_steps, gamma)
 
 
 def _eval_actor_batch(actor: nn.Module, obs: np.ndarray) -> np.ndarray:
@@ -149,7 +151,9 @@ def collect_teacher_demonstrations(
     def policy_fn(obs: np.ndarray, _step: int) -> np.ndarray:
         return _eval_actor_batch(teacher_actor, obs)
 
-    return _collect_rollouts(runner, policy_fn, num_steps, gamma, return_privileged=return_privileged)
+    if return_privileged:
+        return _collect_rollouts(runner, policy_fn, num_steps, gamma, return_privileged=True)
+    return _collect_rollouts(runner, policy_fn, num_steps, gamma)
 
 
 def collect_dagger_demonstrations(
@@ -183,7 +187,9 @@ def collect_dagger_demonstrations(
         exec_act = np.clip(mix_beta * teacher_act + (1.0 - mix_beta) * student_act, -1.0, 1.0).astype(np.float32)
         return exec_act, teacher_act
 
-    return _collect_rollouts(runner, policy_fn, num_steps, gamma, return_privileged=return_privileged)
+    if return_privileged:
+        return _collect_rollouts(runner, policy_fn, num_steps, gamma, return_privileged=True)
+    return _collect_rollouts(runner, policy_fn, num_steps, gamma)
 
 
 def _mirror_obs_by_dim(arr: np.ndarray) -> np.ndarray:
