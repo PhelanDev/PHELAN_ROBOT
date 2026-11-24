@@ -403,3 +403,43 @@ def test_no_orphan_scripts_and_no_machine_hardcoded_paths():
         content = p.read_text(encoding="utf-8")
         assert "LEGION" not in content, f"Hardcoded developer path in {p}"
         assert "eac089d5" not in content, f"Hardcoded conversation path in {p}"
+
+
+def test_duck_train_cli_forwards_hybrid_and_sim2real_flags(monkeypatch):
+    """Verify duck.py train exposes and forwards hybrid RL and Sim2Real flags."""
+    import duck
+    from types import SimpleNamespace
+
+    commands = []
+    monkeypatch.setattr(duck.subprocess, "run", lambda cmd: commands.append(cmd) or SimpleNamespace(returncode=0))
+
+    args = duck.build_parser().parse_args([
+        "train",
+        "--zero-cmd-prob", "0.15",
+        "--turn-in-place-prob", "0.15",
+        "--curriculum-smoothness",
+        "--max-action-delay", "2",
+        "--symmetry-coef", "0.5",
+        "--randomize-pillars",
+        "--enable-limp-fall",
+        "--enable-battery-sag",
+        "--encoder-bias-rad", "0.015",
+        "--imu-mount-max-rad", "0.08",
+        "--delay-joint-vel-obs",
+        "--dry-run",
+    ])
+    assert duck.cmd_train(args) == 0
+    cmd = commands[0]
+    assert "--zero-cmd-prob" in cmd and cmd[cmd.index("--zero-cmd-prob") + 1] == "0.15"
+    assert "--turn-in-place-prob" in cmd and cmd[cmd.index("--turn-in-place-prob") + 1] == "0.15"
+    assert "--curriculum-smoothness" in cmd
+    assert "--max-action-delay" in cmd and cmd[cmd.index("--max-action-delay") + 1] == "2"
+    assert "--symmetry-coef" in cmd and cmd[cmd.index("--symmetry-coef") + 1] == "0.5"
+    assert "--randomize-pillars" in cmd
+    assert "--enable-limp-fall" in cmd
+    assert "--enable-battery-sag" in cmd
+    assert "--encoder-bias-rad" in cmd and cmd[cmd.index("--encoder-bias-rad") + 1] == "0.015"
+    assert "--imu-mount-max-rad" in cmd and cmd[cmd.index("--imu-mount-max-rad") + 1] == "0.08"
+    assert "--delay-joint-vel-obs" in cmd
+    assert "--dry-run" in cmd
+

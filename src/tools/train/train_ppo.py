@@ -26,6 +26,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from sim.env.env_config import MicroDuck8DoFConfig, _DEFAULT_CFG
+from sim.env.policy_contract import validate_model_identity
 from sim.env.run_parallel_sim import ParallelSimRunner, resolve_v2_model_path
 from sim.env.symmetry import compute_actor_symmetry_loss, mirror_critic_obs_53, mirror_obs_42
 from robot.robot_spec import MODEL_PATH, MODEL_NAME, CHECKPOINT_PREFIX, REPO_ROOT
@@ -541,6 +542,36 @@ def _require_finite_tensors(value):
             _require_finite_tensors(child)
 
 
+def _archive_legacy_output_if_unverified(
+    output: Path,
+    expected_model_name: str,
+    *,
+    allow_archive: bool,
+    is_best_slot: bool = False,
+) -> Optional[Path]:
+    """Move untagged pre-schema checkpoints aside on fresh runs; reject mismatched identities."""
+    if not output.exists():
+        return None
+
+    try:
+        existing = torch.load(str(output), map_location="cpu", weights_only=False)
+    except (OSError, RuntimeError, ValueError, TypeError, EOFError, pickle.UnpicklingError):
+        if is_best_slot:
+            return None
+        raise
+    if not isinstance(existing, dict):
+        raise ValueError("Checkpoint model identity requires checkpoint metadata")
+    has_identity = bool(existing.get("model_name") or existing.get("model_path"))
+    if allow_archive and not has_identity:
+        backup_path = output.with_name(f"{output.stem}.legacy_backup{output.suffix}")
+        os.replace(str(output), str(backup_path))
+        return backup_path
+    if (has_identity or not is_best_slot
+            or "model_state_dict" in existing or "actor_state_dict" in existing):
+        validate_model_identity(existing, expected_model_name)
+    return None
+
+
 def train_ppo(
     model_path: Union[str, Path] = DEFAULT_MODEL_PATH,
     num_envs: int = 64,
@@ -584,6 +615,14 @@ def train_ppo(
     zero_cmd_prob: float = 0.0,
     turn_in_place_prob: float = 0.0,
     curriculum_smoothness: bool = False,
+    enable_limp_fall: bool = False,
+    limp_kp_scale: float = 0.25,
+    enable_head_ema_penalty: bool = False,
+    action_over_limit_threshold: Optional[float] = None,
+    enable_battery_sag: bool = False,
+    encoder_bias_rad: float = 0.0,
+    imu_mount_max_rad: float = 0.0,
+    delay_joint_vel_obs: bool = False,
 ) -> Dict[str, Any]:
     """Execute PPO training pipeline using ParallelSimRunner."""
     model_path = resolve_v2_model_path(model_path)
@@ -635,22 +674,15 @@ def train_ppo(
         if source_path in (save_path, latest_save_path, best_save_path):
             raise ValueError("Transfer requires new output paths; do not overwrite the source checkpoint")
 
-    from sim.env.policy_contract import validate_model_identity
-    # Validate every existing output before any write, including fresh runs.
+    # Validate every existing output before any write, archiving pre-schema checkpoints on fresh runs.
+    allow_legacy_archive = (not resume and load_checkpoint is None)
     for output in (save_path, latest_save_path, best_save_path):
-        if output.exists():
-            try:
-                existing = torch.load(str(output), map_location="cpu", weights_only=False)
-            except (OSError, RuntimeError, ValueError, TypeError, EOFError, pickle.UnpicklingError):
-                if output == best_save_path:
-                    continue
-                raise
-            # Corrupt selection files are retained until a qualified replacement.
-            if not isinstance(existing, dict):
-                raise ValueError("Checkpoint model identity requires checkpoint metadata")
-            if (existing.get("model_name") or existing.get("model_path") or output != best_save_path
-                    or "model_state_dict" in existing or "actor_state_dict" in existing):
-                validate_model_identity(existing, MODEL_NAME)
+        _archive_legacy_output_if_unverified(
+            output,
+            MODEL_NAME,
+            allow_archive=allow_legacy_archive,
+            is_best_slot=(output == best_save_path),
+        )
 
     # The actual best file is the only authority for historical selection.
     best_record = None
@@ -695,6 +727,14 @@ def train_ppo(
         max_action_delay_steps=max_action_delay,
         zero_cmd_prob=zero_cmd_prob,
         turn_in_place_prob=turn_in_place_prob,
+        enable_limp_fall=enable_limp_fall,
+        limp_kp_scale=limp_kp_scale,
+        enable_head_ema_penalty=enable_head_ema_penalty,
+        action_over_limit_threshold=action_over_limit_threshold,
+        enable_battery_sag=enable_battery_sag,
+        encoder_bias_rad=encoder_bias_rad,
+        imu_mount_max_rad=imu_mount_max_rad,
+        delay_joint_vel_obs=delay_joint_vel_obs,
     )
     if curriculum_smoothness:
         runner.cfg = MicroDuck8DoFConfig()
@@ -1003,7 +1043,7 @@ def train_ppo(
             iter_start = time.perf_counter()
 
             # Randomize dynamics & slalom pillars per iteration outside worker stepping (thread-safe)
-            runner._randomize_model_dynamics()
+            runner.randomize_dynamics()
             runner.randomize_stage_pillars()
 
             progress = (
@@ -1490,6 +1530,14 @@ def main():
     parser.add_argument("--zero-cmd-prob", type=float, default=0.0, help="Fraction of episodes sampled with exact zero [0,0,0] command (default: 0.0)")
     parser.add_argument("--turn-in-place-prob", type=float, default=0.0, help="Fraction of episodes sampled with pure turn-in-place command (default: 0.0)")
     parser.add_argument("--curriculum-smoothness", action="store_true", help="Gradually ramp action_rate_penalty from -0.02 to -0.10 during training")
+    parser.add_argument("--enable-limp-fall", action="store_true", help="Enable predictive pre-impact servo torque drop on unrecoverable falls")
+    parser.add_argument("--limp-kp-scale", type=float, default=0.25, help="Servo Kp multiplier while limp-fall is active (default: 0.25)")
+    parser.add_argument("--enable-head-ema-penalty", action="store_true", help="Penalize sustained DC bias of head pitch/yaw tracking error")
+    parser.add_argument("--action-over-limit-threshold", type=float, default=None, help="Regularize normalized action magnitude above threshold (e.g. 0.95)")
+    parser.add_argument("--enable-battery-sag", action="store_true", help="Simulate 2S LiPo internal voltage sag torque throttling")
+    parser.add_argument("--encoder-bias-rad", type=float, default=0.0, help="Actor-only per-joint encoder zero offset std in radians (default: 0.0)")
+    parser.add_argument("--imu-mount-max-rad", type=float, default=0.0, help="Actor-only randomized IMU mounting tilt bound in radians (default: 0.0)")
+    parser.add_argument("--delay-joint-vel-obs", action="store_true", help="Apply 1-step Actor-only delay on joint velocity observations")
 
     args = parser.parse_args()
 
@@ -1537,6 +1585,14 @@ def main():
         zero_cmd_prob=args.zero_cmd_prob,
         turn_in_place_prob=args.turn_in_place_prob,
         curriculum_smoothness=args.curriculum_smoothness,
+        enable_limp_fall=args.enable_limp_fall,
+        limp_kp_scale=args.limp_kp_scale,
+        enable_head_ema_penalty=args.enable_head_ema_penalty,
+        action_over_limit_threshold=args.action_over_limit_threshold,
+        enable_battery_sag=args.enable_battery_sag,
+        encoder_bias_rad=args.encoder_bias_rad,
+        imu_mount_max_rad=args.imu_mount_max_rad,
+        delay_joint_vel_obs=args.delay_joint_vel_obs,
     )
 
 

@@ -257,6 +257,29 @@ def cmd_train(args: argparse.Namespace) -> int:
         cmd.extend(["--log-interval", str(args.log_interval)])
     if getattr(args, "terrain", None):
         cmd.extend(["--terrain", str(args.terrain)])
+    for attr, flag in (
+        ("symmetry_coef", "--symmetry-coef"),
+        ("max_action_delay", "--max-action-delay"),
+        ("zero_cmd_prob", "--zero-cmd-prob"),
+        ("turn_in_place_prob", "--turn-in-place-prob"),
+        ("limp_kp_scale", "--limp-kp-scale"),
+        ("action_over_limit_threshold", "--action-over-limit-threshold"),
+        ("encoder_bias_rad", "--encoder-bias-rad"),
+        ("imu_mount_max_rad", "--imu-mount-max-rad"),
+    ):
+        val = getattr(args, attr, None)
+        if val is not None:
+            cmd.extend([flag, str(val)])
+    for attr, flag in (
+        ("curriculum_smoothness", "--curriculum-smoothness"),
+        ("randomize_pillars", "--randomize-pillars"),
+        ("enable_limp_fall", "--enable-limp-fall"),
+        ("enable_head_ema_penalty", "--enable-head-ema-penalty"),
+        ("enable_battery_sag", "--enable-battery-sag"),
+        ("delay_joint_vel_obs", "--delay-joint-vel-obs"),
+    ):
+        if getattr(args, attr, False):
+            cmd.append(flag)
     if getattr(args, "dry_run", False):
         cmd.append("--dry-run")
 
@@ -363,6 +386,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_train.add_argument("--save-interval", type=int, default=50, help="Chu kỳ lưu checkpoint định kỳ (mặc định: 50 iters)")
     p_train.add_argument("--log-interval", type=int, default=1, help="Chu kỳ in log ra màn hình (mặc định: 1 iter)")
     p_train.add_argument("--terrain", choices=["hurdles", "stairs"], default="hurdles", help="Loại giáo trình địa hình ('hurdles', 'stairs' - mặc định: hurdles)")
+    p_train.add_argument("--symmetry-coef", type=float, default=None, help="Hệ số điều chuẩn đối xứng hai bên (mặc định từ train_ppo)")
+    p_train.add_argument("--max-action-delay", type=int, default=None, help="Độ trễ hành động ngẫu nhiên tối đa (số bước điều khiển)")
+    p_train.add_argument("--zero-cmd-prob", type=float, default=None, help="Tỷ lệ episode lấy mẫu lệnh đứng yên [0,0,0]")
+    p_train.add_argument("--turn-in-place-prob", type=float, default=None, help="Tỷ lệ episode lấy mẫu lệnh xoay tại chỗ")
+    p_train.add_argument("--curriculum-smoothness", action="store_true", help="Tăng dần trọng số mượt hành động trong quá trình huấn luyện")
+    p_train.add_argument("--randomize-pillars", action="store_true", help="Ngẫu nhiên hóa cột slalom giữa các episode/iteration")
+    p_train.add_argument("--enable-limp-fall", action="store_true", help="Bật giảm Kp servo dự báo trước va chạm khi ngã")
+    p_train.add_argument("--limp-kp-scale", type=float, default=None, help="Hệ số Kp khi kích hoạt limp-fall")
+    p_train.add_argument("--enable-head-ema-penalty", action="store_true", help="Phạt trôi EMA lệch hướng đầu kéo dài")
+    p_train.add_argument("--action-over-limit-threshold", type=float, default=None, help="Ngưỡng phạt biên độ hành động chuẩn hóa")
+    p_train.add_argument("--enable-battery-sag", action="store_true", help="Mô phỏng sụt áp pin 2S làm giảm ngưỡng mô-men")
+    p_train.add_argument("--encoder-bias-rad", type=float, default=None, help="Sai số 0 độ lệch encoder chỉ ở Actor (rad)")
+    p_train.add_argument("--imu-mount-max-rad", type=float, default=None, help="Giới hạn nghiêng gá IMU chỉ ở Actor (rad)")
+    p_train.add_argument("--delay-joint-vel-obs", action="store_true", help="Trễ 1 bước quan sát vận tốc khớp chỉ ở Actor")
 
     # export
     p_export = subparsers.add_parser("export", help="Xuất policy sang ONNX (RPi 5 & Pi Zero 2 W) và INT8 C Header (ESP32-S3)")

@@ -249,3 +249,33 @@ def test_parallel_sim_runner_sit_mode_very_low_fall():
 
     assert dones[0] == True
     assert infos[0]["fallen"] == True
+
+
+def test_sit_and_lie_zero_actions_reach_full_nominal_posture_targets():
+    """Verify encoded SIT/LIE modes center zero-actions on slewed posture targets rather than standing nominal."""
+    import mujoco
+    from sim.env.env_config import LIE_NOMINAL_QPOS
+
+    sim = ParallelSimRunner(
+        num_envs=2,
+        decimation=10,
+        terrain_mode="flat",
+        posture_ramp_s=0.2,
+        encode_posture_commands=True,
+    )
+    try:
+        sim.set_cmd_modes([LocomotionMode.SIT, LocomotionMode.LIE])
+        zeros = np.zeros((2, 8), dtype=np.float32)
+        for _ in range(15):
+            # Hold floating base upright while isolating joint target slewing under zero actions.
+            for d in sim.datas:
+                d.qpos[2] = 0.08
+                d.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
+                d.qvel[:6] = 0.0
+                mujoco.mj_forward(sim.model, d)
+            sim.step(zeros)
+        np.testing.assert_allclose(sim.last_targets[0], SIT_NOMINAL_QPOS, atol=1e-3)
+        np.testing.assert_allclose(sim.last_targets[1], LIE_NOMINAL_QPOS, atol=1e-3)
+    finally:
+        sim.close()
+

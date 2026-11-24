@@ -354,3 +354,45 @@ def test_nan_safe_critic_and_gae_plus_scheduled_action_rate_weight():
     assert compute_scheduled_action_rate_weight(0.20) == pytest.approx(-0.06)
     assert compute_scheduled_action_rate_weight(0.40) == pytest.approx(-0.10)
     assert compute_scheduled_action_rate_weight(1.0) == pytest.approx(-0.10)
+
+
+def test_train_ppo_forwards_all_sim2real_flags_to_runner(monkeypatch, tmp_path):
+    """Verify train_ppo passes all 7 Sim2Real parameters through to ParallelSimRunner."""
+    import tools.train.train_ppo as train_ppo_mod
+
+    captured_kwargs = {}
+    orig_runner = train_ppo_mod.ParallelSimRunner
+
+    class _SpyRunner(orig_runner):
+        def __init__(self, *args, **kwargs):
+            captured_kwargs.update(kwargs)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(train_ppo_mod, "ParallelSimRunner", _SpyRunner)
+
+    train_ppo_mod.train_ppo(
+        save_path=tmp_path / "sim2real_ppo.pt",
+        dry_run=True,
+        num_envs=2,
+        rollout_steps=2,
+        max_iterations=1,
+        verbose=False,
+        enable_limp_fall=True,
+        limp_kp_scale=0.33,
+        enable_head_ema_penalty=True,
+        action_over_limit_threshold=0.92,
+        enable_battery_sag=True,
+        encoder_bias_rad=0.015,
+        imu_mount_max_rad=0.08,
+        delay_joint_vel_obs=True,
+    )
+
+    assert captured_kwargs["enable_limp_fall"] is True
+    assert captured_kwargs["limp_kp_scale"] == pytest.approx(0.33)
+    assert captured_kwargs["enable_head_ema_penalty"] is True
+    assert captured_kwargs["action_over_limit_threshold"] == pytest.approx(0.92)
+    assert captured_kwargs["enable_battery_sag"] is True
+    assert captured_kwargs["encoder_bias_rad"] == pytest.approx(0.015)
+    assert captured_kwargs["imu_mount_max_rad"] == pytest.approx(0.08)
+    assert captured_kwargs["delay_joint_vel_obs"] is True
+

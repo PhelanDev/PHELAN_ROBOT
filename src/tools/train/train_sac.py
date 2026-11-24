@@ -341,7 +341,11 @@ def train_sac(
             return obs_rms.normalize(raw_obs)
 
         norm_obs = prep_obs(obs, update_stats=True)
+        last_dr_step = 0
         while collected < total_steps:
+            if collected - last_dr_step >= 500:
+                runner.randomize_dynamics()
+                last_dr_step = collected
             if collected < warmup_steps:
                 acts = np.random.uniform(-1.0, 1.0, size=(num_envs, act_dim)).astype(np.float32)
             else:

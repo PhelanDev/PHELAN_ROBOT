@@ -40,6 +40,7 @@ from sim.env.env_config import (
     compute_observations,
     compute_rewards,
     compute_gait_phase,
+    compute_slewed_posture_target,
     quat_rotate_inverse,
     quat_to_yaw,
     scale_actions,
@@ -730,6 +731,10 @@ class ParallelSimRunner:
                 self.model.body_ipos[self.base_body_id] += self.rng.uniform(-com_delta, com_delta, size=3)
             mujoco.mj_setConst(self.model, self._dynamics_data)
 
+    def randomize_dynamics(self) -> None:
+        """Randomize shared model dynamics at synchronized batch/episode boundaries."""
+        self._randomize_model_dynamics()
+
     def reset_env(self, env_idx: int) -> np.ndarray:
         """Reset a single environment with random velocity commands."""
         d = self.datas[env_idx]
@@ -1181,14 +1186,46 @@ class ParallelSimRunner:
         )
         vx_world_before = np.array([d.qvel[0] for d in self.datas], dtype=np.float64)
 
-        # 1. Apply optional actuator delay queue and scale actions around nominal stance
+        if self.posture_ramp_s > 0.0:
+            posture_active = (self.cmd_modes == int(LocomotionMode.SIT)) | (self.cmd_modes == int(LocomotionMode.LIE))
+            blend_step = float(self.control_dt / self.posture_ramp_s)
+            self.posture_blend = np.where(
+                posture_active,
+                np.clip(self.posture_blend + blend_step, 0.0, 1.0),
+                0.0,
+            ).astype(np.float32)
+
+        # 1. Apply optional actuator delay queue and scale actions around nominal stance (or slewed posture)
         if self.max_action_delay_steps > 0:
             self.action_delay_buffer[:, 1:, :] = self.action_delay_buffer[:, :-1, :]
             self.action_delay_buffer[:, 0, :] = actions
             exec_actions = self.action_delay_buffer[np.arange(self.num_envs), self.env_action_delay]
         else:
             exec_actions = actions
-        scaled_targets = scale_actions(exec_actions, self.cfg, nominal_centered=True)
+        if self.encode_posture_commands:
+            posture_mask = (self.cmd_modes == int(LocomotionMode.SIT)) | (self.cmd_modes == int(LocomotionMode.LIE))
+            if np.any(posture_mask):
+                alphas = (
+                    self.posture_blend
+                    if self.posture_ramp_s > 0.0
+                    else np.ones(self.num_envs, dtype=np.float32)
+                )
+                slewed_centers, _ = compute_slewed_posture_target(alphas, self.cmd_modes)
+                nominal_centers = np.where(
+                    posture_mask[:, None],
+                    slewed_centers,
+                    self.cfg.nominal_qpos[None, :],
+                )
+                clipped_act = np.clip(np.asarray(exec_actions, dtype=np.float32), -1.0, 1.0)
+                scaled_targets = np.clip(
+                    nominal_centers + clipped_act * self.cfg.action_scales,
+                    self.cfg.low_limits,
+                    self.cfg.high_limits,
+                ).astype(np.float32)
+            else:
+                scaled_targets = scale_actions(exec_actions, self.cfg, nominal_centered=True)
+        else:
+            scaled_targets = scale_actions(exec_actions, self.cfg, nominal_centered=True)
 
         if self.enable_auto_recovery:
             for i in range(self.num_envs):
@@ -1381,15 +1418,6 @@ class ParallelSimRunner:
         else:
             target_yaw = np.zeros(self.num_envs, dtype=np.float32)
 
-        if self.posture_ramp_s > 0.0:
-            posture_active = (self.cmd_modes == int(LocomotionMode.SIT)) | (self.cmd_modes == int(LocomotionMode.LIE))
-            blend_step = float(self.control_dt / self.posture_ramp_s)
-            self.posture_blend = np.where(
-                posture_active,
-                np.clip(self.posture_blend + blend_step, 0.0, 1.0),
-                0.0,
-            ).astype(np.float32)
-
         if self.enable_head_ema_penalty:
             target_head = (
                 EMOTION_TARGET_HEAD_ARRAY[self.current_emotions]
@@ -1578,7 +1606,7 @@ class ParallelSimRunner:
                     self.completed_distances_x.append(float(root_x[i]))
                     self.completed_distances_y.append(float(root_y[i]))
                     next_obs[i] = self.reset_env(i)
-                if self.num_envs > 1:
+                if self.num_envs > 1 and np.all(dones):
                     self._randomize_model_dynamics()
             fast_info = {
                 "time_outs": time_outs,
@@ -1636,7 +1664,7 @@ class ParallelSimRunner:
                 infos[i]["terminal_obs"] = next_obs[i].copy()
                 infos[i]["terminal_critic_obs"] = self.get_privileged_obs(raw_obs=next_obs[i:i+1], env_indices=[i])[0]
                 next_obs[i] = self.reset_env(i)
-            if self.num_envs > 1:
+            if self.num_envs > 1 and np.all(dones):
                 self._randomize_model_dynamics()
 
         return next_obs, rewards, dones, infos

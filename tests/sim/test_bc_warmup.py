@@ -205,3 +205,75 @@ def test_save_bc_checkpoint_includes_obs_rms(tmp_path: Path):
         verbose=False,
     )
     assert res["success"] is True
+
+
+def test_bc_critic_53d_and_dagger_rms_no_double_count(tmp_path: Path):
+    """Verify save_bc_checkpoint persists critic_obs_dim + critic_obs_rms and DAgger updates RMS only on new slices."""
+    import torch
+    from sim.env.run_parallel_sim import ParallelSimRunner
+    from tools.train.pretrain_bc import train_behavior_cloning, save_bc_checkpoint
+
+    runner = ParallelSimRunner(model_path="src/robot/cyberduck_v2.xml", num_envs=2, num_threads=1, stage=0)
+    try:
+        expected_priv_dim = runner.privileged_obs_dim
+        rng = np.random.default_rng(123)
+        obs_r1 = rng.normal(size=(16, runner.obs_dim)).astype(np.float32)
+        priv_r1 = rng.normal(size=(16, expected_priv_dim)).astype(np.float32)
+        acts_r1 = rng.uniform(-0.5, 0.5, size=(16, runner.action_dim)).astype(np.float32)
+        rets_r1 = rng.normal(size=(16,)).astype(np.float32)
+    finally:
+        runner.close()
+
+    model, _ = train_behavior_cloning(
+        obs_r1,
+        acts_r1,
+        returns=rets_r1,
+        obs_dim=obs_r1.shape[1],
+        action_dim=acts_r1.shape[1],
+        epochs=2,
+        batch_size=16,
+        augment_symmetry=True,
+        critic_obs=priv_r1,
+        critic_obs_dim=expected_priv_dim,
+    )
+    assert model.critic_obs_dim == expected_priv_dim
+    assert model._bc_obs_rms.count == pytest.approx(32.0, abs=1e-2)
+    assert model._bc_critic_obs_rms.count == pytest.approx(32.0, abs=1e-2)
+
+    # Round 2 DAgger appends 16 new samples; passing update_rms_slice avoids recounting Round 1.
+    obs_r2 = rng.normal(size=(16, obs_r1.shape[1])).astype(np.float32)
+    priv_r2 = rng.normal(size=(16, expected_priv_dim)).astype(np.float32)
+    acts_r2 = rng.uniform(-0.5, 0.5, size=(16, acts_r1.shape[1])).astype(np.float32)
+    rets_r2 = rng.normal(size=(16,)).astype(np.float32)
+
+    all_obs = np.concatenate([obs_r1, obs_r2], axis=0)
+    all_priv = np.concatenate([priv_r1, priv_r2], axis=0)
+    all_acts = np.concatenate([acts_r1, acts_r2], axis=0)
+    all_rets = np.concatenate([rets_r1, rets_r2], axis=0)
+
+    model, _ = train_behavior_cloning(
+        all_obs,
+        all_acts,
+        returns=all_rets,
+        obs_dim=all_obs.shape[1],
+        action_dim=all_acts.shape[1],
+        epochs=2,
+        batch_size=16,
+        obs_rms=model._bc_obs_rms,
+        augment_symmetry=True,
+        init_model=model,
+        critic_obs=all_priv,
+        critic_obs_dim=expected_priv_dim,
+        critic_obs_rms=model._bc_critic_obs_rms,
+        update_rms_slice=slice(16, 32),
+    )
+    assert model._bc_obs_rms.count == pytest.approx(64.0, abs=1e-2)
+    assert model._bc_critic_obs_rms.count == pytest.approx(64.0, abs=1e-2)
+
+    ckpt_path = tmp_path / "bc_asymmetric.pt"
+    save_bc_checkpoint(ckpt_path, model, obs_dim=all_obs.shape[1], action_dim=all_acts.shape[1])
+    ckpt = torch.load(str(ckpt_path), map_location="cpu", weights_only=False)
+    assert ckpt["critic_obs_dim"] == expected_priv_dim
+    assert "critic_obs_rms" in ckpt
+    assert ckpt["critic_obs_rms"]["count"] == pytest.approx(64.0, abs=1e-2)
+
