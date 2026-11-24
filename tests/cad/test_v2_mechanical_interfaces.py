@@ -290,7 +290,16 @@ def test_wave15_dfam_wall_fixes_hold_without_thin_wafers():
         hits = hc.find_intersection_points(Axis(Vector(x_p, 48.0, -35.0), Vector(0, 0, 1)))
         zs = sorted(pt.Z for pt, _ in hits if pt.Z > -32.0)
         assert len(zs) >= 2 and zs[-1] - zs[0] >= 2.3, (x_p, zs)
-    assert parts['foot_L'][0].is_inside(Vector(-18.0, 15.0, 2.4))
+    foot = parts['foot_L'][0]
+    assert foot.is_inside(Vector(-18.0, 15.0, 2.4))
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            assert foot.is_inside(Vector(-2.0 + sx * 14.8, sy * 12.7, 1.5)), (sx, sy)
+    for x in (-14.0, -6.0, 2.0, 10.0):
+        for y in (-6.0, 0.0, 6.0):
+            hits = foot.find_intersection_points(Axis(Vector(x, y, -10.0), Vector(0, 0, 1)))
+            zs = sorted(pt.Z for pt, _ in hits)
+            assert len(zs) >= 2 and zs[1] - zs[0] >= 2.0, (x, y, zs)
 
     for name, (shape, mat, _, _) in parts.items():
         if mat == "EVA":
