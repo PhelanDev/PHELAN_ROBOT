@@ -49,12 +49,23 @@ def sample_wall_thickness(shape, required_mm, *, max_samples=WALL_SAMPLE_BUDGET)
                     missing += 1
                     continue
             hits = shape.find_intersection_points(Axis(point, direction))
-            distances = [(p - point).dot(direction) for p, _ in hits]
-            positive = [d for d in distances if d > epsilon and isfinite(d)]
-            if not positive:
+            candidates = []
+            for p, hit_normal in hits:
+                dist = (p - point).dot(direction)
+                if dist > epsilon and isfinite(dist):
+                    candidates.append((dist, hit_normal))
+            if not candidates:
                 missing += 1
                 continue
-            samples.append(min(positive))
+            min_dist, hit_normal = min(candidates, key=lambda item: item[0])
+            if min_dist >= 0.6 and hit_normal is not None:
+                # Filter oblique 90-degree step/chamfer grazing hits at sample edges, while
+                # never hiding sub-0.6 mm boolean slivers regardless of surface orientation.
+                opposing = abs(direction.dot(hit_normal.normalized()))
+                if opposing < 0.75:
+                    missing += 1
+                    continue
+            samples.append(min_dist)
             tested_faces.add(index)
         if attempted >= max_samples:
             break

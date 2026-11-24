@@ -26,7 +26,8 @@ def servo_mount():
 
 
 def horn_plate(thickness=3):
-    plate = ring(26, 9, thickness)
+    # Ø5.56 mm center bore clears M3x6 shaft-screw head (Ø5.5 mm) while leaving >=2.52 mm to horn M3 holes.
+    plate = ring(26, 5.56, thickness)
     for x, y in ((7, 0), (-7, 0), (0, 7), (0, -7)):
         plate -= cylinder(M3_CLEAR, thickness + 2, (x, y, -1))
     return plate
@@ -88,7 +89,7 @@ def clevis(double=False):
 
 
 def insert_boss(x, y, z=0, height=9):
-    return cylinder(9.0, height, (x, y, z)) - cylinder(
+    return cylinder(9.2, height, (x, y, z)) - cylinder(
         M3_INSERT, M3_INSERT_DEPTH, (x, y, z + height - M3_INSERT_DEPTH))
 
 

@@ -45,9 +45,9 @@ def harnesses(variant):
             ('trunk_base', (-51, 0, 40)),
             ('neck', (-44, 0, 20)),
             ('neck', (-46, 0, 38)),
-            ('neck', (-44, 0, 52)),
+            ('neck', (-46.5, 0, 50)),
             ('head', (-52 + HEAD_FORWARD, 4, 24)),
-            ('head', (-34 + HEAD_FORWARD, 4, 24)),
+            ('head', (-39 + HEAD_FORWARD, 4, 24)),
         ), diameter, 240.0, installed_length_mm=240.0),
         # Vertical power trunk from XT30 exit up behind the logic buck.
         Harness('main_power', (

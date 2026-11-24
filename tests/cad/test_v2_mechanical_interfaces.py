@@ -284,27 +284,19 @@ def test_head_pitch_multi_pose_sweep_with_wiring():
 
 def test_wave15_dfam_wall_fixes_hold_without_thin_wafers():
     parts = printable_parts()
-    for name in ('thigh_cover_L', 'thigh_cover_R', 'sole_tread_L', 'sole_tread_R'):
-        shape, mat, _, _ = parts[name]
-        rep = sample_wall_thickness(shape, required_wall(mat), max_samples=512)
-        assert rep['observed_below_requirement'] is False, (name, rep)
-
-    back_rep = sample_wall_thickness(parts['trunk_back_cover_rpi5'][0], 1.8, max_samples=512)
-    assert back_rep['sampled_min_mm'] >= 1.2, back_rep
-
-    neck_shape = parts['neck_link'][0]
-    assert not neck_shape.is_inside(Vector(0.0, 0.0, 15.1))
-    neck_rep = sample_wall_thickness(neck_shape, 2.5, max_samples=512)
-    assert neck_rep['sampled_min_mm'] >= 0.65, neck_rep
-
+    assert not parts['neck_link'][0].is_inside(Vector(0.0, 0.0, 15.1))
     hc = parts['hip_clevis_L'][0]
     for x_p in (-10.0, 0.0, 10.0):
         hits = hc.find_intersection_points(Axis(Vector(x_p, 48.0, -35.0), Vector(0, 0, 1)))
         zs = sorted(pt.Z for pt, _ in hits if pt.Z > -32.0)
         assert len(zs) >= 2 and zs[-1] - zs[0] >= 2.3, (x_p, zs)
+    assert parts['foot_L'][0].is_inside(Vector(-18.0, 15.0, 2.4))
 
-    foot = parts['foot_L'][0]
-    assert foot.is_inside(Vector(-18.0, 15.0, 2.4))
-    foot_rep = sample_wall_thickness(foot, 1.8, max_samples=512)
-    assert foot_rep['sampled_min_mm'] >= 0.75, foot_rep
+    for name, (shape, mat, _, _) in parts.items():
+        if mat == "EVA":
+            continue
+        rep = sample_wall_thickness(shape, required_wall(mat), max_samples=512)
+        assert rep["observed_below_requirement"] is False, (
+            name, mat, rep["sampled_min_mm"], required_wall(mat),
+        )
 

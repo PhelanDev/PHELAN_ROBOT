@@ -37,12 +37,12 @@ def module_frames(variant):
 def backpack(variant):
     depth = DEPTH[variant]
     width = WIDTH[variant]
-    wall = 1.82
+    wall = 1.84
     collar = 7.8  # Extends forward to X_trunk=-52.2 mm, mating torso cleanly with 0.2 mm clearance.
     # Sealed octagonal dorsal pack with closed front bulkhead wall (zero exposed PCB on overhanging wings).
     outer = Box(104, width, depth)
     inner = Box(104 - 2 * wall, width - 2 * wall, depth - 2 * wall)
-    cham = 9.5 if depth > 35 else 6.0
+    cham = 7.5 if depth > 35 else 6.0
     bevels = (
         ((0.707, 0.0, 0.707), (52.0 - cham / 2, 0.0, depth / 2 - cham / 2)),
         ((-0.707, 0.0, 0.707), (-52.0 + cham / 2, 0.0, depth / 2 - cham / 2)),
@@ -84,28 +84,38 @@ def backpack(variant):
 
     floor = -depth / 2 + ARMOR_WALL
     for x, y in TRAY_MOUNTS:
-        housing += cylinder(8.4, POST_HEIGHT + (ARMOR_WALL - wall), (x, y, -depth / 2 + wall))
+        housing += cylinder(7.8 if variant == 'rpi5' else 8.4, POST_HEIGHT + (ARMOR_WALL - wall), (x, y, -depth / 2 + wall))
         housing += box((8, 4.0, POST_HEIGHT),
                        (48 if x > 0 else -48, y, floor + POST_HEIGHT / 2))
-    # Focused rear heatsink cooling louvres without exposing side/top/bottom PCBs.
-    for x_slit in (-31, -24, -17, -10, -3, 4, 11, 18):
-        housing -= box((4.2, 50.0, 10.0), (x_slit, -16 if variant == 'rpi5' else 0, depth / 2))
+    # Focused rear heatsink cooling louvres + secondary rpi5 +Y vent slots to reduce dorsal overhang mass.
+    slit_w = 5.05 if variant == 'rpi5' else 4.2
+    rear_xs = (-31, -24, -17, -10, -3, 4, 11, 18, 25) if variant == 'rpi5' else (-31, -24, -17, -10, -3, 4, 11, 18)
+    for x_slit in rear_xs:
+        housing -= box((slit_w, 54.0 if variant == 'rpi5' else 50.0, 10.0), (x_slit, -16 if variant == 'rpi5' else 0, depth / 2))
+    if variant == 'rpi5':
+        for x_slit in (-38, -31, -24, -17, -10, -3, 4, 11, 18, 25):
+            housing -= box((slit_w, 54.0, 10.0), (x_slit, 28.0, depth / 2))
+        housing -= box((slit_w, 54.0, 10.0), (-38, -16.0, depth / 2))
+        # Open shielded torso-facing cooling & cable passthrough >=5.5 mm clear of head_harness X=25.5.
+        housing -= box((44.0, 78.0, 10.0), (4.0, 0.0, -depth / 2))
+        housing -= box((72.0, 10.0, 18.0), (-4.0, 59.0, 0.0))
+        housing -= box((10.0, 84.0, 18.0), (-52.0, 0.0, 0.0))
     # Minimal wire portals: narrow center-spine head_harness channel behind neck + flush collar-only leg exits backed by solid wall.
     housing -= box((28.0, 13.0, collar + 5.8), (39.5, 0, -depth / 2 - collar / 2 + 1.9))
     for sy in (-1, 1):
         housing -= box((16.0, 12.0, collar + 0.4), (-3.5, sy * 48.0, -depth / 2 - (collar + 0.4) / 2))
     # Compact, low-profile Pi 4B prioritized I/O bays (also fits Pi 5) plus pizero2w & esp32s3 slots.
     if variant == 'rpi5':
-        housing -= box((10.0, 44.0, 13.0), (50.0, -16.0, 5.0))
-        housing -= box((44.0, 10.0, 7.0), (-10.0, -58.0, -1.0))
+        housing -= box((10.0, 42.0, 12.0), (50.0, -15.5, 4.5))
+        housing -= box((60.0, 10.0, 16.0), (-6.0, -58.0, 0.0))
     elif variant == 'pizero2w':
         housing -= box((43, 12, 7.0), (0, -51, 0))
         housing -= box((12, 22, 6.0), (-49, 0, 0))
     else:
         housing -= box((12, 28, 8.0), (49, 0, 0))
+    # 5.6 mm deep insert pocket preserves >=2.6 mm solid PLA floor under TRAY_MOUNTS while clearing m3x8 tips.
     for x, y in TRAY_MOUNTS:
-        housing -= cylinder(M3_INSERT, M3_INSERT_DEPTH,
-                            (x, y, floor + POST_HEIGHT - M3_INSERT_DEPTH))
+        housing -= cylinder(M3_INSERT, 5.6, (x, y, floor + POST_HEIGHT - 5.6))
     return housing.clean()
 
 
@@ -114,7 +124,9 @@ def backpack_hatch(variant):
     for x, y in lid_mounts(variant):
         part -= cylinder(M3_CLEAR, 5, (x, y, -2.5))
     for x in (-32, -16, 0, 16, 32):
-        part -= box((9, 40, 5), (x, 0, 0))
+        # Clear thruster nozzle collars around x=10, y=±28, r=8.3 while lengthening unobstructed slots for rpi5.
+        w_y = 74.0 if (variant == 'rpi5' and x in (-32, -16, 32)) else 38.0
+        part -= box((11.8 if variant == 'rpi5' else 9.0, w_y, 5), (x, 0, 0))
     for y in (-28, 28):
         part -= cylinder(16.6, 5, (10, y, -2.5))
     return part
