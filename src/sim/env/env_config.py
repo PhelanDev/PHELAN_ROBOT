@@ -212,7 +212,10 @@ class MicroDuck8DoFConfig:
             "heading_penalty": -2.0,
             "leg_pose_penalty": -0.10,
             "gait_sync": 1.2,
+            "gait_imitation": 0.6,
             "forward_progress": 40.0,
+            "head_ema_penalty": -0.5,
+            "action_over_limit_penalty": -0.2,
         }
     )
 
@@ -449,6 +452,113 @@ def compute_gait_phase(
     return phase, clock_sin, clock_cos
 
 
+def compute_reference_gait_targets(
+    clock_sin: Union[float, np.ndarray],
+    clock_cos: Union[float, np.ndarray],
+    roll_amp: float = 0.06,
+    pitch_amp: float = 0.07,
+    knee_amp: float = 0.06,
+) -> np.ndarray:
+    """Compute phase-locked 8D reference joint targets synchronized with gait_sync."""
+    c_sin = np.asarray(clock_sin, dtype=np.float32)
+    c_cos = np.asarray(clock_cos, dtype=np.float32)
+    is_scalar = (c_sin.ndim == 0) and (c_cos.ndim == 0)
+    s_b, c_b = np.broadcast_arrays(c_sin, c_cos)
+    s = np.atleast_1d(s_b).astype(np.float32)
+    c = np.atleast_1d(c_b).astype(np.float32)
+
+    l_lift = np.maximum(0.0, s)
+    r_lift = np.maximum(0.0, -s)
+    l_roll = -float(roll_amp) * s
+    r_roll = -float(roll_amp) * s
+    l_pitch = -0.15 - 0.5 * float(knee_amp) * l_lift + float(pitch_amp) * c
+    r_pitch = -0.15 - 0.5 * float(knee_amp) * r_lift - float(pitch_amp) * c
+    l_knee = 0.15 + float(knee_amp) * l_lift
+    r_knee = 0.15 + float(knee_amp) * r_lift
+    head_yaw = 0.05 * s
+    head_pitch = np.full_like(s, 0.02, dtype=np.float32)
+
+    targets = np.stack(
+        [head_yaw, head_pitch, l_roll, l_pitch, l_knee, r_roll, r_pitch, r_knee],
+        axis=-1,
+    )
+    clamped = np.clip(targets, JOINT_LIMITS[:, 0], JOINT_LIMITS[:, 1]).astype(np.float32)
+    return clamped[0] if is_scalar else clamped
+
+
+def compute_slewed_posture_target(
+    alpha: Union[float, np.ndarray],
+    mode: Union[int, np.ndarray, LocomotionMode],
+    start_z: float = 0.128,
+) -> Tuple[np.ndarray, Union[float, np.ndarray]]:
+    """Interpolate target joint angles and torso height between standing and SIT/LIE posture."""
+    a_arr = np.asarray(alpha, dtype=np.float32)
+    m_arr = np.asarray(mode, dtype=np.int32)
+    is_scalar = (a_arr.ndim == 0) and (m_arr.ndim == 0)
+    a_b, m_b = np.broadcast_arrays(a_arr, m_arr)
+    blend = np.clip(np.atleast_1d(a_b), 0.0, 1.0).astype(np.float32)
+    modes = np.atleast_1d(m_b)
+
+    tgt_q = np.broadcast_to(DEFAULT_NOMINAL_QPOS, (modes.shape[0], 8)).copy()
+    tgt_z = np.full(modes.shape[0], float(start_z), dtype=np.float32)
+    sit_mask = (modes == int(LocomotionMode.SIT))
+    lie_mask = (modes == int(LocomotionMode.LIE))
+    if np.any(sit_mask):
+        tgt_q[sit_mask] = SIT_NOMINAL_QPOS
+        tgt_z[sit_mask] = float(TARGET_SIT_HEIGHT)
+    if np.any(lie_mask):
+        tgt_q[lie_mask] = LIE_NOMINAL_QPOS
+        tgt_z[lie_mask] = float(TARGET_LIE_HEIGHT)
+
+    q_out = ((1.0 - blend[:, None]) * DEFAULT_NOMINAL_QPOS[None, :] + blend[:, None] * tgt_q).astype(np.float32)
+    z_out = ((1.0 - blend) * float(start_z) + blend * tgt_z).astype(np.float32)
+    if is_scalar:
+        return q_out[0], float(z_out[0])
+    return q_out, z_out
+
+
+def compute_action_over_limit_penalty(
+    raw_actions: np.ndarray,
+    limit_threshold: float = 0.95,
+) -> Union[float, np.ndarray]:
+    """Penalize raw normalized actions whose magnitude exceeds limit_threshold."""
+    act = np.asarray(raw_actions, dtype=np.float32)
+    excess = np.maximum(0.0, np.abs(act) - float(limit_threshold))
+    pen = np.sum(np.square(excess), axis=-1)
+    return float(pen) if act.ndim <= 1 else pen.astype(np.float32)
+
+
+def compute_battery_sag_torque_limit(
+    torques: np.ndarray,
+    v_in: Union[float, np.ndarray],
+    k_drop: Union[float, np.ndarray],
+    nominal_torque_limit: float = 1.0,
+    v_nominal: float = 7.4,
+    v_min: float = 5.0,
+) -> Union[float, np.ndarray]:
+    """Compute effective actuator torque ceiling under load-dependent battery voltage sag."""
+    t_arr = np.asarray(torques, dtype=np.float32)
+    load = np.sum(np.abs(t_arr), axis=-1)
+    v_eff = np.maximum(float(v_min), np.asarray(v_in, dtype=np.float32) - np.asarray(k_drop, dtype=np.float32) * load)
+    limit = float(nominal_torque_limit) * np.minimum(1.0, v_eff / float(v_nominal))
+    return float(limit) if t_arr.ndim <= 1 else limit.astype(np.float32)
+
+
+def small_angle_rotation_matrix(axis: np.ndarray, angle_rad: float) -> np.ndarray:
+    """Compute 3x3 Rodrigues rotation matrix for fixed per-episode IMU mounting misalignment."""
+    u = np.asarray(axis, dtype=np.float32).ravel()[:3]
+    norm = float(np.linalg.norm(u))
+    theta = float(angle_rad)
+    if norm < 1e-8 or abs(theta) < 1e-12:
+        return np.eye(3, dtype=np.float32)
+    u = u / norm
+    K = np.array(
+        [[0.0, -u[2], u[1]], [u[2], 0.0, -u[0]], [-u[1], u[0], 0.0]],
+        dtype=np.float32,
+    )
+    return (np.eye(3, dtype=np.float32) + np.sin(theta) * K + (1.0 - np.cos(theta)) * (K @ K)).astype(np.float32)
+
+
 def ang_vel_mask(d_min: Union[float, np.ndarray]) -> np.ndarray:
     """Mask tracking_ang_vel when close to obstacles to allow robot to turn away freely.
 
@@ -597,6 +707,11 @@ def compute_rewards(
     standstill_time: Optional[Union[float, np.ndarray]] = None,
     swing_valid: Optional[np.ndarray] = None,
     return_components: bool = False,
+    clock_cos: Optional[Union[float, np.ndarray]] = None,
+    posture_blend: Optional[Union[float, np.ndarray]] = None,
+    multiplicative_posture_reward: bool = False,
+    head_err_ema: Optional[np.ndarray] = None,
+    action_over_limit_threshold: Optional[float] = None,
 ) -> Union[
     Dict[str, Union[float, np.ndarray]],
     Tuple[Dict[str, Union[float, np.ndarray]], Dict[str, Union[float, np.ndarray]]],
@@ -1017,10 +1132,27 @@ def compute_rewards(
         else:
             r_head_pos_penalty = float(pen_head)
 
+    if head_err_ema is not None:
+        ema_arr = np.asarray(head_err_ema, dtype=np.float32)
+        raw_head_ema = np.sum(np.abs(ema_arr), axis=-1)
+        r_head_ema = raw_head_ema.astype(np.float32) if is_batch else float(raw_head_ema)
+    else:
+        r_head_ema = np.zeros(base_lin.shape[0], dtype=np.float32) if is_batch else 0.0
+
     # 12. Sitting posture and height reward
+    if posture_blend is not None:
+        sit_tgt_q, sit_tgt_z = compute_slewed_posture_target(posture_blend, int(LocomotionMode.SIT))
+        sit_legs = sit_tgt_q[..., 2:8]
+        lie_tgt_q, lie_tgt_z = compute_slewed_posture_target(posture_blend, int(LocomotionMode.LIE))
+        lie_legs = lie_tgt_q[..., 2:8]
+    else:
+        sit_legs = SIT_NOMINAL_QPOS[2:8]
+        sit_tgt_z = TARGET_SIT_HEIGHT
+        lie_legs = LIE_NOMINAL_QPOS[2:8]
+        lie_tgt_z = TARGET_LIE_HEIGHT
+
     if joint_pos is not None:
         q_legs = np.asarray(joint_pos, dtype=np.float32)[..., 2:8]
-        sit_legs = SIT_NOMINAL_QPOS[2:8]
         pose_err_sq = np.sum(np.square(q_legs - sit_legs), axis=-1)
         r_sit_pose = np.exp(-pose_err_sq / 0.20)
     else:
@@ -1028,12 +1160,12 @@ def compute_rewards(
 
     if root_z is not None:
         rz = np.asarray(root_z, dtype=np.float32)
-        height_err_sq = np.square(rz - TARGET_SIT_HEIGHT)
+        height_err_sq = np.square(rz - sit_tgt_z)
         r_sit_height = np.exp(-height_err_sq / 0.005)
     else:
         r_sit_height = np.zeros(base_lin.shape[0], dtype=np.float32) if is_batch else 0.0
 
-    r_sit_raw = 0.5 * r_sit_pose + 0.5 * r_sit_height
+    r_sit_raw = (r_sit_pose * r_sit_height * r_upright) if multiplicative_posture_reward else (0.5 * r_sit_pose + 0.5 * r_sit_height)
     if is_batch:
         r_sit = np.where(is_sit, r_sit_raw, 0.0).astype(np.float32)
     else:
@@ -1042,7 +1174,6 @@ def compute_rewards(
     # 13. Lying posture and height reward
     if joint_pos is not None:
         q_legs = np.asarray(joint_pos, dtype=np.float32)[..., 2:8]
-        lie_legs = LIE_NOMINAL_QPOS[2:8]
         lie_pose_err_sq = np.sum(np.square(q_legs - lie_legs), axis=-1)
         r_lie_pose = np.exp(-lie_pose_err_sq / 0.20)
     else:
@@ -1050,12 +1181,16 @@ def compute_rewards(
 
     if root_z is not None:
         rz = np.asarray(root_z, dtype=np.float32)
-        lie_height_err_sq = np.square(rz - TARGET_LIE_HEIGHT)
+        lie_height_err_sq = np.square(rz - lie_tgt_z)
         r_lie_height = np.exp(-lie_height_err_sq / 0.003)
     else:
         r_lie_height = np.zeros(base_lin.shape[0], dtype=np.float32) if is_batch else 0.0
 
-    r_lie_raw = 0.5 * r_lie_pose + 0.5 * r_lie_height
+    if multiplicative_posture_reward:
+        lie_orient_gate = np.where(grav[..., 2] <= 0.0, np.exp(-np.square(grav[..., 1]) / 0.25), 0.0)
+        r_lie_raw = r_lie_pose * r_lie_height * lie_orient_gate
+    else:
+        r_lie_raw = 0.5 * r_lie_pose + 0.5 * r_lie_height
     if is_batch:
         r_lie = np.where(is_lie, r_lie_raw, 0.0).astype(np.float32)
     else:
@@ -1178,12 +1313,35 @@ def compute_rewards(
             r_gait_sync = float(
                 w_gait_sync * sync_score * fwd_gate * mode_gate * dwell_gate * contact_gate * swing_gate
             )
+        if clock_cos is not None and joint_pos is not None:
+            q_ref = compute_reference_gait_targets(c_sin, clock_cos)
+            leg_err_sq = np.sum(np.square(np.asarray(joint_pos, dtype=np.float32)[..., 2:8] - q_ref[..., 2:8]), axis=-1)
+            imitation_score = np.exp(-leg_err_sq / 0.15)
+            w_gait_imitation = float(weights.get("gait_imitation", 0.6))
+            if is_batch:
+                r_gait_imitation = (
+                    w_gait_imitation * imitation_score * fwd_gate * mode_gate * dwell_gate * contact_gate
+                ).astype(np.float32)
+            else:
+                r_gait_imitation = float(
+                    w_gait_imitation * float(imitation_score) * fwd_gate * mode_gate * dwell_gate * contact_gate
+                )
+        else:
+            r_gait_imitation = np.zeros(base_lin.shape[0], dtype=np.float32) if is_batch else 0.0
     else:
         r_gait_sync = np.zeros(base_lin.shape[0], dtype=np.float32) if is_batch else 0.0
+        r_gait_imitation = np.zeros(base_lin.shape[0], dtype=np.float32) if is_batch else 0.0
 
     w_limit = weights.get("joint_limit_penalty", -0.2)
     limit_scale = -w_limit if w_limit < 0 else w_limit
     zero_val = np.zeros(base_lin.shape[0], dtype=np.float32) if is_batch else 0.0
+
+    if actions is not None and action_over_limit_threshold is not None:
+        r_action_over_limit = compute_action_over_limit_penalty(
+            actions, limit_threshold=float(action_over_limit_threshold)
+        )
+    else:
+        r_action_over_limit = np.zeros(base_lin.shape[0], dtype=np.float32) if is_batch else 0.0
 
     raw_weighted_terms: Dict[str, Union[float, np.ndarray]] = {
         "tracking_lin_vel": weights.get("tracking_lin_vel", 3.0) * r_track_lin_vel,
@@ -1215,7 +1373,10 @@ def compute_rewards(
         "heading_penalty": r_heading,
         "leg_pose_penalty": r_leg_pose,
         "gait_sync": r_gait_sync,
+        "gait_imitation": r_gait_imitation,
         "forward_progress": r_forward_progress,
+        "head_ema_penalty": weights.get("head_ema_penalty", -0.5) * r_head_ema,
+        "action_over_limit_penalty": weights.get("action_over_limit_penalty", -0.2) * r_action_over_limit,
     }
 
     if not is_batch:
@@ -1257,7 +1418,10 @@ def compute_rewards(
             "heading_penalty": float(r_heading),
             "leg_pose_penalty": float(r_leg_pose),
             "gait_sync": float(r_gait_sync),
+            "gait_imitation": float(r_gait_imitation),
             "forward_progress": float(r_forward_progress),
+            "head_ema_penalty": float(r_head_ema),
+            "action_over_limit_penalty": float(r_action_over_limit),
         }
         return (reward_dict, weighted_terms) if return_components else reward_dict
 
@@ -1302,7 +1466,14 @@ def compute_rewards(
         "heading_penalty": r_heading.astype(np.float32),
         "leg_pose_penalty": r_leg_pose.astype(np.float32),
         "gait_sync": r_gait_sync.astype(np.float32),
+        "gait_imitation": r_gait_imitation.astype(np.float32),
         "forward_progress": r_forward_progress.astype(np.float32),
+        "head_ema_penalty": r_head_ema.astype(np.float32),
+        "action_over_limit_penalty": (
+            r_action_over_limit.astype(np.float32)
+            if isinstance(r_action_over_limit, np.ndarray)
+            else np.full(base_lin.shape[0], float(r_action_over_limit), dtype=np.float32)
+        ),
     }
     return (reward_dict_batch, weighted_terms_batch) if return_components else reward_dict_batch
 

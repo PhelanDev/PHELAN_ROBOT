@@ -27,6 +27,7 @@ from sim.env.env_config import (
     scale_actions,
     clip_action_rates,
 )
+from sim.behaviors.self_righting import FallPredictor
 from robot.robot_spec import DEFAULT_ONNX_PATH, MODEL_NAME
 
 # Optional hardware libraries
@@ -162,6 +163,7 @@ class MPU6050FilterReader:
         kp: float = 1.0,
         ki: float = 0.05,
         impact_threshold: float = 0.30,
+        ready_confirm_samples: int = 10,
     ):
         self.address = address
         self.mock = mock or (smbus is None)
@@ -169,6 +171,8 @@ class MPU6050FilterReader:
         self.kp = float(kp)
         self.ki = float(ki)
         self.impact_threshold = float(impact_threshold)
+        self.ready_confirm_samples = max(1, int(ready_confirm_samples))
+        self.valid_startup_samples = 0
 
         # Mahony AHRS quaternion [qw, qx, qy, qz] & integral feedback error
         self.q = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
@@ -197,6 +201,15 @@ class MPU6050FilterReader:
             except (OSError, RuntimeError) as e:
                 print(f"[IMU] Real I2C MPU6050 unavailable ({e}), using mock/fallback.")
                 self.mock = True
+
+    @property
+    def imu_ready(self) -> bool:
+        """Return True once IMU has emitted enough finite stationary 1g updates to converge."""
+        return int(getattr(self, "valid_startup_samples", 0)) >= int(getattr(self, "ready_confirm_samples", 10))
+
+    def reset_readiness(self) -> None:
+        """Reset startup convergence counter to gate fall detection during initialization."""
+        self.valid_startup_samples = 0
 
     @staticmethod
     def _decode_int16_be(hi: int, lo: int) -> int:
@@ -256,6 +269,10 @@ class MPU6050FilterReader:
             acc_norm = float(np.sqrt(acc_sq))
             # Dynamic Foot-Strike Impact Gating: gate correction if |norm - 1.0g| > 0.30g
             if abs(acc_norm - 1.0) <= self.impact_threshold:
+                confirm = int(getattr(self, "ready_confirm_samples", 10))
+                cur_samples = int(getattr(self, "valid_startup_samples", 0))
+                if cur_samples < confirm and np.all(np.isfinite([ax, ay, az, gx, gy, gz])):
+                    self.valid_startup_samples = cur_samples + 1
                 inv_norm = 1.0 / acc_norm
                 ax_n = acc[0] * inv_norm
                 ay_n = acc[1] * inv_norm
@@ -330,6 +347,10 @@ class MPU6050FilterReader:
             self.last_read_ok = True
             self.consecutive_read_errors = 0
             self.last_read_error = None
+            confirm = int(getattr(self, "ready_confirm_samples", 10))
+            cur_samples = int(getattr(self, "valid_startup_samples", 0))
+            if cur_samples < confirm:
+                self.valid_startup_samples = cur_samples + 1
             return self.filt_gyro.copy(), self.get_proj_grav()
 
         try:
@@ -383,6 +404,8 @@ class BaseRPiInferenceEngine:
         freq: float = 50.0,
         engine_name: str = "BaseRPiInferenceEngine",
         legacy_observation_schema: Optional[dict] = None,
+        deadman_timeout_s: float = 0.50,
+        standup_model_path: Optional[str] = None,
     ):
         self.engine_name = engine_name
         self.cfg = MicroDuck8DoFConfig(OBS_DIM=42)
@@ -393,6 +416,13 @@ class BaseRPiInferenceEngine:
         self.observation_schema = None
         self.episode_steps = 0
         self.mock = mock or (smbus is None)
+        self.deadman_timeout_s = max(0.0, float(deadman_timeout_s))
+        self.deadman_tripped = False
+        self._active_command = [0.0, 0.0, 0.0]
+        self._last_cmd_timestamp: Optional[float] = None
+        self.fall_predictor = FallPredictor()
+        self.safety_mode = "initializing"
+        self.nonfinite_action_drops = 0
 
         # Servo controller setup
         if self.mock:
@@ -410,39 +440,25 @@ class BaseRPiInferenceEngine:
             bus_num=i2c_bus, mock=self.mock, dt=self.dt
         )
 
-        # ONNX Model setup
+        # ONNX Model setup (walking policy + optional hot-swappable standup recovery policy)
         self.model_path = str(model_path) if model_path is not None else (None if self.mock else str(DEFAULT_ONNX_PATH))
-        self.ort_session = None
-        if self.model_path is not None and not Path(self.model_path).is_file():
-            raise FileNotFoundError(f"CyberDuck V2 ONNX policy not found: {self.model_path}; export a verified V2 checkpoint first")
-        if self.model_path and Path(self.model_path).exists():
-            if ort is None:
-                raise RuntimeError("onnxruntime is required to load ONNX model.")
-            opts = ort.SessionOptions()
-            opts.intra_op_num_threads = 4  # Utilize all 4 CPU cores
-            self.ort_session = ort.InferenceSession(self.model_path, opts)
-            self.input_name = self.ort_session.get_inputs()[0].name
-            from sim.env.policy_contract import validate_model_identity, validate_observation_schema
-            metadata = self.ort_session.get_modelmeta().custom_metadata_map
-            if metadata.get("model_name") or metadata.get("model_path"):
-                validate_model_identity(metadata, MODEL_NAME)
-            elif not self.mock:
-                raise ValueError("Hardware runtime requires CyberDuck V2 model identity in ONNX metadata")
-            raw_schema = metadata.get("observation_schema")
-            if raw_schema is None and legacy_observation_schema is None:
-                raise ValueError("Legacy policy has no observation_schema; provide an explicit verified legacy schema")
-            try:
-                schema = validate_observation_schema(json.loads(raw_schema) if raw_schema is not None else legacy_observation_schema)
-            except (TypeError, json.JSONDecodeError) as exc:
-                raise ValueError("Invalid policy observation_schema") from exc
-            if schema["obs_dim"] != 42 or self.ort_session.get_inputs()[0].shape[-1] != 42:
-                raise ValueError("RPi observation_schema requires 42 observations")
-            if not np.isclose(schema["control_dt"], self.dt, rtol=1e-7, atol=1e-10):
-                raise ValueError("Policy observation_schema control_dt does not match runtime frequency")
-            self.observation_schema = schema
-            print(f"[{self.engine_name}] Loaded ONNX policy model from {self.model_path}")
+        self.ort_session, self.input_name, self.observation_schema = self._load_onnx_policy(
+            self.model_path,
+            legacy_observation_schema=legacy_observation_schema,
+            require_identity=(not self.mock),
+            label="walking",
+        )
+        self.standup_model_path = str(standup_model_path) if standup_model_path is not None else None
+        if self.standup_model_path is not None:
+            self.standup_ort_session, self.standup_input_name, _ = self._load_onnx_policy(
+                self.standup_model_path,
+                legacy_observation_schema=legacy_observation_schema,
+                require_identity=(not self.mock),
+                label="standup",
+            )
         else:
-            print(f"[{self.engine_name}] No ONNX model provided. Running mock zero-action mode.")
+            self.standup_ort_session = None
+            self.standup_input_name = None
 
         # State tracking for rate limiting (initialized to nominal stand posture)
         self.last_targets = self.cfg.nominal_qpos.copy()
@@ -455,6 +471,97 @@ class BaseRPiInferenceEngine:
         self._warned_lidar_fallback: bool = False
         self.imu_stale_steps: int = 0
         self.last_imu_stale: bool = False
+
+    def _load_onnx_policy(
+        self,
+        model_path: Optional[str],
+        legacy_observation_schema: Optional[dict] = None,
+        require_identity: bool = True,
+        label: str = "walking",
+    ) -> Tuple[Optional[object], Optional[str], Optional[dict]]:
+        """Load and validate an ONNX policy session against V2 identity and 42D schema contracts."""
+        if model_path is not None and not Path(model_path).is_file():
+            raise FileNotFoundError(
+                f"CyberDuck V2 ONNX policy not found: {model_path}; export a verified V2 checkpoint first"
+            )
+        if not model_path or not Path(model_path).exists():
+            if label == "walking":
+                print(f"[{self.engine_name}] No ONNX model provided. Running mock zero-action mode.")
+            return None, None, None
+        if ort is None:
+            raise RuntimeError("onnxruntime is required to load ONNX model.")
+        opts = ort.SessionOptions()
+        opts.intra_op_num_threads = 4
+        session = ort.InferenceSession(model_path, opts)
+        input_name = session.get_inputs()[0].name
+        from sim.env.policy_contract import validate_model_identity, validate_observation_schema
+
+        metadata = session.get_modelmeta().custom_metadata_map
+        if metadata.get("model_name") or metadata.get("model_path"):
+            validate_model_identity(metadata, MODEL_NAME)
+        elif require_identity:
+            raise ValueError("Hardware runtime requires CyberDuck V2 model identity in ONNX metadata")
+        raw_schema = metadata.get("observation_schema")
+        if raw_schema is None and legacy_observation_schema is None:
+            raise ValueError("Legacy policy has no observation_schema; provide an explicit verified legacy schema")
+        try:
+            schema = validate_observation_schema(
+                json.loads(raw_schema) if raw_schema is not None else legacy_observation_schema
+            )
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("Invalid policy observation_schema") from exc
+        if schema["obs_dim"] != 42 or session.get_inputs()[0].shape[-1] != 42:
+            raise ValueError("RPi observation_schema requires 42 observations")
+        if not np.isclose(schema["control_dt"], self.dt, rtol=1e-7, atol=1e-10):
+            raise ValueError("Policy observation_schema control_dt does not match runtime frequency")
+        print(f"[{self.engine_name}] Loaded {label} ONNX policy model from {model_path}")
+        return session, input_name, schema
+
+    def set_velocity_command(
+        self, vx: float, vy: float, wz: float, timestamp: Optional[float] = None
+    ) -> None:
+        """Update target velocity command [vx, vy, wz] and refresh Deadman watchdog timestamp."""
+        self._active_command = [float(vx), float(vy), float(wz)]
+        self._last_cmd_timestamp = float(time.monotonic() if timestamp is None else timestamp)
+        self.deadman_tripped = False
+
+    def get_active_command(self, now: Optional[float] = None) -> List[float]:
+        """Return active velocity twist, zeroing [0, 0, 0] on Deadman timeout without going limp."""
+        if self._last_cmd_timestamp is None:
+            return list(self._active_command)
+        t_now = float(time.monotonic() if now is None else now)
+        if (t_now - self._last_cmd_timestamp) > self.deadman_timeout_s:
+            self.deadman_tripped = True
+            return [0.0, 0.0, 0.0]
+        self.deadman_tripped = False
+        return list(self._active_command)
+
+    def update_safety_state(self, base_ang_vel: np.ndarray, proj_grav: np.ndarray) -> str:
+        """Evaluate IMU readiness and analytical pre-impact fall predictor for limp/standup routing."""
+        if not bool(getattr(self.imu_reader, "imu_ready", False)):
+            self.safety_mode = "initializing"
+            return self.safety_mode
+        if self.fall_predictor.update(base_ang_vel, proj_grav, imu_ready=True):
+            self.safety_mode = "standup_recovery" if self.standup_ort_session is not None else "limp_fall"
+        else:
+            self.safety_mode = "walk"
+        return self.safety_mode
+
+    def _compute_pwms(self, targets: np.ndarray, dispatch: bool = True) -> np.ndarray:
+        """Convert 8D joint targets (rad) to PWM microseconds and optionally dispatch to servos."""
+        pwms = np.zeros(self.cfg.ACTION_DIM, dtype=np.int32)
+        for i, (angle, limits) in enumerate(zip(targets, self.joint_limits_list)):
+            pwm = angle_to_pwm(
+                angle_rad=float(angle),
+                min_rad=limits[0],
+                max_rad=limits[1],
+                min_pulse_us=500,
+                max_pulse_us=2500,
+            )
+            pwms[i] = pwm
+            if dispatch:
+                self.servo_controller.set_pwm_us(channel=i, pulse_us=pwm)
+        return pwms
 
     def reset_policy_state(self):
         """Reset observation history and clock together at an episode boundary."""
@@ -489,17 +596,22 @@ class BaseRPiInferenceEngine:
 
     def predict_action(self, obs: np.ndarray) -> np.ndarray:
         """Run policy model inference to produce normalized actions [-1, 1]."""
-        if self.ort_session is not None:
+        use_standup = (
+            getattr(self, "safety_mode", "walk") in ("limp_fall", "standup_recovery")
+            and getattr(self, "standup_ort_session", None) is not None
+        )
+        session = self.standup_ort_session if use_standup else self.ort_session
+        input_name = self.standup_input_name if use_standup else getattr(self, "input_name", None)
+        if session is not None and input_name is not None:
             input_tensor = obs.reshape(1, self.cfg.OBS_DIM).astype(np.float32)
-            outputs = self.ort_session.run(None, {self.input_name: input_tensor})
+            outputs = session.run(None, {input_name: input_tensor})
             return np.asarray(outputs[0], dtype=np.float32).ravel()
-        else:
-            return np.zeros(self.cfg.ACTION_DIM, dtype=np.float32)
+        return np.zeros(self.cfg.ACTION_DIM, dtype=np.float32)
 
     def step(self, obs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Perform one control cycle:
 
-        1. Infer action from observation
+        1. Reject non-finite observations/actions by holding last safe targets
         2. Scale actions to joint physical limits
         3. Rate-limit target angles
         4. Map angles to servo PWMs and dispatch to PCA9685
@@ -508,8 +620,19 @@ class BaseRPiInferenceEngine:
             f"Expected obs shape ({self.cfg.OBS_DIM},), got {obs.shape}"
         )
 
-        # 1. Infer raw actions
-        raw_actions = np.clip(self.predict_action(obs), -1.0, 1.0)
+        if not np.all(np.isfinite(obs)):
+            self.nonfinite_action_drops += 1
+            safe_targets = self.last_targets.copy()
+            return safe_targets, self._compute_pwms(safe_targets, dispatch=False)
+
+        # 1. Infer raw actions and reject non-finite vectors BEFORE clipping
+        predicted = np.asarray(self.predict_action(obs), dtype=np.float32).ravel()
+        if predicted.shape != (self.cfg.ACTION_DIM,) or not np.all(np.isfinite(predicted)):
+            self.nonfinite_action_drops += 1
+            safe_targets = self.last_targets.copy()
+            return safe_targets, self._compute_pwms(safe_targets, dispatch=False)
+
+        raw_actions = np.clip(predicted, -1.0, 1.0)
         self.last_raw_actions = raw_actions.copy()
 
         # 2. Scale actions to joint angles
@@ -522,20 +645,15 @@ class BaseRPiInferenceEngine:
             dt=self.dt,
             max_velocity=self.cfg.MAX_VELOCITY,
         )
+        if not np.all(np.isfinite(clipped_targets)):
+            self.nonfinite_action_drops += 1
+            safe_targets = self.last_targets.copy()
+            return safe_targets, self._compute_pwms(safe_targets, dispatch=False)
+
         self.last_targets = clipped_targets.copy()
 
-        # 4. Map to PWM signals
-        pwms = np.zeros(self.cfg.ACTION_DIM, dtype=np.int32)
-        for i, (angle, limits) in enumerate(zip(clipped_targets, self.joint_limits_list)):
-            pwm = angle_to_pwm(
-                angle_rad=float(angle),
-                min_rad=limits[0],
-                max_rad=limits[1],
-                min_pulse_us=500,
-                max_pulse_us=2500,
-            )
-            pwms[i] = pwm
-            self.servo_controller.set_pwm_us(channel=i, pulse_us=pwm)
+        # 4. Map to PWM signals and dispatch
+        pwms = self._compute_pwms(clipped_targets, dispatch=True)
 
         self.episode_steps += 1
         return clipped_targets, pwms
@@ -556,15 +674,21 @@ class BaseRPiInferenceEngine:
 
                 # Read filtered IMU angular velocity and gravity vector
                 base_ang_vel, proj_grav = self.imu_reader.read()
+                self.update_safety_state(base_ang_vel, proj_grav)
                 imu_stale = bool(getattr(self.imu_reader, "is_stale", False))
                 self.last_imu_stale = imu_stale
+                base_commands = (
+                    self.get_active_command()
+                    if self._last_cmd_timestamp is not None
+                    else commands
+                )
                 if imu_stale:
                     self.imu_stale_steps += 1
                     loop_commands = [0.0, 0.0, 0.0]
                     if self.imu_stale_steps == 1 or self.imu_stale_steps % max(1, int(self.freq)) == 0:
                         print(f"[{self.engine_name} Warning] Stale IMU sample ({self.imu_reader.last_read_error}); zeroing velocity commands.")
                 else:
-                    loop_commands = commands
+                    loop_commands = base_commands
 
                 # Read foot contact and LiDAR perception hooks (with fallback warning)
                 foot_contact = self.read_foot_contact()

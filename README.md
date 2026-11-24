@@ -210,6 +210,20 @@ Mesh và articulation đủ để bắt đầu kiểm tra import. Khung gá MG99
 - **Kiểm chứng:** `pytest tests/robot tests/sim tests/hardware`, `.venv_cad` `pytest tests/cad`, `python duck.py verify` và `python src/tools/robot/verify_model.py --steps 1000` đều pass 100%, `git ls-files artifacts` rỗng.
 - **Bước tiếp theo:** Xử lý các hạng mục F01–F04 trong báo cáo audit `docs/project_algorithm_audit_2026-11-19.md`, hoàn thiện cơ khí MG996R trong `src/cad/` và nhập `src/robot/cyberduck_v2.urdf` sang Isaac Lab trước khi huấn luyện lại policy V2 mang metadata đầy đủ.
 
+### Nâng cấp thuật toán Hybrid RL 3-trong-1 ngày 2026-11-22
+
+- **Đang dừng ở đâu:** Trên nhánh `wip/repo-reorg` (HEAD `c17cc302`, kèm các sửa đổi đang giữ), chưa train dài hạn hoặc tạo neo weights V2 mới. Giữ nguyên contract triển khai `42 obs -> 256 (ELU) -> 256 (ELU) -> 8 actions` ở `50 Hz`.
+- **Đã thử và sửa:** Xây dựng [symmetry.py](src/sim/env/symmetry.py) cho phép chiếu gương trái-phải 42D/53D/8D; bổ sung bám quỹ đạo pha `gait_imitation` trong [env_config.py](src/sim/env/env_config.py); thêm hàng đợi trễ hành động `max_action_delay_steps` và làm mới domain randomization ở ranh giới đồng bộ trong [run_parallel_sim.py](src/sim/env/run_parallel_sim.py) (vá `F07`); sửa đo metric trước reset trong [evaluate_models_sim.py](src/tools/train/evaluate_models_sim.py) (vá `F08`); tích hợp Symmetry-BC + DAgger vào [pretrain_bc.py](src/tools/train/pretrain_bc.py), Symmetry-PPO vào [train_ppo.py](src/tools/train/train_ppo.py), và ELU FastSAC + N-step replay buffer + xuất INT8 ESP32-S3 vào [train_sac.py](src/tools/train/train_sac.py) và [export_policy.py](src/tools/robot/export_policy.py).
+- **Kiểm chứng:** `python -m pytest tests/robot tests/sim tests/hardware -q -p no:cacheprovider` đạt `595 passed, 40 warnings`; `.\.venv_cad\Scripts\python.exe -m pytest tests/cad -q -p no:cacheprovider` đạt `173 passed`; `python duck.py verify --skip-tests` thoát `0`.
+- **Bước tiếp theo:** Xử lý F01–F04 phần cứng/planner, chốt cơ khí MG996R rồi chạy train phối hợp Symmetry-BC warmup -> Asymmetric PPO (kèm `--max-action-delay`) -> ELU FastSAC / DAgger để tạo checkpoint và neo V2 chính thức.
+
+### Tích hợp kỹ thuật Sim2Real & an toàn phần cứng từ Microduck ngày 2026-11-22
+
+- **Đang dừng ở đâu:** Trên nhánh `wip/repo-reorg` (`c17cc302` kèm working tree), đã hoàn tất cả hai đợt nâng cấp thuật toán Hybrid RL và Sim2Real/Safety từ `pollen-robotics/microduck`, chưa chạy đợt train dài hoặc gắn tag neo weights V2 mới.
+- **Đã làm:** Thêm dự báo ngã giải tích `FallPredictor` + hạ độ cứng `Limp-Fall` trong [self_righting.py](src/sim/behaviors/self_righting.py) và [run_parallel_sim.py](src/sim/env/run_parallel_sim.py); bổ sung bucket lấy mẫu lệnh đứng yên/xoay tại chỗ `zero_cmd_prob`/`turn_in_place_prob`, chuyển tư thế mượt `compute_slewed_posture_target`, `multiplicative_posture_reward`, phạt lệch đầu EMA 1 giây (`head_ema_penalty`), phạt vượt ngưỡng hành động (`action_over_limit_penalty`), sụt áp pin động, nhiễu cảm biến chỉ áp dụng lên Actor (`encoder_bias_rad`, `imu_mount_max_rad`, `delay_joint_vel_obs`) kèm làm sạch NaN cho Critic/GAE trong [env_config.py](src/sim/env/env_config.py), [run_parallel_sim.py](src/sim/env/run_parallel_sim.py), [train_ppo.py](src/tools/train/train_ppo.py); bổ sung `imu_ready`, giữ tư thế khi gặp `NaN`/`Inf`, Deadman zero twist và hot-swap `standup` ONNX trong [rpi_infer_core.py](src/hardware/rpi_infer_core.py).
+- **Kiểm chứng:** `python -m pytest tests/robot tests/sim tests/hardware -q -p no:cacheprovider` đạt `607 passed, 44 warnings` (gồm `tests/sim/test_microduck_sim2real_upgrades.py` và `tests/hardware/test_microduck_safety_runtime.py`); `python duck.py verify --skip-tests` thoát `0`.
+- **Bước tiếp theo:** Xử lý F01–F04 phần cứng còn lại, hoàn thiện cơ khí MG996R trong `src/cad/` và chạy train PPO với `--zero-cmd-prob 0.15 --turn-in-place-prob 0.15 --curriculum-smoothness --max-action-delay 2` trước khi xuất policy và tạo neo V2.
+
 ---
 
 ## 8. License

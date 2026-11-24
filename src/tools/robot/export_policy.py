@@ -195,10 +195,10 @@ def apply_obs_norm_to_actor(actor: nn.Module, ckpt: Any, min_std: float = 0.10) 
 
 
 def _build_sac_sequential(state: dict, ckpt: Optional[dict] = None) -> nn.Sequential:
-    """Adapt SAC SquashedGaussianActor (ReLU + mean_head) weights to nn.Sequential."""
+    """Adapt SAC SquashedGaussianActor (ReLU or ELU + mean_head) weights to nn.Sequential."""
     required = ("net.0.weight", "net.0.bias", "net.2.weight", "net.2.bias", "mean_head.weight", "mean_head.bias")
     if not isinstance(state, dict) or any(k not in state or not isinstance(state[k], torch.Tensor) for k in required):
-        raise ValueError("Invalid SAC actor_state_dict; missing expected ReLU/mean_head tensors")
+        raise ValueError("Invalid SAC actor_state_dict; missing expected SAC/mean_head tensors")
     w0, w2, wm = state["net.0.weight"], state["net.2.weight"], state["mean_head.weight"]
     if w0.ndim != 2 or w2.ndim != 2 or wm.ndim != 2:
         raise ValueError("Invalid SAC weight tensor rank")
@@ -214,9 +214,14 @@ def _build_sac_sequential(state: dict, ckpt: Optional[dict] = None) -> nn.Sequen
         _validate_ckpt_dims(ckpt, (("obs_dim", obs_d), ("hidden_dim", hid_d), ("action_dim", act_d)))
         if "squash_actions" in ckpt and ckpt["squash_actions"] is not True:
             raise ValueError("SAC checkpoint requires squash_actions=True")
+    use_elu = isinstance(ckpt, dict) and (
+        ckpt.get("activation") == "elu"
+        or ckpt.get("policy_arch") == "sac_elu_squashed_gaussian"
+    )
+    act_cls = nn.ELU if use_elu else nn.ReLU
     actor = nn.Sequential(
-        nn.Linear(obs_d, hid_d), nn.ReLU(),
-        nn.Linear(hid_d, hid_d), nn.ReLU(),
+        nn.Linear(obs_d, hid_d), act_cls(),
+        nn.Linear(hid_d, hid_d), act_cls(),
         nn.Linear(hid_d, act_d),
     )
     with torch.no_grad():
@@ -227,7 +232,7 @@ def _build_sac_sequential(state: dict, ckpt: Optional[dict] = None) -> nn.Sequen
         actor[4].weight.copy_(wm)
         actor[4].bias.copy_(state["mean_head.bias"])
     actor._squash_actions = True
-    actor._policy_arch = "sac_squashed_gaussian"
+    actor._policy_arch = "sac_elu_squashed_gaussian" if use_elu else "sac_squashed_gaussian"
     return actor
 
 
@@ -240,7 +245,10 @@ def load_actor_from_checkpoint(
     """Load Actor network from checkpoint file or dict, folding obs_rms if present."""
     if isinstance(checkpoint_or_model, nn.Module):
         if hasattr(checkpoint_or_model, "net") and hasattr(checkpoint_or_model, "mean_head"):
-            actor = _build_sac_sequential(checkpoint_or_model.state_dict())
+            actor = _build_sac_sequential(
+                checkpoint_or_model.state_dict(),
+                ckpt={"activation": getattr(checkpoint_or_model, "activation", "relu")},
+            )
         else:
             actor = copy.deepcopy(getattr(checkpoint_or_model, "actor", checkpoint_or_model))
             if hasattr(checkpoint_or_model, "squash_actions"):
@@ -274,7 +282,7 @@ def load_actor_from_checkpoint(
 
     state = ckpt.get("actor_state_dict", ckpt.get("model_state_dict", ckpt)) if isinstance(ckpt, dict) else ckpt
     is_sac = isinstance(ckpt, dict) and (
-        ckpt.get("policy_arch") == "sac_squashed_gaussian"
+        ckpt.get("policy_arch") in ("sac_squashed_gaussian", "sac_elu_squashed_gaussian")
         or ckpt.get("algorithm") == "sac"
         or (isinstance(state, dict) and "net.0.weight" in state and "mean_head.weight" in state)
     )

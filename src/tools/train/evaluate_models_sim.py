@@ -135,6 +135,7 @@ def run_benchmark_scenario(
         accum_torque_sq = np.zeros(num_envs, dtype=np.float32)
         accum_work = np.zeros(num_envs, dtype=np.float32)
         survived = np.ones(num_envs, dtype=bool)
+        fell = np.zeros(num_envs, dtype=bool)
 
         # Initial positions
         start_x = np.array([d.qpos[0] for d in runner.datas], dtype=np.float32)
@@ -165,16 +166,17 @@ def run_benchmark_scenario(
                     if curr_x > max_dist_x[i]:
                         max_dist_x[i] = curr_x
 
-                    # Tilt angle from projected gravity (grav_z)
-                    grav_z = float(next_obs[i, 5])
+                    # Tilt angle from projected gravity (grav_z), using terminal_obs on done
+                    obs_for_metrics = infos[i].get("terminal_obs", next_obs[i]) if dones[i] else next_obs[i]
+                    grav_z = float(obs_for_metrics[5])
                     tilt_rad = math.acos(max(-1.0, min(1.0, -grav_z)))
                     tilt_deg = math.degrees(tilt_rad)
                     if tilt_deg > max_tilt_deg[i]:
                         max_tilt_deg[i] = tilt_deg
 
-                    # Effort / Torque
-                    ctrl = runner.datas[i].ctrl[:]
-                    qvel = runner.datas[i].qvel[6:14]
+                    # Effort / Torque (using pre-reset snapshots when available)
+                    ctrl = infos[i].get("step_ctrl", runner.datas[i].ctrl[:])
+                    qvel = infos[i].get("step_qvel", runner.datas[i].qvel[6:14])
                     accum_torque_sq[i] += float(np.sum(ctrl ** 2))
                     accum_work[i] += float(np.sum(np.abs(ctrl * qvel))) * runner.control_dt
 
@@ -197,12 +199,14 @@ def run_benchmark_scenario(
 
                     if dones[i]:
                         survived[i] = False
+                        if infos[i].get("fallen", False) or not infos[i].get("time_outs", False):
+                            fell[i] = True
 
             obs = next_obs
             if not np.any(survived):
                 break
 
-        success_rate = float(np.mean(alive_steps >= max_steps))
+        success_rate = float(np.mean((alive_steps >= max_steps) & (~fell)))
         mean_eplen = float(np.mean(alive_steps))
         mean_reward = float(np.mean(accum_reward))
         mean_dist_x = float(np.mean(final_dist_x))

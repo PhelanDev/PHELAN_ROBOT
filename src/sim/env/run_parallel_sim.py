@@ -27,6 +27,7 @@ from sim.env.env_config import (
     _DEFAULT_CFG,
     DEFAULT_NOMINAL_QPOS,
     EmotionState,
+    EMOTION_TARGET_HEAD_ARRAY,
     NUM_EMOTIONS,
     LocomotionMode,
     SIT_NOMINAL_QPOS,
@@ -35,15 +36,17 @@ from sim.env.env_config import (
     TARGET_LIE_HEIGHT,
     get_emotion_one_hot,
     clip_action_rates,
+    compute_battery_sag_torque_limit,
     compute_observations,
     compute_rewards,
     compute_gait_phase,
     quat_rotate_inverse,
     quat_to_yaw,
     scale_actions,
+    small_angle_rotation_matrix,
 )
 from sim.env.terrain_curriculum import apply_stage, apply_stair_stage, STAIR_STAGES, randomize_pillars
-from sim.behaviors.self_righting import FallClassifier, SelfRightingController
+from sim.behaviors.self_righting import FallClassifier, FallPredictor, SelfRightingController
 from sim.behaviors.nav_planner import LidarWaypointPlanner, NavPlannerConfig
 from robot.robot_spec import MODEL_PATH, MJCF_MODEL_NAME, REPO_ROOT, SRC_ROOT
 
@@ -246,8 +249,44 @@ class ParallelSimRunner:
         use_nav_planner: bool = False,
         nav_goal_xy: Tuple[float, float] = (2.0, 0.0),
         nav_planner_cfg: Optional[NavPlannerConfig] = None,
+        max_action_delay_steps: int = 0,
+        enable_limp_fall: bool = False,
+        limp_kp_scale: float = 0.25,
+        zero_cmd_prob: float = 0.0,
+        turn_in_place_prob: float = 0.0,
+        posture_ramp_s: float = 0.0,
+        encode_posture_commands: bool = False,
+        multiplicative_posture_reward: bool = False,
+        enable_head_ema_penalty: bool = False,
+        action_over_limit_threshold: Optional[float] = None,
+        enable_battery_sag: bool = False,
+        encoder_bias_rad: float = 0.0,
+        imu_mount_max_rad: float = 0.0,
+        delay_joint_vel_obs: bool = False,
     ):
         self.model_path = resolve_v2_model_path(model_path)
+        if int(max_action_delay_steps) < 0:
+            raise ValueError("max_action_delay_steps must be >= 0")
+        if not (0.0 <= float(limp_kp_scale) <= 1.0):
+            raise ValueError("limp_kp_scale must be in [0.0, 1.0]")
+        if float(posture_ramp_s) < 0.0:
+            raise ValueError("posture_ramp_s must be >= 0")
+        if float(encoder_bias_rad) < 0.0 or float(imu_mount_max_rad) < 0.0:
+            raise ValueError("encoder_bias_rad and imu_mount_max_rad must be >= 0")
+        self.enable_limp_fall = bool(enable_limp_fall)
+        self.limp_kp_scale = float(limp_kp_scale)
+        self.posture_ramp_s = float(posture_ramp_s)
+        self.encode_posture_commands = bool(encode_posture_commands)
+        self.multiplicative_posture_reward = bool(multiplicative_posture_reward)
+        self.enable_head_ema_penalty = bool(enable_head_ema_penalty)
+        self.action_over_limit_threshold = (
+            float(action_over_limit_threshold) if action_over_limit_threshold is not None else None
+        )
+        self.enable_battery_sag = bool(enable_battery_sag)
+        self.encoder_bias_rad = float(encoder_bias_rad)
+        self.imu_mount_max_rad = float(imu_mount_max_rad)
+        self.delay_joint_vel_obs = bool(delay_joint_vel_obs)
+        self.set_command_bucket_probs(zero_cmd_prob, turn_in_place_prob)
 
         self.terrain_mode = str(terrain_mode)
         self.randomize_pillars_enabled = bool(randomize_pillars)
@@ -307,6 +346,12 @@ class ParallelSimRunner:
 
         self.last_actions = np.zeros((self.num_envs, self.action_dim), dtype=np.float32)
         self.last_targets = np.zeros((self.num_envs, self.action_dim), dtype=np.float32)
+        self.max_action_delay_steps = int(max_action_delay_steps)
+        self.env_action_delay = np.zeros(self.num_envs, dtype=np.int32)
+        self.action_delay_buffer = np.zeros(
+            (self.num_envs, self.max_action_delay_steps + 1, self.action_dim),
+            dtype=np.float32,
+        )
         self.commands = np.zeros((self.num_envs, 3), dtype=np.float32)
         self.stand_still = bool(stand_still)
         if not self.stand_still:
@@ -331,6 +376,13 @@ class ParallelSimRunner:
         self.rng = np.random.default_rng(seed=42)
         self.current_emotions = self.rng.integers(0, NUM_EMOTIONS, size=self.num_envs, dtype=np.int32)
         self.cmd_modes = np.zeros(self.num_envs, dtype=np.int32)
+        self.posture_blend = np.zeros(self.num_envs, dtype=np.float32)
+        self.head_err_ema = np.zeros((self.num_envs, 2), dtype=np.float32)
+        self.env_v_in = np.full(self.num_envs, 7.4, dtype=np.float32)
+        self.env_k_drop = np.zeros(self.num_envs, dtype=np.float32)
+        self.env_encoder_bias = np.zeros((self.num_envs, self.action_dim), dtype=np.float32)
+        self.env_imu_rot = np.broadcast_to(np.eye(3, dtype=np.float32), (self.num_envs, 3, 3)).copy()
+        self.obs_prev_joint_vel = np.zeros((self.num_envs, self.action_dim), dtype=np.float32)
         self.tilt_exceed_count = np.zeros(self.num_envs, dtype=np.int32)
 
         # Obstacle avoidance and approach-velocity tracking state
@@ -422,7 +474,7 @@ class ParallelSimRunner:
             self.stair_max_x = float(max(self.model.geom_pos[g, 0] + self.model.geom_size[g, 0] for g in stair_gids))
             self.stair_half_w = float(min(self.model.geom_size[g, 1] for g in stair_gids))
 
-        # Self-righting recovery controllers
+        # Self-righting recovery controllers & pre-impact limp-fall predictors
         self.enable_auto_recovery = bool(enable_auto_recovery)
         if self.enable_auto_recovery:
             self.recovery_controllers: List[SelfRightingController] = [
@@ -430,6 +482,10 @@ class ParallelSimRunner:
             ]
         else:
             self.recovery_controllers = []
+        self.fall_predictors: List[FallPredictor] = [
+            FallPredictor(limp_kp_scale=self.limp_kp_scale) for _ in range(self.num_envs)
+        ]
+        self.limp_active = np.zeros(self.num_envs, dtype=bool)
 
         # Hierarchical waypoint navigation planner (L2)
         self.use_nav_planner = bool(use_nav_planner)
@@ -448,6 +504,15 @@ class ParallelSimRunner:
         if self.stand_still:
             self.commands[:, :] = 0.0
 
+    def set_command_bucket_probs(self, zero_cmd_prob: float, turn_in_place_prob: float) -> None:
+        """Configure fractions of episodes sampled with [0,0,0] or pure turn-in-place commands."""
+        zp = float(zero_cmd_prob)
+        tp = float(turn_in_place_prob)
+        if not (np.isfinite(zp) and np.isfinite(tp)) or zp < 0.0 or tp < 0.0 or (zp + tp) > 1.0 + 1e-6:
+            raise ValueError("zero_cmd_prob and turn_in_place_prob must be >= 0 and sum to <= 1.0")
+        self.zero_cmd_prob = zp
+        self.turn_in_place_prob = tp
+
     def set_emotions(self, emotions: Union[int, EmotionState, np.ndarray, List[int]]) -> None:
         """Set emotion state across environments."""
         if isinstance(emotions, (int, EmotionState)):
@@ -455,12 +520,28 @@ class ParallelSimRunner:
         else:
             self.current_emotions[:] = np.asarray(emotions, dtype=np.int32)
 
+    def _apply_posture_command_encoding(self, env_indices: Optional[Union[List[int], np.ndarray, range]] = None) -> None:
+        """Encode SIT/LIE posture mode into commands so Actor observes requested posture."""
+        if not self.encode_posture_commands:
+            return
+        indices = range(self.num_envs) if env_indices is None else env_indices
+        for idx in indices:
+            mode = int(self.cmd_modes[idx])
+            if mode == int(LocomotionMode.SIT):
+                self.commands[idx] = [0.0, -0.5, 0.0]
+            elif mode == int(LocomotionMode.LIE):
+                self.commands[idx] = [0.0, -1.0, 0.0]
+
     def set_cmd_modes(self, modes: Union[int, List[int], np.ndarray, LocomotionMode]) -> None:
         """Set locomotion mode (WALK=0, SIT=1, LIE=2) across environments."""
+        prev_modes = self.cmd_modes.copy()
         if isinstance(modes, (int, LocomotionMode)):
             self.cmd_modes[:] = int(modes)
         else:
             self.cmd_modes[:] = np.asarray(modes, dtype=np.int32)
+        changed = (self.cmd_modes != prev_modes) | (self.cmd_modes == int(LocomotionMode.WALK))
+        self.posture_blend[changed] = 0.0
+        self._apply_posture_command_encoding()
 
     def set_cmd_mode(self, mode: Union[int, List[int], np.ndarray, LocomotionMode]) -> None:
         """Alias for set_cmd_modes."""
@@ -682,21 +763,65 @@ class ParallelSimRunner:
         # Ngẫu nhiên hóa lệnh vận tốc mục tiêu [vx, vy, wz] (hoặc giữ đứng yên nếu stand_still)
         if self.stand_still:
             self.commands[env_idx, :] = 0.0
-        elif self.terrain_mode in ("hurdles", "stairs"):
-            self.commands[env_idx, 0] = self.rng.uniform(0.18, 0.25)
-            self.commands[env_idx, 1] = self.rng.uniform(-0.03, 0.03)
-            wz_lim = min(0.10, 0.04 + 0.02 * getattr(self, "curriculum_stage", 0))
-            self.commands[env_idx, 2] = self.rng.uniform(-wz_lim, wz_lim)
         else:
-            self.commands[env_idx, 0] = self.rng.uniform(0.10, 0.25)
-            self.commands[env_idx, 1] = self.rng.uniform(-0.08, 0.08)
-            self.commands[env_idx, 2] = self.rng.uniform(-0.50, 0.50)
+            bucket_mode = "walk"
+            if self.zero_cmd_prob > 0.0 or self.turn_in_place_prob > 0.0:
+                u = float(self.rng.random())
+                if u < self.zero_cmd_prob:
+                    bucket_mode = "zero"
+                elif u < self.zero_cmd_prob + self.turn_in_place_prob:
+                    bucket_mode = "turn"
+
+            if bucket_mode == "zero":
+                self.commands[env_idx, :] = 0.0
+            elif bucket_mode == "turn":
+                wz_lim = (
+                    0.50
+                    if self.terrain_mode == "flat"
+                    else min(0.10, 0.04 + 0.02 * getattr(self, "curriculum_stage", 0))
+                )
+                sign = -1.0 if float(self.rng.random()) < 0.5 else 1.0
+                mag = float(self.rng.uniform(0.4 * wz_lim, wz_lim))
+                self.commands[env_idx, 0] = 0.0
+                self.commands[env_idx, 1] = 0.0
+                self.commands[env_idx, 2] = sign * mag
+            elif self.terrain_mode in ("hurdles", "stairs"):
+                self.commands[env_idx, 0] = self.rng.uniform(0.18, 0.25)
+                self.commands[env_idx, 1] = self.rng.uniform(-0.03, 0.03)
+                wz_lim = min(0.10, 0.04 + 0.02 * getattr(self, "curriculum_stage", 0))
+                self.commands[env_idx, 2] = self.rng.uniform(-wz_lim, wz_lim)
+            else:
+                self.commands[env_idx, 0] = self.rng.uniform(0.10, 0.25)
+                self.commands[env_idx, 1] = self.rng.uniform(-0.08, 0.08)
+                self.commands[env_idx, 2] = self.rng.uniform(-0.50, 0.50)
+
+        self.posture_blend[env_idx] = 0.0
+        self.head_err_ema[env_idx] = 0.0
+        self._apply_posture_command_encoding([env_idx])
 
         mujoco.mj_forward(self.model, d)
 
         self.last_actions[env_idx] = 0.0
+        self.action_delay_buffer[env_idx] = 0.0
+        self.env_action_delay[env_idx] = (
+            int(self.rng.integers(0, self.max_action_delay_steps + 1))
+            if self.max_action_delay_steps > 0
+            else 0
+        )
         self.last_targets[env_idx] = d.qpos[7:15].astype(np.float32)
         self.last_joint_vel[env_idx] = 0.0
+        self.obs_prev_joint_vel[env_idx] = 0.0
+        if self.enable_battery_sag:
+            self.env_v_in[env_idx] = float(self.rng.uniform(6.5, 8.2))
+            self.env_k_drop[env_idx] = float(self.rng.uniform(0.0, 0.20))
+        if self.encoder_bias_rad > 0.0:
+            self.env_encoder_bias[env_idx] = self.rng.uniform(
+                -self.encoder_bias_rad, self.encoder_bias_rad, size=self.action_dim
+            ).astype(np.float32)
+        if self.imu_mount_max_rad > 0.0:
+            ax = self.rng.normal(size=3).astype(np.float32)
+            ang = float(self.rng.uniform(0.0, self.imu_mount_max_rad))
+            self.env_imu_rot[env_idx] = small_angle_rotation_matrix(ax, ang)
         self.double_support_time[env_idx] = 0.0
         self.prev_root_x[env_idx] = float(d.qpos[0])
         self.prev_world_vx[env_idx] = float(d.qvel[0])
@@ -709,6 +834,8 @@ class ParallelSimRunner:
         self.last_feet_contact[env_idx] = True
         if self.enable_auto_recovery and env_idx < len(self.recovery_controllers):
             self.recovery_controllers[env_idx].reset()
+        self.fall_predictors[env_idx].reset()
+        self.limp_active[env_idx] = False
         if self.use_nav_planner:
             self.update_nav_commands(env_indices=[env_idx])
         obs = self._extract_obs(env_idx)
@@ -745,7 +872,7 @@ class ParallelSimRunner:
 
         return self.get_observations()
 
-    def _extract_obs(self, env_idx: int) -> np.ndarray:
+    def _extract_obs(self, env_idx: int, corrupt_actor: bool = True) -> np.ndarray:
         """Extract the V2 observation vector from environment data."""
         d = self.datas[env_idx]
 
@@ -766,6 +893,15 @@ class ParallelSimRunner:
         cmd = self.commands[env_idx]
         joint_pos = np.array(d.sensordata[12:20], dtype=np.float32)
         joint_vel = np.array(d.sensordata[20:28], dtype=np.float32)
+        if corrupt_actor:
+            if self.imu_mount_max_rad > 0.0:
+                rot = self.env_imu_rot[env_idx]
+                base_ang_vel = (rot @ base_ang_vel).astype(np.float32)
+                proj_grav = (rot @ proj_grav).astype(np.float32)
+            if self.encoder_bias_rad > 0.0:
+                joint_pos = (joint_pos + self.env_encoder_bias[env_idx]).astype(np.float32)
+            if self.delay_joint_vel_obs:
+                joint_vel = self.obs_prev_joint_vel[env_idx].copy()
         last_act = self.last_actions[env_idx]
 
         # Foot contact sensors: left (10), right (11), padded to 4 dimensions
@@ -908,8 +1044,13 @@ class ParallelSimRunner:
         if n_envs == 0:
             return np.empty((0, self.privileged_obs_dim), dtype=np.float32)
 
-        if raw_obs is None:
-            actor_obs = np.array([self._extract_obs(i) for i in indices], dtype=np.float32)
+        has_actor_corruption = (
+            self.encoder_bias_rad > 0.0
+            or self.imu_mount_max_rad > 0.0
+            or self.delay_joint_vel_obs
+        )
+        if raw_obs is None or has_actor_corruption:
+            actor_obs = np.array([self._extract_obs(i, corrupt_actor=False) for i in indices], dtype=np.float32)
         else:
             raw_arr = np.asarray(raw_obs, dtype=np.float32)
             if raw_arr.shape[0] == self.num_envs and len(indices) < self.num_envs:
@@ -984,7 +1125,12 @@ class ParallelSimRunner:
         # 5. Curriculum stage norm (1)
         priv_extra[:, 10] = stage_norm
 
-        return np.concatenate([actor_obs, priv_extra], axis=-1).astype(np.float32)
+        return np.nan_to_num(
+            np.concatenate([actor_obs, priv_extra], axis=-1),
+            nan=0.0,
+            posinf=100.0,
+            neginf=-100.0,
+        ).astype(np.float32)
 
     def _step_subrange(
         self,
@@ -995,14 +1141,25 @@ class ParallelSimRunner:
         for idx in indices:
             d = self.datas[idx]
             target_pos = target_positions[idx]
+            kp_eff = self.kp * (self.limp_kp_scale if (self.enable_limp_fall and self.limp_active[idx]) else 1.0)
+            v_in_i = float(self.env_v_in[idx]) if self.enable_battery_sag else 7.4
+            k_drop_i = float(self.env_k_drop[idx]) if self.enable_battery_sag else 0.0
             for _ in range(self.decimation):
                 current_pos = d.qpos[7:15]
                 current_vel = d.qvel[6:14]
                 # PD controller for MG996R servo position tracking
-                torques = self.kp * (target_pos - current_pos) - self.kd * current_vel
-                d.ctrl[:] = np.clip(
-                    torques, -self.cfg.TORQUE_LIMIT, self.cfg.TORQUE_LIMIT
+                torques = kp_eff * (target_pos - current_pos) - self.kd * current_vel
+                torque_lim = (
+                    compute_battery_sag_torque_limit(
+                        torques,
+                        v_in=v_in_i,
+                        k_drop=k_drop_i,
+                        nominal_torque_limit=self.cfg.TORQUE_LIMIT,
+                    )
+                    if self.enable_battery_sag
+                    else self.cfg.TORQUE_LIMIT
                 )
+                d.ctrl[:] = np.clip(torques, -torque_lim, torque_lim)
                 mujoco.mj_step(self.model, d)
 
     def step(
@@ -1024,8 +1181,14 @@ class ParallelSimRunner:
         )
         vx_world_before = np.array([d.qvel[0] for d in self.datas], dtype=np.float64)
 
-        # 1. Scale actions to joint limits around nominal stance (vectorized)
-        scaled_targets = scale_actions(actions, self.cfg, nominal_centered=True)
+        # 1. Apply optional actuator delay queue and scale actions around nominal stance
+        if self.max_action_delay_steps > 0:
+            self.action_delay_buffer[:, 1:, :] = self.action_delay_buffer[:, :-1, :]
+            self.action_delay_buffer[:, 0, :] = actions
+            exec_actions = self.action_delay_buffer[np.arange(self.num_envs), self.env_action_delay]
+        else:
+            exec_actions = actions
+        scaled_targets = scale_actions(exec_actions, self.cfg, nominal_centered=True)
 
         if self.enable_auto_recovery:
             for i in range(self.num_envs):
@@ -1059,6 +1222,11 @@ class ParallelSimRunner:
             max_velocity=self.cfg.MAX_VELOCITY,
         )
         self.last_targets[:] = target_positions
+
+        # Snapshot pre-step joint velocity so optional 1-step joint_vel lag exposes previous tick's readings
+        if self.delay_joint_vel_obs:
+            for i in range(self.num_envs):
+                self.obs_prev_joint_vel[i] = self.datas[i].sensordata[20:28]
 
         # 3. Step physics simulation (either multi-threaded or sequential)
         if self.executor is not None and self.num_threads > 1:
@@ -1096,7 +1264,20 @@ class ParallelSimRunner:
         # MuJoCo <gyro> sensor is already mounted on torso in body frame matching _extract_obs.
         base_ang_vel_body = base_ang_vel_raw
         cmd_ang_vel = self.commands[:, 2]
-        proj_grav = next_obs[:, 3:6]
+        if self.imu_mount_max_rad > 0.0:
+            proj_grav = np.array(
+                [
+                    [
+                        2.0 * (d.sensordata[6] * d.sensordata[8] - d.sensordata[7] * d.sensordata[9]),
+                        -2.0 * (d.sensordata[6] * d.sensordata[7] + d.sensordata[8] * d.sensordata[9]),
+                        2.0 * (d.sensordata[7] * d.sensordata[7] + d.sensordata[8] * d.sensordata[8]) - 1.0,
+                    ]
+                    for d in self.datas
+                ],
+                dtype=np.float32,
+            )
+        else:
+            proj_grav = next_obs[:, 3:6]
         joint_torques = np.array([d.ctrl[:] for d in self.datas], dtype=np.float32)
         joint_vel = np.array([d.sensordata[20:28] for d in self.datas], dtype=np.float32)
         joint_pos = np.array([d.sensordata[12:20] for d in self.datas], dtype=np.float32)
@@ -1200,6 +1381,26 @@ class ParallelSimRunner:
         else:
             target_yaw = np.zeros(self.num_envs, dtype=np.float32)
 
+        if self.posture_ramp_s > 0.0:
+            posture_active = (self.cmd_modes == int(LocomotionMode.SIT)) | (self.cmd_modes == int(LocomotionMode.LIE))
+            blend_step = float(self.control_dt / self.posture_ramp_s)
+            self.posture_blend = np.where(
+                posture_active,
+                np.clip(self.posture_blend + blend_step, 0.0, 1.0),
+                0.0,
+            ).astype(np.float32)
+
+        if self.enable_head_ema_penalty:
+            target_head = (
+                EMOTION_TARGET_HEAD_ARRAY[self.current_emotions]
+                if self.include_emotions
+                else np.zeros((self.num_envs, 2), dtype=np.float32)
+            )
+            ema_alpha = min(1.0, float(self.control_dt))
+            self.head_err_ema = (
+                (1.0 - ema_alpha) * self.head_err_ema + ema_alpha * (qpos_head - target_head)
+            ).astype(np.float32)
+
         # Vectorized reward computation across all environments
         reward_dict, weighted_terms = compute_rewards(
             base_lin_vel=base_lin_vel_body,
@@ -1234,10 +1435,15 @@ class ParallelSimRunner:
             current_yaw=current_yaw,
             target_yaw=target_yaw,
             clock_sin=clock_sin,
+            clock_cos=clock_cos,
             delta_root_x=accepted_dx,
             standstill_time=self.standstill_time,
             swing_valid=swing_valid,
             return_components=True,
+            posture_blend=(self.posture_blend if self.posture_ramp_s > 0.0 else None),
+            multiplicative_posture_reward=self.multiplicative_posture_reward,
+            head_err_ema=(self.head_err_ema if self.enable_head_ema_penalty else None),
+            action_over_limit_threshold=self.action_over_limit_threshold,
         )
         rewards = reward_dict["total_reward"]
         self.last_joint_vel[:] = joint_vel
@@ -1348,6 +1554,13 @@ class ParallelSimRunner:
         standstill_time_mean = float(np.mean(self.standstill_time))
         terminal_distances_x = root_x.copy()
 
+        # Pre-impact fall predictor update (updates limp gain scaling for next control step)
+        if self.enable_limp_fall:
+            for i in range(self.num_envs):
+                self.limp_active[i] = self.fall_predictors[i].update(
+                    base_ang_vel_body[i], proj_grav[i], imu_ready=True
+                )
+
         if fast:
             if np.any(time_outs):
                 timeout_indices = np.where(time_outs)[0]
@@ -1365,6 +1578,8 @@ class ParallelSimRunner:
                     self.completed_distances_x.append(float(root_x[i]))
                     self.completed_distances_y.append(float(root_y[i]))
                     next_obs[i] = self.reset_env(i)
+                if self.num_envs > 1:
+                    self._randomize_model_dynamics()
             fast_info = {
                 "time_outs": time_outs,
                 "tracking_lin_vel": float(np.mean(reward_dict["tracking_lin_vel"])) if "tracking_lin_vel" in reward_dict else 0.0,
@@ -1403,6 +1618,8 @@ class ParallelSimRunner:
             infos[i]["standstill_time"] = float(self.standstill_time[i])
             infos[i]["invalid_displacement"] = bool(invalid_disp_mask[i])
             infos[i]["swing_valid"] = swing_valid[i].copy()
+            infos[i]["step_ctrl"] = joint_torques[i].copy()
+            infos[i]["step_qvel"] = np.array(self.datas[i].qvel[6:14], dtype=np.float32).copy()
             infos[i]["reward_components"] = {k: float(v[i]) for k, v in weighted_terms.items()}
             if self.enable_auto_recovery:
                 infos[i]["recovering"] = bool(self.recovery_controllers[i].is_recovering)
@@ -1419,6 +1636,8 @@ class ParallelSimRunner:
                 infos[i]["terminal_obs"] = next_obs[i].copy()
                 infos[i]["terminal_critic_obs"] = self.get_privileged_obs(raw_obs=next_obs[i:i+1], env_indices=[i])[0]
                 next_obs[i] = self.reset_env(i)
+            if self.num_envs > 1:
+                self._randomize_model_dynamics()
 
         return next_obs, rewards, dones, infos
 
