@@ -1,7 +1,5 @@
 """Create draft variant assemblies; geometric validation is a separate gate."""
 
-from math import cos, radians, sin
-
 from build123d import Pos, Rot
 
 from .catalogue import printable_parts
@@ -9,7 +7,9 @@ from .armor.backpacks import module_frames
 from .geometry import Component
 from .kinematics import frame_transforms, location_from_matrix
 from .layout import (STATIONS, UBEC_LOCATION, CAPACITOR_LOCATION, IMU_LOCATION,
-                     LOGIC_BUCK_LOCATION, SWITCH_LOCATION, CAMERA_LOCATION, TOF_Z, HEAD_FORWARD)
+                     LOGIC_BUCK_LOCATION, SWITCH_LOCATION, OLED_LOCATION,
+                     CAMERA_LOCATION, TOF_LOCATION, MIC_LOCATION, HEAD_FORWARD,
+                     THIGH_COVER_BOSSES)
 from .params import MG996R, VARIANTS
 from .placements import print_placements
 from .purchased.catalogue import purchased_parts
@@ -53,7 +53,7 @@ def build_assembly(variant='rpi5', pose=None, *, armor=True, wiring=True):
             for i, bearing_location in enumerate(bearing_locations(bearings == 2)):
                 reference(f'f623_{joint}_{i}', 'f623zz', moving_link,
                           moving_location * bearing_location)
-            reference(f'idler_screw_{joint}', 'm3x20' if bearings == 2 else 'm3x18',
+            reference(f'idler_screw_{joint}', 'm3x18' if bearings == 2 else 'm3x14',
                       fixed_link, location * Pos(0, 0, -47.95) * Rot(180, 0, 0))
             bearing_bottom = IDLER_BEARING_TOP - 4 * bearings
             reference(f'idler_washer_{joint}', 'm3_washer', moving_link,
@@ -64,7 +64,16 @@ def build_assembly(variant='rpi5', pose=None, *, armor=True, wiring=True):
     for spec in STATIONS:
         station(spec)
     reference('neck_6803', '6803_2rs', 'trunk_base', Pos(6, 0, 34.5))
-    reference('battery', 'battery_2s_2000mah', 'trunk_base', Pos(0, 0, -35.5), 'BATTERY')
+    reference('battery', 'battery_2s_2000mah', 'trunk_base', Pos(0, 0, -39.5), 'BATTERY')
+    for idx, sign in enumerate((-1, 1)):
+        reference(f'belly_insert_{idx}', 'm3_insert', 'trunk_base', Pos(-47.5, sign * 18.5, -49.8))
+        reference(f'belly_screw_{idx}', 'm3x8', 'trunk_base', Pos(-47.5, sign * 18.5, -55.6))
+    for side, sign, prefix in (('L', 1, 'left'), ('R', -1, 'right')):
+        for idx, (bx, bz) in enumerate(THIGH_COVER_BOSSES):
+            reference(f'thigh_cover_insert_{side}_{idx}', 'm3_insert', f'{prefix}_thigh',
+                      Pos(bx, sign * 31.8, bz) * Rot(90 * sign, 0, 0))
+            reference(f'thigh_cover_screw_{side}_{idx}', 'm3x8', f'{prefix}_thigh',
+                      Pos(bx, sign * 38.6, bz) * Rot(90 * sign, 0, 0))
     reference('ubec', 'ubec_6v_15a', 'trunk_base', UBEC_LOCATION, 'ELECTRONICS')
     reference('capacitor', 'capacitor_4700uf', 'trunk_base', CAPACITOR_LOCATION, 'ELECTRONICS')
     reference('imu', 'mpu6050', 'trunk_base', IMU_LOCATION, 'PCB')
@@ -84,11 +93,10 @@ def build_assembly(variant='rpi5', pose=None, *, armor=True, wiring=True):
             reference(f'clamp_insert_{key}_{index}', 'm3_insert', 'trunk_base',
                       clamp_location * Pos(0, 0, -5))
     camera = 'ov2640' if variant == 'dual_esp32s3' else 'pi_camera_3'
+    reference('oled_display', 'oled_242', 'head', OLED_LOCATION, 'PCB')
     reference('camera', camera, 'head', CAMERA_LOCATION, 'PCB')
     if variant == 'dual_esp32s3':
         reference('head_mcu1', 'esp32_s3_devkit', 'head', Pos(-22 + HEAD_FORWARD, 0, 34) * Rot(0, 0, 90), 'PCB')
-    else:
-        reference('tof_mux', 'tca9548a', 'head', Pos(6 + HEAD_FORWARD, 0, 39), 'PCB')
     if variant == 'rpi5':
         reference('active_cooler', 'pi5_active_cooler', 'trunk_base',
                   tray_location * Pos(*COOLER_POSITION), 'ALUMINUM')
@@ -96,12 +104,9 @@ def build_assembly(variant='rpi5', pose=None, *, armor=True, wiring=True):
     reference('logic_buck', power, 'trunk_base', LOGIC_BUCK_LOCATION, 'PCB')
     if variant == 'dual_esp32s3':
         reference('ldo_1', 'ams1117', 'head', Pos(12 + HEAD_FORWARD, 28, 28), 'PCB')
-        reference('ldo_2', 'ams1117', 'trunk_base', Pos(48, 28, -14), 'PCB')
-    for angle in (-30, -15, 0, 15, 30):
-        a = radians(angle)
-        location = Pos(-26 + HEAD_FORWARD + 64 * cos(a), 64 * sin(a), TOF_Z) * Rot(0, 0, angle) * Rot(0, 90, 0)
-        reference(f'tof_sensor_{angle}', 'vl53l0x', 'head', location, 'PCB')
-    reference('microphone', 'inmp441', 'head', Pos(32 + HEAD_FORWARD, 0, -6), 'PCB')
+        reference('ldo_2', 'ams1117', 'trunk_base', Pos(32, 24, -10), 'PCB')
+    reference('tof_sensor_0', 'vl53l0x', 'head', TOF_LOCATION, 'PCB')
+    reference('microphone', 'inmp441', 'head', MIC_LOCATION, 'PCB')
     reference('main_switch', 'main_switch', 'trunk_base', SWITCH_LOCATION, 'ELECTRONICS')
     reference('battery_connector', 'xt30_connector', 'trunk_base', Pos(-53, 0, -34), 'ELECTRONICS')
     transforms = frame_transforms(pose)

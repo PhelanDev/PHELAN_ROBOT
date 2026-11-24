@@ -47,9 +47,9 @@ BATTERY_POCKET = (82.0, 48.0, 18.0)
 BATTERY_ENVELOPE = (75.0, 48.0, 16.0)
 FRAME_WALL, ARMOR_WALL = 2.8, 2.2
 SLIDE_XY, SLIDE_Z = 0.25, 0.30
-THIGH_MM, SHIN_MM = 68.0, 59.0
+THIGH_MM, SHIN_MM = 60.0, 54.0
 # Place the agreed 5 mm TPU sole datum on the ground in the zero-pose CAD model.
-BASE_HEIGHT_MM = 177.0
+BASE_HEIGHT_MM = 202.0
 FOOT_SIZE = (82.0, 46.0, 12.0)
 VARIANTS = ('rpi5', 'pizero2w', 'dual_esp32s3')
 VARIANT_SUFFIX = dict(zip(VARIANTS, ('rpi5', 'pizero2w', 'esp32s3')))

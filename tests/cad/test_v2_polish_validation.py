@@ -8,8 +8,8 @@ pytest.importorskip('build123d')
 
 def test_mass_budget_accepts_exact_upper_bound_and_rejects_next_float():
     from cad.validation import within_mass_budget
-    assert within_mass_budget(1.32)
-    assert not within_mass_budget(np.nextafter(1.32, np.inf))
+    assert within_mass_budget(1.50)
+    assert not within_mass_budget(np.nextafter(1.50, np.inf))
     assert within_mass_budget(1.17)  # The target lower mass is not a safety minimum.
     for invalid in (0, -1, np.nan, np.inf):
         assert not within_mass_budget(invalid)

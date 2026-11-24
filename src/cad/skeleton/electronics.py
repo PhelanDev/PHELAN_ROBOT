@@ -9,18 +9,19 @@ from .interfaces import insert_boss
 
 
 TRAY_LAYOUTS = {
-    'rpi5': [('raspberry_pi_5', (0, -16, 6)), ('pca9685', (0, 36.7, 6))],
+    'rpi5': [('raspberry_pi_4b', (0, -16, 6)), ('pca9685', (0, 36.7, 6))],
     'pizero2w': [('raspberry_pi_zero_2w', (0, -10, 6)), ('pca9685', (0, 28, 6))],
     'dual_esp32s3': [('esp32_s3_devkit', (0, 0, 6))],
 }
 TRAY_MOUNTS = tuple((x, y) for x in (-44, 44) for y in (-46, 46))
-COOLER_POSITION = (-6.0, -16.875, 8.1)
+COOLER_POSITION = (-12.0, -16.0, 8.1)
 
 
 def clamp_positions(key, position):
     cx, cy, z = position
     board = BOARDS[key]
-    offsets = {'raspberry_pi_5': (-19, 19), 'raspberry_pi_zero_2w': (-28.5, 28.5)}
+    offsets = {'raspberry_pi_4b': (-19, 19), 'raspberry_pi_5': (-19, 19),
+               'raspberry_pi_zero_2w': (-28.5, 28.5)}
     return [(cx + dx, cy - board.size[1] / 2 - 4.8, z + board.size[2])
             for dx in offsets.get(key, (-16, 16))]
 
@@ -35,9 +36,9 @@ def electronics_sled(variant):
             tray -= box((74, 28, 6), (0, sy * 32, 1.1))
         tray -= box((44, 14, 6), (0, 0, 1.1))
     elif variant == 'rpi5':
-        tray -= box((62, 36, 6), (0, -16, 1.1))
-        tray -= box((54, 15, 6), (0, 36.7, 1.1))
-        tray -= box((76, 6, 6), (0, 13.5, 1.1))
+        tray -= box((72, 41, 6), (0, -16, 1.1))
+        tray -= box((68, 21, 6), (0, 36.7, 1.1))
+        tray -= box((78, 11, 6), (0, 13.5, 1.1))
     else:
         tray -= box((42, 14, 6), (0, -10, 1.1))
         tray -= box((42, 10, 6), (0, 28, 1.1))

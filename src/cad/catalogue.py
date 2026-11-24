@@ -5,7 +5,6 @@ from build123d import Plane
 
 from . import monocoque as mono
 from .armor.backpacks import backpack
-from .armor.panels import reactor
 from .geometry import box
 from .params import VARIANTS, VARIANT_SUFFIX
 from .skeleton.electronics import electronics_sled
@@ -28,16 +27,16 @@ def printable_parts():
         add(name, factory())
     add('head_front', mono.head_front(), 'PLA', 2.0)
     add('head_rear_cover', mono.head_rear_cover(), 'PLA', 2.0)
-    # Keep the reactor bezel in the slate palette; no gold/yellow duck styling.
-    add('reactor_bezel', reactor(), 'PLA', 2.2)
-    add('reactor_diffuser', reactor(True), 'CLEAR', 2)
     add('visor_lens', mono.visor_lens(), 'CLEAR', 2.4)
     add('battery_foam_spacer', box((70, 32, 2)), 'EVA', 2)
     for side in ('L', 'R'):
         for name, factory, material, wall in (
             ('hip_clevis', mono.hip_clevis, 'PETG', 2.8),
             ('thigh', mono.thigh_shell, 'PLA', 2.2),
+            ('thigh_cover', mono.thigh_cover, 'PLA', 2.0),
+            ('thigh_idler_cap', mono.thigh_idler_cap, 'PLA', 2.0),
             ('shin', mono.shin_shell, 'PETG', 2.6),
+            ('shin_idler_cap', mono.shin_idler_cap, 'PETG', 2.6),
             ('foot', mono.integrated_foot, 'PLA', 2.2),
             ('sole_tread', mono.sole_tread, 'TPU', 2.4),
         ):

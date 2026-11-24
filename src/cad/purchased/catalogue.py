@@ -24,6 +24,6 @@ def purchased_parts():
         'main_switch': (box((19, 13, 22)), 0.005),
         'xt30_connector': (box((14, 12, 7)), 0.0025),
     })
-    for length in (6, 8, 12, 18, 20):
+    for length in (6, 8, 12, 14, 18, 20):
         parts[f'm3x{length}'] = (screw(length), 0.0005 + length * 0.000045)
     return parts

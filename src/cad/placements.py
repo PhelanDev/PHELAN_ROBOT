@@ -14,9 +14,7 @@ def print_placements(variant):
 
     for name in ('trunk_front', 'trunk_bottom', 'battery_hatch'):
         put(name)
-    put('battery_foam_spacer', pos=(0, 0, -44.5))
-    put('reactor_bezel', pos=(66.0, 0, 6.0), rot=(0, 90, 0))
-    put('reactor_diffuser', pos=(69.3, 0, 6.0), rot=(0, 90, 0))
+    put('battery_foam_spacer', pos=(0, 0, -48.5))
     put('neck_link', 'neck')
     for name in ('head_front', 'head_rear_cover', 'visor_lens'):
         put(name, 'head')
@@ -26,6 +24,8 @@ def print_placements(variant):
     put(f'trunk_back_cover_{suffix}', location=housing)
     for side, prefix in (('L', 'left'), ('R', 'right')):
         for stem, link in (('hip_clevis', 'hip'), ('thigh', 'thigh'),
-                           ('shin', 'shin'), ('foot', 'foot'), ('sole_tread', 'foot')):
+                           ('thigh_cover', 'thigh'), ('thigh_idler_cap', 'thigh'),
+                           ('shin', 'shin'), ('shin_idler_cap', 'shin'),
+                           ('foot', 'foot'), ('sole_tread', 'foot')):
             put(f'{stem}_{side}', f'{prefix}_{link}')
     return placements

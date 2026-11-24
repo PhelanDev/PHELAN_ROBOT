@@ -10,13 +10,13 @@ from .params import BASE_HEIGHT_MM, SHIN_MM, THIGH_MM
 FRAMES = {
     'trunk_base': (None, (0, 0, BASE_HEIGHT_MM), None, None),
     'neck': ('trunk_base', (6, 0, 28), 'head_yaw', 'z'),
-    'head': ('neck', (0, 0, 50), 'head_pitch', 'y'),
-    'left_hip': ('trunk_base', (0, 49, -40), 'left_hip_roll', 'x'),
-    'left_thigh': ('left_hip', (0, 55, 0), 'left_hip_pitch', 'y'),
+    'head': ('neck', (0, 0, 44), 'head_pitch', 'y'),
+    'left_hip': ('trunk_base', (0, 42, -40), 'left_hip_roll', 'x'),
+    'left_thigh': ('left_hip', (0, 23, -38), 'left_hip_pitch', 'y'),
     'left_shin': ('left_thigh', (0, 0, -THIGH_MM), 'left_knee_pitch', 'y'),
     'left_foot': ('left_shin', (4, 0, -SHIN_MM), None, None),
-    'right_hip': ('trunk_base', (0, -49, -40), 'right_hip_roll', 'x'),
-    'right_thigh': ('right_hip', (0, -55, 0), 'right_hip_pitch', 'y'),
+    'right_hip': ('trunk_base', (0, -42, -40), 'right_hip_roll', 'x'),
+    'right_thigh': ('right_hip', (0, -23, -38), 'right_hip_pitch', 'y'),
     'right_shin': ('right_thigh', (0, 0, -THIGH_MM), 'right_knee_pitch', 'y'),
     'right_foot': ('right_shin', (4, 0, -SHIN_MM), None, None),
 }

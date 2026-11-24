@@ -46,7 +46,8 @@ def test_purchased_reference_step_roundtrip_has_matching_volume(name):
     np.testing.assert_allclose(tuple(imported.bounding_box().size), tuple(shape.bounding_box().size), atol=1e-6)
 
 
-@pytest.mark.parametrize('key', ['raspberry_pi_5', 'raspberry_pi_zero_2w', 'pi_camera_3'])
+@pytest.mark.parametrize('key', ['raspberry_pi_4b', 'raspberry_pi_5', 'raspberry_pi_zero_2w',
+                                 'pi_camera_3', 'oled_242'])
 def test_pcb_holes_remain_native_sizes(key):
     board, shape = BOARDS[key], board_model(key)
     for x, y in board.holes:
@@ -89,7 +90,9 @@ def test_assemblies_include_eight_servos_eleven_f623_one_neck_bearing(variant):
     assert sum(n.startswith('f623_') for n in names) == 11
     assert names.count('neck_6803') == 1
     assert not any(n.startswith(('cassette_', 'idler_cap_')) for n in names)
-    assert sum(n.startswith('tof_sensor_') for n in names) == 5
+    assert sum(n.startswith('tof_sensor_') for n in names) == 1
+    assert 'oled_display' in names
+    assert 'tof_mux' not in names
     assert ('head_mcu1' in names) == (variant == 'dual_esp32s3')
     assert ('pca9685' in names) == (variant != 'dual_esp32s3')
     assert all(p.shape.is_valid for p in assembly)

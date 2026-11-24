@@ -8,33 +8,48 @@ from .interfaces import insert_boss
 
 
 def torso_lower():
-    """Lightweight 2.6 mm wall belly drawer around the locked 82 x 48 x 18 mm cavity."""
-    # Cavity: X in [-41, 41], Y in [-24, 24], Z in [-45.5, -27.5] (18 mm tall).
-    # Outer:  X in [-43.6, 43.6], Y in [-26.6, 26.6], Z in [-48.5, -24.9] (2.6 mm walls).
-    outer = box((87.2, 53.2, 23.6), (0, 0, -36.7))
-    outer += box((16, 18.0, 21.0), (-50.0, 0, -36.5))
-    cavity = box((82, 48, 22), (0, 0, -38.5))
+    """2.55+ mm PETG universal belly battery bay (82 x 48.9 x 22 mm) with open XT30 access & M3 bosses."""
+    # Cavity: X in [-41.0, 41.0] (82.0 mm), Y in [-24.45, 24.45] (48.9 mm), Z in [-49.5, -27.5] (22.0 mm).
+    # Outer:  X in [-43.6, 43.6] (87.2 mm), Y in [-27.0, 27.0] (54.0 mm), Z in [-52.8, -24.9] (27.9 mm).
+    outer = box((87.2, 54.0, 27.9), (0, 0, -38.85))
+    # Rear XT30 housing pod kept above backpack lower collar floor (Z >= -47.0 vs collar Z=-47.18..-49.0).
+    outer += box((17.0, 19.2, 21.0), (-50.5, 0, -36.5))
+    # Twin solid PETG rear M3 heat-set insert bosses at X=-47.5, Y=±18.5 (Z in [-49.8, -41.0]).
+    for sign in (-1, 1):
+        outer += box((9.0, 10.0, 8.8), (-47.5, sign * 18.5, -45.4))
+    # Open bottom battery cavity (82.0 x 48.9 x 22.0 mm, open through Z=-52.8).
+    cavity = box((82.0, 48.9, 27.0), (0, 0, -41.0))
     part = outer - cavity
-    # Roof & side weight-saving windows keeping 2.6 mm PETG structural frame.
-    part -= box((68, 34, 8), (0, 0, -25.5))
-    part -= box((64, 62, 12), (0, 0, -36.5))
-    # Bottom recess for sliding hatch (hatch Z in [-48.4, -45.8], gap 0.2 mm).
-    part -= box((84.6, 50.6, 3.4), (0, 0, -47.3))
-    # Front latch tongue recess (tongue Z in [-46.6, -43.0]).
-    part -= box((4.4, 13.0, 4.2), (42.8, 0, -44.7))
-    # Rear XT30 connector bay and top wire exit (main_power passes up at X=-53, Y=0).
-    part -= box((18, 13.6, 16), (-50.5, 0, -36.5))
-    part -= cylinder(8, 14, (-53, 0, -29.5))
+    # Roof weight-saving window keeping solid perimeter walls (>= 2.55 mm PETG) hiding battery.
+    part -= box((76.0, 42.0, 8.0), (0, 0, -25.5))
+    # Bottom recess seating battery_hatch flush & open at rear for twin screw tabs (X in [-45.0, 42.3], Z in [-53.4, -49.8]).
+    part -= box((87.3, 51.2, 3.6), (-1.35, 0, -51.6))
+    # Front blind-recessed latch slot (tongue X in [40.8, 42.8], cleanly inside front wall X=43.6).
+    part -= box((3.4, 14.0, 4.0), (42.5, 0, -48.5))
+    # Open bottom-accessible XT30 connector bay & direct wire pass-through into battery cavity (X=-59.5..-39.5).
+    part -= box((20.0, 13.6, 26.0), (-49.5, 0, -41.5))
+    # Top wire exit hole for main_power up behind logic_buck.
+    part -= cylinder(6.8, 14.0, (-53.0, 0, -29.5))
+    # Real Ø4.05 mm x 6.2 mm M3 heat-set insert pockets in rear bosses (X=-47.5, Y=±18.5, Z in [-50.0, -43.8]).
+    for sign in (-1, 1):
+        part -= cylinder(M3_INSERT, 6.2, (-47.5, sign * 18.5, -50.0))
     return part.clean()
 
 
 def battery_hatch():
-    """2.6 mm PETG sliding belly hatch with lightening window and 2.6 mm front latch."""
-    plate = box((84, 50, 2.6), (0, 0, -47.1))
-    plate += box((3.0, 12, 3.6), (42.6, 0, -44.8))
-    plate -= box((56, 26, 6), (2, 0, -47.1))
-    for y in (-19, 19):
-        plate -= cylinder(M3_CLEAR, 8, (-38, y, -50))
+    """2.6 mm PETG bottom belly hatch with front tilt-in tongue and twin rear M3 screw tabs."""
+    # Main bottom lid: X in [-42.0, 42.0], Y in [-25.3, 25.3], Z in [-52.6, -50.0].
+    plate = box((84.0, 50.6, 2.6), (0, 0, -51.3))
+    # Front tilt-in latch tongue recessed cleanly inside front slot (X in [40.8, 42.8], Z in [-50.0, -47.2]).
+    plate += box((2.0, 13.0, 3.0), (41.8, 0, -48.7))
+    # Twin rear mounting ears aligning with M3 insert bosses at X=-47.5, Y=±18.5.
+    for sign in (-1, 1):
+        plate += box((10.0, 10.0, 2.6), (-46.5, sign * 18.5, -51.3))
+    # Lightening window leaving generous perimeter rim and grip access.
+    plate -= box((72.0, 39.0, 6.0), (0, 0, -51.3))
+    # Twin M3 clearance screw holes matching trunk_bottom rear insert bosses.
+    for sign in (-1, 1):
+        plate -= cylinder(M3_CLEAR, 8.0, (-47.5, sign * 18.5, -54.0))
     return plate.clean()
 
 

@@ -21,11 +21,11 @@ SRC_ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT = ROOT / 'artifacts/cad/draft/media'
 COLORS = {
-    'PLA': (0.34, 0.39, 0.43, 1),
-    'PETG': (0.18, 0.23, 0.27, 1),
-    'TPU': (0.075, 0.09, 0.105, 1),
+    'PLA': (0.44, 0.49, 0.54, 1),
+    'PETG': (0.13, 0.16, 0.19, 1),
+    'TPU': (0.06, 0.07, 0.08, 1),
     'BRONZE': (0.27, 0.16, 0.09, 1),
-    'CLEAR': (0.02, 0.25, 0.31, 1),
+    'CLEAR': (0.0, 0.42, 0.52, 1),
     'SERVO': (0.065, 0.075, 0.085, 1),
     'ALUMINUM': (0.47, 0.51, 0.54, 1),
     'STEEL': (0.31, 0.36, 0.39, 1),
@@ -112,8 +112,7 @@ def _cutaway(parts):
 
 def _exterior(parts):
     """Render recognizable outer armor; reserve internal prints for cutaway."""
-    fixed_shells = {'trunk_front', 'head_front', 'head_rear_cover', 'visor_lens',
-                    'reactor_bezel', 'reactor_diffuser'}
+    fixed_shells = {'trunk_front', 'head_front', 'head_rear_cover', 'visor_lens'}
     return [part for part in parts
             if part.category == 'printed'
             and (part.name in fixed_shells

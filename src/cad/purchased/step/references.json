@@ -1,4 +1,18 @@
 {
+  "raspberry_pi_4b": {
+    "path": "raspberry_pi_4b.step",
+    "units": "mm",
+    "bbox_mm": [
+      87.0,
+      56.0,
+      17.1
+    ],
+    "volume_mm3": 22849.48672889155,
+    "nominal_mass_kg": 0.046,
+    "sha256": "61c1eece378cad14c70fc0b0c6a575b5ad524db75814f710fa5bd0655d3f579e",
+    "geometry_kind": "parametric_fit_reference",
+    "vendor_certified": false
+  },
   "raspberry_pi_5": {
     "path": "raspberry_pi_5.step",
     "units": "mm",
@@ -9,7 +23,21 @@
     ],
     "volume_mm3": 22724.98672889156,
     "nominal_mass_kg": 0.046,
-    "sha256": "0f82548457db49e8eb6342582e5ce7686007a9665006ce3c5033a77680f60e49",
+    "sha256": "40ee5b0f0dbef9d15e7b7ba42d63a1c561ae8bccc4e21c2b31294133e5d30c51",
+    "geometry_kind": "parametric_fit_reference",
+    "vendor_certified": false
+  },
+  "oled_242": {
+    "path": "oled_242.step",
+    "units": "mm",
+    "bbox_mm": [
+      43.5,
+      72.0,
+      15.0
+    ],
+    "volume_mm3": 13382.691861753372,
+    "nominal_mass_kg": 0.012,
+    "sha256": "ad89fbe27abbba89413000ac65bdedaafee647efa0994b8774cdb6b1be0f3c6e",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -23,7 +51,7 @@
     ],
     "volume_mm3": 3957.9867288915643,
     "nominal_mass_kg": 0.012,
-    "sha256": "4ff94377451d7a50b7acbf73d8e700cb7086acf53338c81168226b81f696858d",
+    "sha256": "3daa2cc0cc9ec706376c4fdf033e3cda6e9dc14cd01f69e82951bd974c24f55c",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -37,7 +65,7 @@
     ],
     "volume_mm3": 6306.4,
     "nominal_mass_kg": 0.012,
-    "sha256": "431b4d3e5f3a835439760e361cf1beb2f3974f79b5b4ba8602ce16ee72a82d4b",
+    "sha256": "6eb691253c8bb8879424a4e2333023001325a5ec5711c17ae34485a44b19f152",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -51,7 +79,7 @@
     ],
     "volume_mm3": 7222.584073464102,
     "nominal_mass_kg": 0.01,
-    "sha256": "352b3f476d4a3cb718e84cca4710a4e11bb5936ed02220ac84766790d6ca53b5",
+    "sha256": "c0196e02f8a10ad5fb3903819c27f8fdd06d94d67e9394a65bf14289f1eae81f",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -65,7 +93,7 @@
     ],
     "volume_mm3": 491.8938070170252,
     "nominal_mass_kg": 0.002,
-    "sha256": "2914915b348695faaad4b4964e4078fdc5d0d4a968ad97fb6e965564e9e42a4d",
+    "sha256": "d8a8a9d3a663f8487a71791e183fac6eb44867f033ef467a6fe8fbb311e20fab",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -75,11 +103,11 @@
     "bbox_mm": [
       25.0,
       24.0,
-      11.1
+      12.4
     ],
-    "volume_mm3": 1705.1715064906007,
+    "volume_mm3": 2195.383506490601,
     "nominal_mass_kg": 0.004,
-    "sha256": "32d684eb09217ae2fc115c8e84327fc7ea1f8e7239654206c43e000c2609b0fa",
+    "sha256": "a1d85b1794a752305e4f96fd9490be54ea38e0f7e4264939145bf2ec7d95ba05",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -93,7 +121,7 @@
     ],
     "volume_mm3": 1369.6000000000004,
     "nominal_mass_kg": 0.003,
-    "sha256": "8c18226d7e0c7a64839b80f49cb073f8c8b0d8fd08fa463ba13d1b7691fea31b",
+    "sha256": "7cf1d1c1c0490ab17046b0fe2e8efb90c5a37a1057b0f03e299a5eb23432fb2a",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -107,7 +135,7 @@
     ],
     "volume_mm3": 249.29999999999998,
     "nominal_mass_kg": 0.0015,
-    "sha256": "62853a1be1d499a88ba5f808a37118edb13920302c4b98a11fc2ec650b6ec7f3",
+    "sha256": "d401a5d2b6853949e8c42f999f92f2617b996ad4fdf3424263537d6fd4a1383e",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -121,7 +149,7 @@
     ],
     "volume_mm3": 268.8,
     "nominal_mass_kg": 0.0015,
-    "sha256": "d5389c93ea62b1165f1609b3ff2b7b24642b420697f8ff263e2ee0c79b9960c9",
+    "sha256": "fa9a67f139e873fa5ed7e19ab29660782f3b0c48602fd6e9b48d853a0b0eddc7",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -135,7 +163,7 @@
     ],
     "volume_mm3": 861.6960000000003,
     "nominal_mass_kg": 0.003,
-    "sha256": "ed4d3705922a618df9a619ac0489173e981d34ad99764d689c49b829a4a13495",
+    "sha256": "6509e9a6311b07fc4fe5f17bcb5646561110509d478bf85b2876987379f872d1",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -149,7 +177,7 @@
     ],
     "volume_mm3": 6448.0,
     "nominal_mass_kg": 0.018,
-    "sha256": "ea29217622b764968e8a0ab9072e39fd119f3dd1d82f674971f79f6388535da2",
+    "sha256": "8bfc3896fe4ebdd3b996b7571546dd759dcf6e679914462d45c2bd76b6510115",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -163,7 +191,7 @@
     ],
     "volume_mm3": 3556.0,
     "nominal_mass_kg": 0.01,
-    "sha256": "cb9523cef0b8301c4a32288e6c236e82d2d5356121d01e3c9ba771a9606a58b3",
+    "sha256": "77f018ca1bfade77fec0b214da0b8a7d89c11ea423c9ecac59eedd13a2f02eba",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -177,7 +205,7 @@
     ],
     "volume_mm3": 587.2,
     "nominal_mass_kg": 0.003,
-    "sha256": "eff20653906409951e977fbe0fddba0adaabf25a70e247e74dd6efc4a5ca22b1",
+    "sha256": "55459c92abcae1dda55f189920e2b56224de1a0ce70de415c22e328ddd77f01e",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -191,7 +219,7 @@
     ],
     "volume_mm3": 208.00000000000003,
     "nominal_mass_kg": 0.002,
-    "sha256": "937d232e74ea2578f31beec33923a1468a472e55a5eac817e8b0e57d84e013f3",
+    "sha256": "38f52bae730a0a5fc0ba5f99bb1de38cc13da0d28d6437cea4235d8dc6d872a5",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -205,7 +233,7 @@
     ],
     "volume_mm3": 30415.39347326342,
     "nominal_mass_kg": 0.055,
-    "sha256": "7780ae45a07abef1fa4b4715d27cc241670b90ac31503e9fb6597a413d93fdca",
+    "sha256": "d858f7923acce191bbc0dfac5bf71161846a3969564188def877239bb0a5c9c4",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -219,7 +247,7 @@
     ],
     "volume_mm3": 648.6760511132208,
     "nominal_mass_kg": 0.003,
-    "sha256": "5f3cee88ac92fb9c2f859c630fff1060d02ee8a82d452f0abbe0de1d8e43cc95",
+    "sha256": "f26e539a3e0c82f882192b3493f9237a6599d722b01c8c0ca1550af7a75f3eaa",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -233,7 +261,7 @@
     ],
     "volume_mm3": 311.21402224623887,
     "nominal_mass_kg": 0.0018,
-    "sha256": "b08f5638fe93afffac6a8a641e73ca42532aff34a9fee2759cebd7ec3d1f4fd9",
+    "sha256": "8b86da8b6ac82203eb6a66bd1a6a267db099ae4e37d3c0e696ccc1c17ab907d4",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -247,7 +275,7 @@
     ],
     "volume_mm3": 1519.7454461740622,
     "nominal_mass_kg": 0.008,
-    "sha256": "8ac9bce46d865234c6de111cccf403afc8d4e71b244b5856b9e7d4c435a9f422",
+    "sha256": "27543cc5977d4b86f9ad3934281206759f5f326943badd4d23d7de14df5632fc",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -261,7 +289,7 @@
     ],
     "volume_mm3": 29.069549522748055,
     "nominal_mass_kg": 0.00035,
-    "sha256": "de8be667d694a10228458ad667b7f51d01d364db6fe669c7d8922d21eb28aa49",
+    "sha256": "eb9df4cc7f3062fcf7d6c1e54dec38123ccddaa670f10e66691fd1bc16fde66d",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -275,7 +303,7 @@
     ],
     "volume_mm3": 76.51473997560893,
     "nominal_mass_kg": 0.0004,
-    "sha256": "bcbc5326e8cebc707a01e2843eb220a5929eb4367bfb8b2ad7b396886796ad28",
+    "sha256": "7b0d8a0c058ffb6eb7e04673dfc760e481632095362abcd1721004c5b1b92c2f",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -289,7 +317,7 @@
     ],
     "volume_mm3": 15.221016406642551,
     "nominal_mass_kg": 0.00015,
-    "sha256": "dece2c8fd7a94447bab59ad132d654d71e95bb2a23a6466a9e9bd94d9c7a943d",
+    "sha256": "87943f3bb5352ab49e7095b8317494524de74e9e55adcc52209217b816574ea6",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -303,7 +331,7 @@
     ],
     "volume_mm3": 44.459819233602744,
     "nominal_mass_kg": 0.0004,
-    "sha256": "58eda9f491ce87c743d5d2b7de44ffc27e15953e02faa3ee510dd4b4e87a4357",
+    "sha256": "2b29a5681931feed9cacd91cdd95d1f5bd9cec5b2c679bbaeda7be72ed74aba4",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -311,13 +339,13 @@
     "path": "pi5_active_cooler.step",
     "units": "mm",
     "bbox_mm": [
-      63.5,
-      42.5,
-      13.7
+      36.0,
+      36.0,
+      12.0
     ],
-    "volume_mm3": 36972.875,
+    "volume_mm3": 15552.0,
     "nominal_mass_kg": 0.025,
-    "sha256": "99db4ca6acc3d54c584e8198ea5157b5c79a8088c07e306db002287b315f763c",
+    "sha256": "5fe9fda073062ee1b71b69424b0f8abf838d1dd363aec2f6e8ee145c170ecf85",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -331,7 +359,7 @@
     ],
     "volume_mm3": 57600.0,
     "nominal_mass_kg": 0.105,
-    "sha256": "2c569a150ff96def3c084975260be0debc357228cf96ef5b97a39fe60f820b00",
+    "sha256": "5dfea324a86726b463c45ef1f86a34b31864bd1f2f9bc5d3a5badcd3bfa44d4b",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -345,7 +373,7 @@
     ],
     "volume_mm3": 17500.0,
     "nominal_mass_kg": 0.025,
-    "sha256": "495e57de336df37879b100d0898dd7637efe1aca88eb17928967b1bae2fcbc68",
+    "sha256": "568c00ca5e1ecdc19f8c709adb7a3d5eee32ffdcd20bfd9ed02e9628078cc4f0",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -359,7 +387,7 @@
     ],
     "volume_mm3": 8906.415172927063,
     "nominal_mass_kg": 0.009,
-    "sha256": "ec39bf94f815ac5885d709bd313bb5935478a711163eaf70ca3f925085407bcf",
+    "sha256": "7b772638a90a4a20d4743018cc7966de864a93663803121265777eaab3846dbb",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -373,7 +401,7 @@
     ],
     "volume_mm3": 5434.0,
     "nominal_mass_kg": 0.005,
-    "sha256": "3038c859f7cd5f3d40a45e46f196ddf51682366437658163c98cb340dcd8d62c",
+    "sha256": "00236d21bcecd459b479a916745069c7050f929ca2494b97f3463871bd74553e",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -387,7 +415,7 @@
     ],
     "volume_mm3": 1176.0,
     "nominal_mass_kg": 0.0025,
-    "sha256": "63e9ef8bf6f1159f7bfc84177d12888b11f9391b6574f08085b4a7621d623758",
+    "sha256": "8f760f9aaf64486f2dc5d3d5e1aa17bdaf075408968e94b5de04a91517e6975d",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -401,7 +429,7 @@
     ],
     "volume_mm3": 103.94359835920567,
     "nominal_mass_kg": 0.0007700000000000001,
-    "sha256": "1a7044dac437f53bb658f90eceb9c2c8265d9022d62cd8318045de29a5180756",
+    "sha256": "aab8f10c1ae9e3fa7c17973520fd01c147af74d0ad122e8a6bdf88ca1373e342",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -415,7 +443,7 @@
     ],
     "volume_mm3": 118.08076530035974,
     "nominal_mass_kg": 0.0008600000000000001,
-    "sha256": "c851b757d72a561a0a2725cf5de0e7af8768c8f11eafa6539c2a417d8d813d4a",
+    "sha256": "b7bd992e7a7aa55bc0f1c300ebd0b07b5a07f9fc89266fdf1b9e4d5d2af24c96",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -429,7 +457,21 @@
     ],
     "volume_mm3": 146.35509918266789,
     "nominal_mass_kg": 0.0010400000000000001,
-    "sha256": "2b78bf25c92ec5e1ca5c83dd1e7ebe02201e5388fc897234d691ab668424ff18",
+    "sha256": "db7d4a665fb5bd3f938fd5b02bd9097116f4b946508ee9113dd4ee7cb4be451d",
+    "geometry_kind": "parametric_fit_reference",
+    "vendor_certified": false
+  },
+  "m3x14": {
+    "path": "m3x14.step",
+    "units": "mm",
+    "bbox_mm": [
+      5.5,
+      5.5,
+      17.0
+    ],
+    "volume_mm3": 160.49226612382196,
+    "nominal_mass_kg": 0.00113,
+    "sha256": "692818871438d0d9eccd55c6cf307de5c1877c8c3da7455e2b35dfa18871758e",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -443,7 +485,7 @@
     ],
     "volume_mm3": 188.7666000061301,
     "nominal_mass_kg": 0.00131,
-    "sha256": "4537e590598aca5cdad42d7c769d54925fb401a82b9cc169c0cf9ab7f2f8aec7",
+    "sha256": "b229168d7dc91537fb25579ad1fdad59d9d09cb93f2d935b5b79d652b8c02179",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   },
@@ -457,7 +499,7 @@
     ],
     "volume_mm3": 202.90376694728414,
     "nominal_mass_kg": 0.0014000000000000002,
-    "sha256": "7eed420cca860f04555d481eef35aaa5aeda06efc87e7400331e7fb68e603151",
+    "sha256": "85d05e38e778d6465671fa1825473fbab337b945ffb600416bf1c59441dccdfd",
     "geometry_kind": "parametric_fit_reference",
     "vendor_certified": false
   }

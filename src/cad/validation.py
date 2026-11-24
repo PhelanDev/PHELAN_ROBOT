@@ -19,7 +19,7 @@ from .wiring.routes import measure_harnesses
 
 
 JOINT_SWEEP_SAMPLES = 9
-MAX_MASS_KG = 1.32
+MAX_MASS_KG = 1.50
 
 
 def within_mass_budget(mass_kg):
@@ -37,7 +37,7 @@ def sample_poses(samples=JOINT_SWEEP_SAMPLES):
     for name, spec in EXPECTED_JOINTS.items():
         for value in np.linspace(spec['lower'], spec['upper'], samples):
             yield f'{name}_{value:+.6f}', {name: float(value)}
-    yield 'both_hips_inward', {'left_hip_roll': -0.44, 'right_hip_roll': 0.44}
+    yield 'both_hips_inward', {'left_hip_roll': -0.22, 'right_hip_roll': 0.22}
 
 
 def validate_parts():

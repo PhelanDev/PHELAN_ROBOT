@@ -36,15 +36,15 @@ class Harness:
 
 
 def harnesses(variant):
-    diameter = 4.5 if variant == 'dual_esp32s3' else 6.0
+    diameter = 4.5 if variant == 'dual_esp32s3' else 6.5
     routes = [
         # Rear S-loop through the open neck cable channel (all neck X <= -30).
         Harness('head_harness', (
             ('trunk_base', (-55, 0, 14)),
-            ('trunk_base', (-51, 0, 42)),
-            ('neck', (-44, 0, 24)),
-            ('neck', (-46, 0, 44)),
-            ('neck', (-44, 0, 58)),
+            ('trunk_base', (-51, 0, 40)),
+            ('neck', (-44, 0, 20)),
+            ('neck', (-46, 0, 38)),
+            ('neck', (-44, 0, 52)),
             ('head', (-52 + HEAD_FORWARD, 4, 24)),
             ('head', (-34 + HEAD_FORWARD, 4, 24)),
         ), diameter, 240.0),
@@ -58,15 +58,31 @@ def harnesses(variant):
         ), 5.0, start_tangent=(0, 0, 1)),
     ]
     for side, sign in (('left', 1), ('right', -1)):
-        # Service loop running strictly behind hip_roll idler (X <= -48) and above Z = -10.
+        # Knee servo wire exits knee_pitch portal, curves hidden inside thigh under cross-bridge to rear exit.
+        routes.append(Harness(f'knee_pitch_wire_{side}', (
+            (f'{side}_thigh', (21.8, -sign * 16.6, -35.8)),
+            (f'{side}_thigh', (18.0, -sign * 15.8, -27.5)),
+            (f'{side}_thigh', ( 1.0, -sign * 13.5, -34.5)),
+            (f'{side}_thigh', (-3.0, -sign * 12.2, -43.5)),
+            (f'{side}_thigh', (-13.0, -sign * 10.2, -45.5)),
+            (f'{side}_thigh', (-22.0, -sign *  8.5, -45.5)),
+        ), 2.6, 95.0))
+        # Hip pitch servo wire exits straight back through open-bottom rear slot in hip_clevis to Y-junction.
+        routes.append(Harness(f'hip_pitch_wire_{side}', (
+            (f'{side}_hip', (-31.6, sign * 10.4, -38.0)),
+            (f'{side}_hip', (-41.5, sign * 11.2, -37.5)),
+            (f'{side}_hip', (-47.0, sign * 14.2, -33.5)),
+            (f'{side}_hip', (-49.0, sign * 15.8, -22.0)),
+        ), 2.6, 80.0))
+        # Braided leg service loop running behind hip_clevis pod & trunk rear (X <= -54) into backpack.
         routes.append(Harness(f'leg_harness_{side}', (
-            (f'{side}_thigh', (-20, -sign * 4, -56)),
-            (f'{side}_thigh', (-28, -sign * 4, -30)),
-            (f'{side}_thigh', (-34, -sign * 4, -10)),
-            (f'{side}_hip', (-49, sign * 24, 24)),
-            ('trunk_base', (-55, sign * 28, -10)),
-            ('trunk_base', (-56, sign * 20, 4)),
-        ), 4.5, 260.0))
+            (f'{side}_thigh', (-25.5, -sign * 7.5, -45.5)),
+            (f'{side}_thigh', (-46.0, -sign * 4.0, -30.0)),
+            (f'{side}_hip',   (-54.0,  sign * 24.0, -42.0)),
+            (f'{side}_hip',   (-55.0,  sign * 28.0,  10.0)),
+            ('trunk_base',    (-57.0,  sign * 34.0,  -8.0)),
+            ('trunk_base',    (-57.0,  sign * 20.0,   4.0)),
+        ), 4.5, 265.0))
     return routes
 
 
