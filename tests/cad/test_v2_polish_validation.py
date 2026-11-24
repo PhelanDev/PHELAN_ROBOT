@@ -49,3 +49,14 @@ def test_neck_harness_is_routed_behind_the_yaw_axis():
     assert len(neck_points) >= 3
     assert all(xyz[0] <= -30 for xyz in neck_points)
     assert route.maximum_length is not None
+
+
+def test_assembly_mass_includes_wire_tails_and_is_pose_invariant():
+    from cad.assembly import build_assembly
+    from cad.mass_properties import mass_properties
+
+    m0 = mass_properties(build_assembly('rpi5', pose=None, wiring=True))['mass_kg']
+    m1 = mass_properties(build_assembly(
+        'rpi5', pose={'head_yaw': 1.57, 'left_knee_pitch': 1.40}, wiring=True,
+    ))['mass_kg']
+    assert m0 == pytest.approx(m1, abs=1e-9)

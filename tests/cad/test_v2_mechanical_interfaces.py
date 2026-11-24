@@ -198,6 +198,12 @@ def test_microduck_leg_outer_haunch_flat_inner_plate_and_sleek_shin_bounds():
     assert by_name['shin_idler_cap_L'].shape.bounding_box().min.Y < by_name['idler_screw_left_knee_pitch'].shape.bounding_box().min.Y
     assert max(p.shape.bounding_box().max.Y for p in straight) <= 107.0
     assert abs(min(p.shape.bounding_box().min.Z for p in straight)) < 1e-4
+    nominal_report = interference(build_assembly(pose=None, wiring=True))
+    assert nominal_report['passed'], nominal_report['interferences']
+
+
+@pytest.mark.slow
+def test_microduck_leg_multi_pose_sweep_with_wiring():
     for pose in (
         {'left_hip_roll': -0.22, 'right_hip_roll': 0.22},
         {'left_hip_roll': -0.44},
@@ -268,6 +274,9 @@ def test_verified_electronics_envelopes_and_universal_cam_a_clear_head_and_backp
     ]
     assert interference(cover_check)['passed']
 
+
+@pytest.mark.slow
+def test_head_pitch_multi_pose_sweep_with_wiring():
     for pose in ({'head_pitch': 0.785}, {'head_pitch': -0.523}):
         report = interference(build_assembly('rpi5', pose=pose, wiring=True))
         assert report['passed'], (pose, report['interferences'])

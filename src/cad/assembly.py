@@ -113,7 +113,7 @@ def build_assembly(variant='rpi5', pose=None, *, armor=True, wiring=True):
     placed = [part.placed(location_from_matrix(transforms[part.link])) for part in assembly]
     if wiring:
         for route in harnesses(variant):
-            path = route.path(transforms)
+            wire_len_mm = route.installed_length_mm if route.installed_length_mm is not None else route.path(transforms).length
             placed.append(Component(route.name, 'harness', route.solid(transforms), 'WIRE',
-                                    mass_kg=path.length * 0.00002))
+                                    mass_kg=wire_len_mm * 0.00002))
     return placed

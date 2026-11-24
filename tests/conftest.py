@@ -82,3 +82,28 @@ except Exception:
 def isolated_cli_env(tmp_path: Path) -> dict:
     """Fixture providing isolated subprocess environment for CLI training and export tests."""
     return make_isolated_env(tmp_path)
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--run-slow",
+        action="store_true",
+        default=False,
+        help="Run slow multi-pose CAD B-rep sweep tests",
+    )
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "slow: multi-pose CAD B-rep interference sweeps (skipped unless --run-slow)",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--run-slow"):
+        return
+    skip_slow = pytest.mark.skip(reason="Pass --run-slow to run multi-pose B-rep sweeps")
+    for item in items:
+        if "slow" in item.keywords:
+            item.add_marker(skip_slow)
