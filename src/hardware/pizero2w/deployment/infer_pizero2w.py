@@ -34,6 +34,7 @@ class PiZero2WInferenceEngine(BaseRPiInferenceEngine):
         mock: bool = False,
         freq: float = 50.0,
         legacy_observation_schema: dict = None,
+        allow_mock_fallback: bool = False,
     ):
         super().__init__(
             model_path=model_path,
@@ -42,6 +43,7 @@ class PiZero2WInferenceEngine(BaseRPiInferenceEngine):
             freq=freq,
             legacy_observation_schema=legacy_observation_schema,
             engine_name="PiZero2WInferenceEngine",
+            allow_mock_fallback=allow_mock_fallback,
         )
         # Explicit contract hooks preserving: prev_q, read_foot_contact, read_lidar_ranges
         self.prev_q = self.last_targets.copy()

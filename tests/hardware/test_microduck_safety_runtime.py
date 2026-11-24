@@ -128,3 +128,79 @@ def test_limp_fall_and_standup_policy_hotswap_lifecycle(tmp_path):
         mode = engine.update_safety_state(zero_w, upright_g)
     assert mode == "walk"
     assert np.allclose(engine.predict_action(obs), 0.0, atol=1e-4)
+
+
+def test_hardware_mode_refuses_to_drive_servos_when_imu_init_fails(monkeypatch):
+    """Fail closed when mock=False and PCA9685 succeeds at 0x40 but MPU6050 NACKs at 0x68."""
+    import hardware.rpi_infer_core as core
+
+    class _FakeBus:
+        def __init__(self, _bus_num):
+            pass
+
+        def read_byte_data(self, addr, _reg):
+            if addr == 0x68:
+                raise OSError("MPU6050 read NACK")
+            return 0x00
+
+        def write_byte_data(self, addr, _reg, _val):
+            if addr == 0x68:
+                raise OSError("MPU6050 write NACK")
+
+        def write_i2c_block_data(self, _addr, _reg, _data):
+            return None
+
+    class _FakeSMBusMod:
+        SMBus = _FakeBus
+
+    monkeypatch.setattr(core, "smbus", _FakeSMBusMod)
+    with pytest.raises(RuntimeError, match="MPU6050"):
+        BaseRPiInferenceEngine(mock=False, freq=50.0, model_path=None)
+
+    monkeypatch.setattr(core, "smbus", None)
+    with pytest.raises(RuntimeError, match="I2C|PCA9685|smbus"):
+        BaseRPiInferenceEngine(mock=False, freq=50.0, model_path=None)
+
+
+def test_limp_fall_without_standup_policy_disables_all_servo_pwm_outputs(monkeypatch):
+    """When safety_mode=='limp_fall' with no standup policy, PCA9685 outputs must be disabled (PWM=0)."""
+    import hardware.rpi_infer_core as core
+
+    engine = BaseRPiInferenceEngine(mock=True, freq=50.0, standup_model_path=None)
+    engine.safety_mode = "limp_fall"
+    called = False
+
+    def _forbid_predict(_obs):
+        nonlocal called
+        called = True
+        return np.zeros(8, dtype=np.float32)
+
+    monkeypatch.setattr(engine, "predict_action", _forbid_predict)
+    targets, pwms = engine.step(np.zeros(42, dtype=np.float32))
+    assert called is False
+    assert pwms.tolist() == [0] * 8
+    assert engine.servo_controller.channel_pwms[:8] == [0] * 8
+    assert engine.servo_controller.outputs_enabled is False
+    np.testing.assert_allclose(targets, engine.last_targets)
+
+    # Verify HardwarePCA9685.disable_all_channels writes FULL_OFF (0x10) to ALL_LED_ON_L (0xFA..0xFD)
+    writes = []
+
+    class _RecordingBus:
+        def __init__(self, _bus_num):
+            pass
+
+        def read_byte_data(self, _addr, _reg):
+            return 0x00
+
+        def write_byte_data(self, addr, reg, val):
+            writes.append((addr, reg, val))
+
+        def write_i2c_block_data(self, addr, reg, data):
+            writes.append((addr, reg, list(data)))
+
+    monkeypatch.setattr(core, "smbus", type("_SM", (), {"SMBus": _RecordingBus}))
+    hw_pca = core.HardwarePCA9685(bus_num=1, freq=50)
+    hw_pca.disable_all_channels()
+    assert (0x40, 0xFA, [0, 0, 0, 0x10]) in writes
+

@@ -97,12 +97,19 @@ class MockPCA9685:
         self.bus = bus
         self.address = address
         self.channel_pwms = [1500] * 16
+        self.outputs_enabled = True
         print(f"[MockPCA9685] Initialized mock servo controller on I2C bus {bus}, address {hex(address)}")
 
     def set_pwm_us(self, channel: int, pulse_us: int) -> None:
         """Record commanded pulse width for given channel."""
         if 0 <= channel < 16:
+            self.outputs_enabled = True
             self.channel_pwms[channel] = pulse_us
+
+    def disable_all_channels(self) -> None:
+        """Cut servo PWM pulses across all 16 channels."""
+        self.channel_pwms = [0] * 16
+        self.outputs_enabled = False
 
 
 class HardwarePCA9685:
@@ -111,6 +118,7 @@ class HardwarePCA9685:
     PCA9685_MODE1 = 0x00
     PCA9685_PRESCALE = 0xFE
     LED0_ON_L = 0x06
+    ALL_LED_ON_L = 0xFA
 
     def __init__(self, bus_num: int = 1, address: int = 0x40, freq: int = 50):
         self.address = address
@@ -143,6 +151,10 @@ class HardwarePCA9685:
         data = [0, 0, ticks & 0xFF, (ticks >> 8) & 0xFF]
         self.bus.write_i2c_block_data(self.address, reg_base, data)
 
+    def disable_all_channels(self) -> None:
+        """Broadcast FULL_OFF (bit 4 in ALL_LED_OFF_H) to release all MG996R servos safely."""
+        self.bus.write_i2c_block_data(self.address, self.ALL_LED_ON_L, [0, 0, 0, 0x10])
+
 
 class MPU6050FilterReader:
     """Hardware I2C driver for MPU6050 with 42Hz DLPF, Mahony AHRS sensor fusion, and impact gating."""
@@ -164,9 +176,13 @@ class MPU6050FilterReader:
         ki: float = 0.05,
         impact_threshold: float = 0.30,
         ready_confirm_samples: int = 10,
+        allow_mock_fallback: bool = False,
     ):
         self.address = address
-        self.mock = mock or (smbus is None)
+        self.allow_mock_fallback = bool(allow_mock_fallback)
+        if smbus is None and not mock and not self.allow_mock_fallback:
+            raise RuntimeError("MPU6050 hardware initialization failed: smbus module not available")
+        self.mock = bool(mock) or (smbus is None)
         self.dt = float(dt)
         self.kp = float(kp)
         self.ki = float(ki)
@@ -199,8 +215,11 @@ class MPU6050FilterReader:
                 self.bus.write_byte_data(self.address, self.GYRO_CONFIG, 0x00)
                 self._calibrate_gyro()
             except (OSError, RuntimeError) as e:
-                print(f"[IMU] Real I2C MPU6050 unavailable ({e}), using mock/fallback.")
-                self.mock = True
+                if self.allow_mock_fallback:
+                    print(f"[IMU] Real I2C MPU6050 unavailable ({e}), using mock/fallback.")
+                    self.mock = True
+                else:
+                    raise RuntimeError(f"MPU6050 hardware initialization failed: {e}") from e
 
     @property
     def imu_ready(self) -> bool:
@@ -406,6 +425,7 @@ class BaseRPiInferenceEngine:
         legacy_observation_schema: Optional[dict] = None,
         deadman_timeout_s: float = 0.50,
         standup_model_path: Optional[str] = None,
+        allow_mock_fallback: bool = False,
     ):
         self.engine_name = engine_name
         self.cfg = MicroDuck8DoFConfig(OBS_DIM=42)
@@ -415,7 +435,10 @@ class BaseRPiInferenceEngine:
         self.dt = 1.0 / self.freq
         self.observation_schema = None
         self.episode_steps = 0
-        self.mock = mock or (smbus is None)
+        self.allow_mock_fallback = bool(allow_mock_fallback)
+        if smbus is None and not mock and not self.allow_mock_fallback:
+            raise RuntimeError("PCA9685 / I2C hardware initialization failed: smbus module not available")
+        self.mock = bool(mock) or (smbus is None)
         self.deadman_timeout_s = max(0.0, float(deadman_timeout_s))
         self.deadman_tripped = False
         self._active_command = [0.0, 0.0, 0.0]
@@ -431,13 +454,19 @@ class BaseRPiInferenceEngine:
             try:
                 self.servo_controller = HardwarePCA9685(bus_num=i2c_bus, freq=int(self.freq))
             except Exception as e:
-                print(f"[Warning] Failed to initialize hardware I2C ({e}). Falling back to Mock PCA9685.")
-                self.mock = True
-                self.servo_controller = MockPCA9685(bus=i2c_bus)
+                if self.allow_mock_fallback:
+                    print(f"[Warning] Failed to initialize hardware I2C ({e}). Falling back to Mock PCA9685.")
+                    self.mock = True
+                    self.servo_controller = MockPCA9685(bus=i2c_bus)
+                else:
+                    raise RuntimeError(f"PCA9685 hardware initialization failed: {e}") from e
 
-        # IMU sensor & filter setup
+        # IMU sensor & filter setup (fail closed unless mock=True or explicit opt-in fallback)
         self.imu_reader = MPU6050FilterReader(
-            bus_num=i2c_bus, mock=self.mock, dt=self.dt
+            bus_num=i2c_bus,
+            mock=self.mock,
+            dt=self.dt,
+            allow_mock_fallback=self.allow_mock_fallback,
         )
 
         # ONNX Model setup (walking policy + optional hot-swappable standup recovery policy)
@@ -624,6 +653,14 @@ class BaseRPiInferenceEngine:
             self.nonfinite_action_drops += 1
             safe_targets = self.last_targets.copy()
             return safe_targets, self._compute_pwms(safe_targets, dispatch=False)
+
+        if (
+            getattr(self, "safety_mode", "walk") == "limp_fall"
+            and getattr(self, "standup_ort_session", None) is None
+        ):
+            self.servo_controller.disable_all_channels()
+            self.episode_steps += 1
+            return self.last_targets.copy(), np.zeros(self.cfg.ACTION_DIM, dtype=np.int32)
 
         # 1. Infer raw actions and reject non-finite vectors BEFORE clipping
         predicted = np.asarray(self.predict_action(obs), dtype=np.float32).ravel()
