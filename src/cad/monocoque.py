@@ -636,25 +636,25 @@ def sole_tread():
 
 @cache
 def head_front():
-    """Aero visor helmet clearing camera/neck_link cleanly with >=1.85 mm sloped PLA walls."""
-    w = 2.06
-    wr = 2.26
-    wb = 2.38
+    """Enclosed aero visor helmet shielding head_pitch servo & yokes with >=1.85 mm PLA walls."""
+    w = 2.24
+    wr = 2.24
+    wb = 2.42
     main_out = _loft_stations((
-        (-22.0, 74.0, 12.0, 50.5, 10.0),
-        ( -9.0, 86.0, 12.0, 53.5, 11.0),
-        ( 14.0, 90.5,  8.0, 54.0, 13.0),
-        ( 39.0, 91.5, -1.5, 54.0, 13.0),
-        ( 51.0, 89.5, -0.5, 53.0, 12.0),
-        ( 55.5, 83.5,  2.0, 50.5, 11.0),
+        (-23.2, 81.0,  -9.5, 49.8,  9.5),
+        ( -9.0, 88.5, -13.2, 52.0, 10.5),
+        ( 14.0, 89.5, -13.2, 52.4, 11.5),
+        ( 35.0, 89.0,  -8.8, 52.4, 11.5),
+        ( 51.0, 87.5,  -1.5, 51.8, 11.0),
+        ( 55.5, 81.5,   1.8, 49.8, 10.0),
     ))
     main_in = _loft_stations((
-        (-19.8, 74.0 - 2 * wr, 12.0 + wb, 50.5 - wr,  8.0),
-        ( -9.0, 86.0 - 2 * wr, 12.0 + wb, 53.5 - wr,  9.0),
-        ( 14.0, 90.5 - 2 * w,   8.0 + wb, 54.0 - w,  11.0),
-        ( 39.0, 91.5 - 2 * w,  -1.5 + w,  54.0 - w,  11.0),
-        ( 51.0, 89.5 - 2 * w,  -0.5 + w,  53.0 - w,  10.0),
-        ( 53.2, 83.5 - 2 * w,   2.0 + w,  50.5 - w,   9.0),
+        (-20.8, 81.0 - 2 * wr,  -9.5 + wb, 49.8 - wr,  7.5),
+        ( -9.0, 88.5 - 2 * wr, -13.2 + wb, 52.0 - wr,  8.5),
+        ( 14.0, 89.5 - 2 * w,  -13.2 + wb, 52.4 - w,   9.5),
+        ( 35.0, 89.0 - 2 * w,   -8.8 + wb, 52.4 - w,   9.5),
+        ( 51.0, 87.5 - 2 * w,   -1.5 + wb, 51.8 - w,   9.0),
+        ( 53.2, 81.5 - 2 * w,    1.8 + w,  49.8 - w,   8.0),
     ))
     # Smooth streamlined teardrop dorsal wave enclosing Camera (-9.0) & ToF (+11.5) cleanly.
     wave_out = _loft_stations((
@@ -665,11 +665,11 @@ def head_front():
         ( 54.8, 52.0, 46.5, 74.8, 12.5),
     ))
     wave_in = _loft_stations((
-        ( -4.5, 18.0, 38.0, 51.0 - 2.5,  1.8),
-        (  8.0, 34.0, 38.0, 63.0 - 2.5,  8.0),
-        ( 28.0, 43.0, 38.0, 75.5 - 2.5, 10.5),
-        ( 46.0, 46.0, 38.0, 74.5,       11.0),
-        ( 52.2, 42.0, 42.0, 71.5,       10.0),
+        ( -4.5, 19.0, 38.0, 51.0 - 2.3,  1.8),
+        (  8.0, 38.0, 38.0, 63.0 - 2.3,  8.5),
+        ( 28.0, 50.8, 38.0, 75.5 - 2.3, 11.5),
+        ( 46.0, 51.8, 38.0, 74.8,       11.5),
+        ( 52.2, 46.5, 42.0, 71.8,       10.0),
     ))
 
     outer = (main_out + wave_out).clean()
@@ -686,23 +686,22 @@ def head_front():
     # Rounded rear cover bay cleanly clears head_rear_cover (Z in [16, 38]).
     part -= _rounded_stadium(58.5, 22.0, 6.5, 36.0, center=(-34.5, 0.0, 27.0))
 
-    # Internal cheek shelves clipped cleanly inside outer hull before uniting full 360-degree pitch yokes.
-    ribs = (
-        box((16, 16, 2.4), (0, 37, 21))
-        + box((16, 16, 2.4), (0, -35, 21))
-    )
-    part += (ribs & outer).clean()
-
+    # Fuse horn_plate & bearing_plate solidly down into helmet floor and side cheek walls.
     st_hp = STATION_BY_JOINT['head_pitch']
     ml_hp = st_hp.moving_location
-    part += ml_hp * horn_plate(3.0)
-    part += ml_hp * Pos(0, 0, IDLER_SEAT_TOP - 4.5) * bearing_plate(False)
-    part += box((20, 3.0, 22), (0, 31.5, 11.0))
-    part += box((20, 4.5, 22), (0, -27.25, 11.0))
+    internals = (
+        ml_hp * horn_plate(3.0)
+        + ml_hp * Pos(0, 0, IDLER_SEAT_TOP - 4.5) * bearing_plate(False)
+        + box((20, 3.0, 26.0), (0, 31.5, -1.0))
+        + box((20, 4.5, 26.0), (0, -27.25, -1.0))
+        + box((14, 15.0, 3.0), (0, 38.5, 11.0))
+        + box((14, 15.0, 3.0), (0, -35.5, 11.0))
+    )
+    part += (internals & outer).clean()
 
     part = recut_horn_and_bearing(part, ml_hp, double=False)
-    # Clear neck_link & head_pitch servo across full -30° .. +45° pitch sweep (Y in [-25, +25] inside yokes).
-    part -= box((72, 50, 42), (6, 0, -2.0))
+    # Central neck & horn drop-in tunnel strictly inside Y in [-25.0, +29.9], leaving both cheeks sealed.
+    part -= box((76, 54.9, 35.0), (6.0, 2.45, -3.5))
     # Clearances for 2.42" OLED, forehead Camera & ToF, mic, ESP32 head MCU & rear cable bay.
     part -= OLED_LOCATION * box((44.6, 76.0, 6.4), (0, 0, 2.4))
     part -= CAMERA_LOCATION * box((26.0, 26.0, 14.2), (0, 0, 6.9))

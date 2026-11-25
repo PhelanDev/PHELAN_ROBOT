@@ -30,9 +30,9 @@
   </material>
   <link name="trunk_base">
     <inertial>
-      <origin xyz="-0.018972 -0.000844 -0.015274" rpy="0 0 0" />
-      <mass value="0.578958" />
-      <inertia ixx="0.00092568" iyy="0.00129935" izz="0.00139401" ixy="0" ixz="0" iyz="0" />
+      <origin xyz="-0.018954 -0.000844 -0.015293" rpy="0 0 0" />
+      <mass value="0.578706" />
+      <inertia ixx="0.00092515" iyy="0.00129841" izz="0.00139357" ixy="0" ixz="0" iyz="0" />
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
@@ -110,9 +110,9 @@
   </joint>
   <link name="head">
     <inertial>
-      <origin xyz="0.025233 0.000626 0.032953" rpy="0 0 0" />
-      <mass value="0.078636" />
-      <inertia ixx="0.00010172" iyy="9.077e-05" izz="0.00010261" ixy="0" ixz="0" iyz="0" />
+      <origin xyz="0.022765 0.000378 0.028656" rpy="0 0 0" />
+      <mass value="0.079444" />
+      <inertia ixx="0.00011204" iyy="0.0001" izz="0.00011531" ixy="0" ixz="0" iyz="0" />
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />

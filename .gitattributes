@@ -15,3 +15,4 @@
 *.stl binary
 *.png binary
 *.jpg binary
+src/cad/purchased/sources/*.step binary

@@ -86,7 +86,7 @@
     <!-- Main Torso Body -->
     <body name="trunk_base" pos="0 0 0.202" childclass="cyberduck_v2">
       <freejoint name="trunk_freejoint" />
-      <inertial pos="-0.018972 -0.000844 -0.015274" mass="0.578958" diaginertia="0.00092568 0.00129935 0.00139401" />
+      <inertial pos="-0.018954 -0.000844 -0.015293" mass="0.578706" diaginertia="0.00092515 0.00129841 0.00139357" />
       <site name="imu" pos="0.016 0.012 0.006" size="0.003" rgba="1.0 0.4 0.0 0.95" group="2" />
       <site name="imu_site" pos="0.016 0.012 0.006" size="0.003" rgba="1.0 0.4 0.0 0.95" group="2" />
 
@@ -106,7 +106,7 @@
 
         <body name="head" pos="0 0 0.044">
           <joint name="head_pitch" type="hinge" axis="0 1 0" range="-0.52 0.78" />
-          <inertial pos="0.025233 0.000626 0.032953" mass="0.078636" diaginertia="0.00010172 0.00009077 0.00010261" />
+          <inertial pos="0.022765 0.000378 0.028656" mass="0.079444" diaginertia="0.00011204 0.00010000 0.00011531" />
 
           <!-- Aero Helm, Glowing Cyber Visor, Metallic Gold Beak -->
           <geom type="mesh" mesh="cyber_helm" material="mecha_white" class="visual" />

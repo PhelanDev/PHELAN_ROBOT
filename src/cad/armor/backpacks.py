@@ -101,7 +101,7 @@ def backpack(variant):
         housing -= box((72.0, 10.0, 18.0), (-4.0, 59.0, 0.0))
         housing -= box((10.0, 84.0, 18.0), (-52.0, 0.0, 0.0))
     # Minimal wire portals: narrow center-spine head_harness channel behind neck + flush collar-only leg exits backed by solid wall.
-    housing -= box((28.0, 13.0, collar + 5.8), (39.5, 0, -depth / 2 - collar / 2 + 1.9))
+    housing -= box((28.0, 18.0, collar + 5.8), (39.5, 0, -depth / 2 - collar / 2 + 1.9))
     for sy in (-1, 1):
         housing -= box((16.0, 12.0, collar + 0.4), (-3.5, sy * 48.0, -depth / 2 - (collar + 0.4) / 2))
     # Compact, low-profile Pi 4B prioritized I/O bays (also fits Pi 5) plus pizero2w & esp32s3 slots.

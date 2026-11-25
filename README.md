@@ -40,7 +40,7 @@ The robot uses eight MG996R servos, split into two neck joints and six leg joint
 
 The MG996R frame is modeled parametrically with `build123d` in `src/cad/`. Automated CAD checks pass with zero assembly interferences across all three board variants, full joint motion sweeps, wire routing lengths, a full-configuration mass budget below `1.5 kg`, and DfAM wall-thickness checks across 28 printable parts at 512 samples per part. No physical robot has been printed, assembled, or weighed yet, so fastener fit, print orientation, mechanical backlash, and usable servo torque remain to be verified on real hardware.
 
-Geometry and link inertials in `src/robot/cyberduck_v2.xml`, `src/robot/cyberduck_v2_robot.xml`, and `src/robot/cyberduck_v2.urdf` are synced directly from the MG996R CAD model assuming 60% FDM infill for printed parts. Base height is `0.202 m`, thigh length is `60 mm`, shin length is `54 mm`, and each foot sole collider measures `82 x 46 x 12 mm` resting flat at `Z = 0.000 m`. Total simulated mass is `1.262 kg`, calculated from CAD link inertials and not yet weighed on an assembled robot.
+Geometry and link inertials in `src/robot/cyberduck_v2.xml`, `src/robot/cyberduck_v2_robot.xml`, and `src/robot/cyberduck_v2.urdf` are synced directly from the MG996R CAD model assuming 60% FDM infill for printed parts. Base height is `0.202 m`, thigh length is `60 mm`, shin length is `54 mm`, and each foot sole collider measures `82 x 46 x 12 mm` resting flat at `Z = 0.000 m`. Total simulated mass is `1.263 kg`, calculated from CAD link inertials and not yet weighed on an assembled robot.
 
 Simulation sensors include a trunk IMU, dual foot contact sensors, position and velocity sensors for all eight joints, a head camera, and a single brow-mounted `head_tof` rangefinder with a `2.0 m` cutoff. Hardware builds also place a `128x64` SPI SSD1309 OLED screen behind the visor for eye expressions.
 
@@ -149,9 +149,9 @@ Notes for importing the robot into Isaac Sim or Isaac Lab are in [docs/isaac_v2_
 
 ## Current status
 
-- Branch and state: `main` at code commit `5317b516` and handover commit `763f4163`, with MG996R CAD synced to MJCF and URDF at `1.262 kg`, `0.202 m` base height, and a `37`-dim actor / `48`-dim critic control contract at `50 Hz`; no GPU-trained V2 `.pt` checkpoint or release anchor tag exists yet.
-- Completed work: fixed RL training and simulation audit bugs, hardened fail-closed runtime safety for Raspberry Pi and Dual ESP32-S3, cleared CAD assembly interference and DfAM wall-thickness checks across 28 printable parts, added `ActiveHeadScanner` and `SSD1309Display`, and migrated the stack to the `head_tof` single rangefinder and 37-dim observation layout.
-- Verification: `628 passed` across `tests/robot`, `tests/sim`, and `tests/hardware`; `193 passed` across `tests/cad --run-slow`; `python duck.py train --dry-run` and `python duck.py verify` both exit `0`.
+- Branch and state: `main` at code commit `5317b516` and handover commit `763f4163`, with MG996R CAD synced to MJCF and URDF at `1.263 kg`, `0.202 m` base height, and a `37`-dim actor / `48`-dim critic control contract at `50 Hz`; no GPU-trained V2 `.pt` checkpoint or release anchor tag exists yet.
+- Completed work: fixed RL training and simulation audit bugs, hardened fail-closed runtime safety for Raspberry Pi and Dual ESP32-S3, enclosed the `head_front` helmet cheeks over `head_pitch` yokes, widened the backpack wire harness portal, cleared CAD assembly interference and DfAM wall-thickness checks, added `ActiveHeadScanner` and `SSD1309Display`, and migrated the stack to the `head_tof` single rangefinder and 37-dim observation layout.
+- Verification: `628 passed` across `tests/robot`, `tests/sim`, and `tests/hardware`; `194 passed` across `tests/cad --run-slow`; `python duck.py train --dry-run` and `python duck.py verify` both exit `0`.
 - Next step: run full GPU training through `pretrain_bc.py`, Asymmetric PPO, and ELU FastSAC under the 37-dim contract, then print, assemble, and bench-test the MG996R hardware before tagging a validated V2 checkpoint.
 
 ## License

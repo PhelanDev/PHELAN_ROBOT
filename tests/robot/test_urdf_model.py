@@ -129,5 +129,5 @@ def test_urdf_head_link_com_synchronization():
     root = ET.parse(URDF_PATH).getroot()
     head = root.find("link[@name='head']")
     xyz = [float(value) for value in head.find("inertial/origin").get("xyz").split()]
-    np.testing.assert_allclose(xyz, [0.025233, 0.000626, 0.032953], atol=1e-9)
+    np.testing.assert_allclose(xyz, [0.022765, 0.000378, 0.028656], atol=1e-9)
     assert verify_urdf_physics(str(MODEL_PATH), str(URDF_PATH))["valid"]

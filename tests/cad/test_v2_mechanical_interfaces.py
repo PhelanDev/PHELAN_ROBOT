@@ -277,7 +277,7 @@ def test_verified_electronics_envelopes_and_universal_cam_a_clear_head_and_backp
 
 @pytest.mark.slow
 def test_head_pitch_multi_pose_sweep_with_wiring():
-    for pose in ({'head_pitch': 0.785}, {'head_pitch': -0.523}):
+    for pose in ({'head_pitch': 0.785}, {'head_pitch': -0.523}, {'head_pitch': -0.0325}, {'head_yaw': -1.1775}):
         report = interference(build_assembly('rpi5', pose=pose, wiring=True))
         assert report['passed'], (pose, report['interferences'])
 
@@ -308,4 +308,14 @@ def test_wave15_dfam_wall_fixes_hold_without_thin_wafers():
         assert rep["observed_below_requirement"] is False, (
             name, mat, rep["sampled_min_mm"], required_wall(mat),
         )
+
+
+def test_head_front_encloses_neck_pitch_yokes():
+    hf = printable_parts()["head_front"][0]
+    for sign in (-1.0, 1.0):
+        hits = hf.find_intersection_points(
+            Axis(Vector(0.0, sign * 60.0, -5.0), Vector(0.0, -sign, 0.0))
+        )
+        ys = sorted(abs(pt.Y) for pt, _ in hits if abs(pt.Y) >= 34.0)
+        assert len(ys) >= 2 and ys[-1] - ys[0] >= 1.8, (sign, ys)
 

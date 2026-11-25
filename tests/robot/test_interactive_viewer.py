@@ -41,7 +41,7 @@ def test_readme_comprehensive_content():
 
     # 1. Overview: MG996R hardware target and CAD-synced V2 simulation parameters
     assert "MG996R" in content
-    assert "1.262" in content
+    assert "1.263" in content
     assert "0.202" in content
     assert "head_tof" in content
     assert "811" not in content

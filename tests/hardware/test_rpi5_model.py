@@ -36,10 +36,10 @@ def test_rpi5_mujoco_compilation_and_mass_budget():
         MJCF_PATH,
         min_mass=TOTAL_MASS_KG - 1e-6,
         max_mass=TOTAL_MASS_KG + 1e-6,
-        base_mass_min=0.578958 - 1e-6,
-        base_mass_max=0.578958 + 1e-6,
-        base_ipos_z_min=-0.015274 - 1e-6,
-        base_ipos_z_max=-0.015274 + 1e-6,
+        base_mass_min=0.578706 - 1e-6,
+        base_mass_max=0.578706 + 1e-6,
+        base_ipos_z_min=-0.015293 - 1e-6,
+        base_ipos_z_max=-0.015293 + 1e-6,
         n_steps=50,
     )
 
@@ -50,8 +50,8 @@ def test_rpi5_urdf_structure_and_inertials():
         robot_name="cyberduck_v2",
         min_total_mass=TOTAL_MASS_KG - 1e-6,
         max_total_mass=TOTAL_MASS_KG + 1e-6,
-        min_base_mass=0.578958 - 1e-6,
-        max_base_mass=0.578958 + 1e-6,
+        min_base_mass=0.578706 - 1e-6,
+        max_base_mass=0.578706 + 1e-6,
     )
 
 
