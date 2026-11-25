@@ -4,6 +4,16 @@ CyberDuck V2 is a student learning project built to practice the full robotics w
 
 Deployment code under `src/hardware/` covers three board profiles for Raspberry Pi 5, Raspberry Pi Zero 2 W, and Dual ESP32-S3. Those profiles only switch sensor drivers, PWM output, and inference format; all three use the same robot geometry and policy contract.
 
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/PhelanDev/badge.svg)](https://hub.xerj.org/contributors/PhelanDev)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![Physics: MuJoCo 3.x](https://img.shields.io/badge/Physics-MuJoCo%203.x-black.svg)](https://mujoco.org/)
+
+> **XERJ Corpus Hub Selected Contribution**  
+> The decoupled real-time inference runtime on Raspberry Pi Zero 2 W was selected by [XERJ Corpus Hub](https://hub.xerj.org/contributors/PhelanDev) as an open reference memory solution for autonomous AI coding agents:  
+> *"We came across your 'feat(pizero2w): add decoupled real-time inference runtime for Pi Zero 2 W with tests' in PhelanDev/DUCK_MINI_TRAINING and think it could help others. It is a substantial piece of work, with 6 files and about 460 lines across pipelines and tests, in Python, with the tests landing in the same commit."*  
+> — **Ivan**, Founder of XERJ ([github.com/xerj-org/xerj](https://github.com/xerj-org/xerj))
+
 <p align="center">
   <img src="src/robot/media/cyberduck_v2_iso.png" width="48%" alt="CyberDuck V2 MG996R isometric CAD render" />
   <img src="src/robot/media/cyberduck_v2_front.png" width="48%" alt="CyberDuck V2 MG996R front CAD render" />
